@@ -253,8 +253,8 @@ export default function QuoteAnalysisPage() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setDateRange((prev) => ({
-                      ...prev,
                       from: value ? new Date(value + "T00:00:00") : undefined,
+                      to: prev?.to,
                     }));
                   }}
                 />
@@ -268,7 +268,7 @@ export default function QuoteAnalysisPage() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setDateRange((prev) => ({
-                      ...prev,
+                      from: prev?.from,
                       to: value ? new Date(value + "T23:59:59") : undefined,
                     }));
                   }}
