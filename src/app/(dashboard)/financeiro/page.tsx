@@ -178,8 +178,9 @@ export default function FinancialDashboardPage() {
     const chartData = Object.values(monthlyData).sort((a,b) => {
         const [mA, yA] = a.name.split('/');
         const [mB, yB] = b.name.split('/');
-        const dateA = new Date(`20${yA}`, ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(mA.toLowerCase()));
-        const dateB = new Date(`20${yB}`, ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'].indexOf(mB.toLowerCase()));
+        const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const dateA = new Date(parseInt(`20${yA}`, 10), months.indexOf(mA.toLowerCase()));
+        const dateB = new Date(parseInt(`20${yB}`, 10), months.indexOf(mB.toLowerCase()));
         return dateA.getTime() - dateB.getTime();
     });
 
