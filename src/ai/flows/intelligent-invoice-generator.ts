@@ -15,9 +15,11 @@ export type InvoiceGeneratorOutput = {
 export async function generateIntelligentInvoice(
   input: InvoiceGeneratorInput
 ): Promise<InvoiceGeneratorOutput> {
-  // Future: integrate with Claude API for smart invoice generation
   return {
     invoiceText: `Nota Fiscal referente ao orçamento ${input.quoteId}.\nTotal: R$ ${input.total.toFixed(2)}`,
     suggestedPaymentTerms: '30/60/90 dias',
   };
 }
+
+// Alias used by invoicing page
+export const generateInvoice = generateIntelligentInvoice;

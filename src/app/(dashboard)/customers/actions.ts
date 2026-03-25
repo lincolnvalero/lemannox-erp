@@ -86,3 +86,22 @@ export async function deleteCustomer(id: string): Promise<{ success: boolean; er
     return { success: false, error: message };
   }
 }
+
+export async function updateProductionStatus(
+  id: string,
+  productionStatus: Customer['productionStatus']
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('customers')
+      .update({ production_status: productionStatus })
+      .eq('id', id);
+    if (error) throw error;
+    revalidatePath('/customers');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao atualizar status';
+    return { success: false, error: message };
+  }
+}

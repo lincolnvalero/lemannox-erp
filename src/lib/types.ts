@@ -27,6 +27,7 @@ export type Customer = {
   rating?: number;
   totalSpent?: number;
   joinDate?: string;
+  productionStatus?: 'nenhum' | 'ativo' | 'em_producao' | 'entregue' | 'pausado';
 };
 
 export type ProductionStatus = {
@@ -162,3 +163,6 @@ export type UserProfile = {
   role: 'admin' | 'user' | 'viewer';
   createdAt?: string;
 };
+
+// Alias for backward compatibility with calculator page
+export type RawMaterial = Material;
