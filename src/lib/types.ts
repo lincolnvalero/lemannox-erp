@@ -164,5 +164,11 @@ export type UserProfile = {
   createdAt?: string;
 };
 
-// Alias for backward compatibility with calculator page
-export type RawMaterial = Material;
+// Extended type for calculator page (sheet metal with dimensions)
+export type RawMaterial = Material & {
+  width?: number;
+  height?: number;
+  thickness?: number;
+  density?: number;
+  price?: number;
+};
