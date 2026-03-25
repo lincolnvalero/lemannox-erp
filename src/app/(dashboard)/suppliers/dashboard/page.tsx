@@ -189,7 +189,7 @@ export default function SupplierDashboardPage() {
       .sort((a, b) => b.value - a.value);
 
     const topSuppliers = [...data]
-      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .sort((a, b) => (b.totalSpent ?? 0) - (a.totalSpent ?? 0))
       .slice(0, 5);
 
     const performanceChartData = topSuppliers.map((supplier) => ({
@@ -340,7 +340,7 @@ export default function SupplierDashboardPage() {
           <CardContent>
             <div className="text-lg font-bold">{analysis.bestSupplier?.name || 'N/A'}</div>
             <p className="text-xs text-muted-foreground">
-              Nota: {analysis.bestSupplier?.rating.toFixed(1) || '0.0'} de 5
+              Nota: {(analysis.bestSupplier?.rating ?? 0).toFixed(1)} de 5
             </p>
           </CardContent>
         </Card>

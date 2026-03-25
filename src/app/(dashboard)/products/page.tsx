@@ -389,8 +389,8 @@ export default function ProductsPage() {
     setPercentageUpdate('');
   };
   
-  const allCategories = useMemo(() => [...new Set(products.map((p) => p.category as string))].filter(Boolean).sort(), [products]);
-  const allModels = useMemo(() => [...new Set(products.map((p) => p.model as string))].filter(Boolean).sort(), [products]);
+  const allCategories = useMemo(() => Array.from(new Set(products.map((p) => p.category as string))).filter(Boolean).sort(), [products]);
+  const allModels = useMemo(() => Array.from(new Set(products.map((p) => p.model as string))).filter(Boolean).sort(), [products]);
 
   const searchedProducts = useMemo(() => products.filter((product) =>
     `${product.category} ${product.model} ${product.measurement}`.toLowerCase().includes(searchTerm.toLowerCase())
@@ -416,7 +416,7 @@ export default function ProductsPage() {
 
   const currentModels = useMemo(() => {
       if (categoryFilter === 'all') return [];
-      return [...new Set(searchedProducts.filter(p => p.category === categoryFilter).map(p => p.model))].sort();
+      return Array.from(new Set(searchedProducts.filter(p => p.category === categoryFilter).map(p => p.model))).sort();
   }, [categoryFilter, searchedProducts]);
   
   const filteredProducts = useMemo(() => {

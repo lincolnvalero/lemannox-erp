@@ -96,9 +96,9 @@ export default function SuppliersPage() {
     setSupplierToDelete(null);
   };
 
-  const supplierCategories = [
-    ...new Set(suppliers.map((s) => s.category)),
-  ].sort();
+  const supplierCategories = Array.from(
+    new Set(suppliers.map((s) => s.category))
+  ).sort();
 
   const filteredSuppliers = suppliers.filter((supplier) => {
     const matchesSearch = supplier.name

@@ -324,26 +324,26 @@ export default function QuoteEditorPage() {
   const availableCategories = useMemo(() => {
     if (!addItemGroup) return [];
     const categoriesForGroup = groupToCategoryMap[addItemGroup] || [];
-    return [...new Set(products
+    return Array.from(new Set(products
         .filter(p => categoriesForGroup.includes(p.category))
         .map(p => p.category)
-    )].sort();
+    )).sort();
   }, [addItemGroup, products]);
 
   const availableModels = useMemo(() => {
       if (!addItemCategory) return [];
-      return [...new Set(products
+      return Array.from(new Set(products
           .filter(p => p.category === addItemCategory)
           .map(p => p.model)
-      )].sort();
+      )).sort();
   }, [addItemCategory, products]);
 
   const availableMeasurements = useMemo(() => {
       if (!addItemModel) return [];
-      return [...new Set(products
+      return Array.from(new Set(products
           .filter(p => p.category === addItemCategory && p.model === addItemModel)
           .map(p => p.measurement)
-      )].sort();
+      )).sort();
   }, [addItemCategory, addItemModel, products]);
 
   const availableMaterials = useMemo(() => {

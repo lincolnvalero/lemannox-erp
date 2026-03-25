@@ -32,14 +32,15 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
       const { createOrdemServico } = await import('@/app/(dashboard)/os/actions');
       const result = await createOrdemServico(quote.id);
       if (result.success) {
-        toast({ title: 'OS criada com sucesso!', description: `OS #${result.osNumber} gerada.` });
-        onSuccess?.(result.osNumber || 0);
+        toast({ title: 'OS criada com sucesso!', description: `OS #${result.ordem?.osNumber} gerada.` });
+        onSuccess?.(result.ordem?.osNumber || 0);
         onOpenChange?.(false);
       } else {
         toast({ variant: 'destructive', title: 'Erro ao criar OS', description: result.error });
       }
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro inesperado';
+      toast({ variant: 'destructive', title: 'Erro', description: message });
     }
     setLoading(false);
   };
