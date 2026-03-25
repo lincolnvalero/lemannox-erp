@@ -138,7 +138,7 @@ export default function SupplierDashboardPage() {
     
     if (dateRange?.from) {
         data = data.filter(s => {
-            const joinDate = new Date(s.joinDate);
+            const joinDate = new Date(s.joinDate ?? '');
             const from = new Date(dateRange.from!);
             from.setHours(0,0,0,0);
             
@@ -161,13 +161,13 @@ export default function SupplierDashboardPage() {
   const analysis = useMemo(() => {
     const data = filteredData;
     const totalSuppliers = data.length;
-    const totalSpent = data.reduce((sum, s) => sum + s.totalSpent, 0);
+    const totalSpent = data.reduce((sum, s) => sum + (s.totalSpent ?? 0), 0);
     const bestSupplier = data.length > 0 ? data.reduce(
-      (best, current) => (current.rating > best.rating ? current : best),
+      (best, current) => ((current.rating ?? 0) > (best.rating ?? 0) ? current : best),
       data[0]
     ) : null;
     const newSuppliersCount = data.filter(
-      (s) => new Date(s.joinDate) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      (s) => new Date(s.joinDate ?? '') > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     ).length;
 
     const suppliersByCategory = data.reduce((acc, supplier) => {
@@ -180,7 +180,7 @@ export default function SupplierDashboardPage() {
       .sort((a, b) => b.count - a.count);
 
     const spendingByCategory = data.reduce((acc, supplier) => {
-      acc[supplier.category] = (acc[supplier.category] || 0) + supplier.totalSpent;
+      acc[supplier.category] = (acc[supplier.category] || 0) + (supplier.totalSpent ?? 0);
       return acc;
     }, {} as Record<string, number>);
 
@@ -194,9 +194,9 @@ export default function SupplierDashboardPage() {
 
     const performanceChartData = topSuppliers.map((supplier) => ({
       subject: supplier.name,
-      price: supplier.performance.price,
-      quality: supplier.performance.quality,
-      delivery: supplier.performance.delivery,
+      price: supplier.performance?.price ?? 0,
+      quality: supplier.performance?.quality ?? 0,
+      delivery: supplier.performance?.delivery ?? 0,
       fullMark: 5,
     }));
 

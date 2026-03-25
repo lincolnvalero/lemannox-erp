@@ -27,6 +27,7 @@ export type Customer = {
   rating?: number;
   totalSpent?: number;
   joinDate?: string;
+  company?: string;
   financialStatus?: 'Pago' | 'Em dia' | 'Vencido';
   productionStatus?: 'Em orçamento' | 'Aprovado' | 'Produção' | 'Entrega' | 'Concluído' | 'Devolução para ajuste' | 'Pausado';
 };

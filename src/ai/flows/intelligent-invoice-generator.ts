@@ -12,6 +12,21 @@ export type InvoiceGeneratorOutput = {
   suggestedPaymentTerms: string;
 };
 
+// Type used by the invoicing page (fiscal details)
+export type InvoiceInput = {
+  customerLocation: string;
+  productType: string;
+  productDetails: string;
+};
+
+export type InvoiceOutput = {
+  ncm: string;
+  cfop: string;
+  icms: string;
+  ipi: string;
+  pisCofins: string;
+};
+
 export async function generateIntelligentInvoice(
   input: InvoiceGeneratorInput
 ): Promise<InvoiceGeneratorOutput> {
@@ -21,5 +36,13 @@ export async function generateIntelligentInvoice(
   };
 }
 
-// Alias used by invoicing page
-export const generateInvoice = generateIntelligentInvoice;
+// Used by invoicing page — returns fiscal classification stub
+export async function generateInvoice(_input: InvoiceInput): Promise<InvoiceOutput> {
+  return {
+    ncm: '8414.60.00',
+    cfop: '5.102',
+    icms: '12%',
+    ipi: 'Isento',
+    pisCofins: 'Regime cumulativo',
+  };
+}
