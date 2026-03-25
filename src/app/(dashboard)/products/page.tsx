@@ -254,35 +254,9 @@ export default function ProductsPage() {
     setModelFilter('all');
   }, [categoryFilter]);
 
-  const handleSaveSuccess = (savedProduct: Product) => {
-    const getMeasurementValue = (measurement: string): number => {
-      if (!measurement) return 0;
-      const cleaned = measurement.replace(/^[^0-9]+/, '');
-      const match = cleaned.match(/^(\d+)/);
-      return match ? parseInt(match[1], 10) : 0;
-    };
-
-    setProducts(currentProducts => {
-        const index = currentProducts.findIndex(p => p.id === savedProduct.id);
-        let newProducts;
-        if (index !== -1) {
-            newProducts = [...currentProducts];
-            newProducts[index] = savedProduct;
-        } else {
-            newProducts = [...currentProducts, savedProduct];
-        }
-        
-        newProducts.sort((a, b) => {
-            if (a.category < b.category) return -1;
-            if (a.category > b.category) return 1;
-            if (a.model < b.model) return -1;
-            if (a.model > b.model) return 1;
-            const measureA = getMeasurementValue(a.measurement);
-            const measureB = getMeasurementValue(b.measurement);
-            return measureA - measureB;
-        });
-        return newProducts;
-    });
+  const handleSaveSuccess = () => {
+    setEditingProduct(null);
+    fetchProducts();
   };
 
   const handleDeleteProduct = async () => {

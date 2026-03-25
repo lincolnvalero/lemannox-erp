@@ -1,6 +1,6 @@
 
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Supplier } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -53,36 +53,28 @@ export default function SuppliersPage() {
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    async function fetchSuppliers() {
-      setLoading(true);
-      const result = await getSuppliers();
-      if (result.success) {
-        setSuppliers(result.suppliers || []);
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao Carregar Fornecedores',
-          description: result.error,
-        });
-      }
-      setLoading(false);
+  const fetchSuppliers = useCallback(async () => {
+    setLoading(true);
+    const result = await getSuppliers();
+    if (result.success) {
+      setSuppliers(result.suppliers || []);
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Carregar Fornecedores',
+        description: result.error,
+      });
     }
-    fetchSuppliers();
+    setLoading(false);
   }, [toast]);
-  
-  const handleSaveSuccess = (savedSupplier: Supplier) => {
-    setSuppliers(currentSuppliers => {
-        const index = currentSuppliers.findIndex(s => s.id === savedSupplier.id);
-        if (index !== -1) {
-            const newSuppliers = [...currentSuppliers];
-            newSuppliers[index] = savedSupplier;
-            return newSuppliers;
-        } else {
-            const newSuppliers = [...currentSuppliers, savedSupplier];
-            return newSuppliers.sort((a, b) => a.name.localeCompare(b.name));
-        }
-    });
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
+
+  const handleSaveSuccess = () => {
+    setEditingSupplier(null);
+    fetchSuppliers();
   };
 
   const handleDeleteConfirm = async () => {

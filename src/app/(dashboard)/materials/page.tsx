@@ -48,7 +48,7 @@ export default function MaterialsPage() {
     setLoading(true);
     const result = await getMaterials();
     if (result.success) {
-      setMaterials(result.materials || []);
+      setMaterials((result.materials || []).map(m => ({ ...m, price: m.unitCost })));
     } else {
       toast({
         variant: 'destructive',
@@ -73,30 +73,9 @@ export default function MaterialsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSaveSuccess = (savedMaterial: RawMaterial) => {
-    setMaterials(currentMaterials => {
-      const index = currentMaterials.findIndex(m => m.id === savedMaterial.id);
-      let newMaterials;
-      if (index !== -1) {
-        // Update existing item
-        newMaterials = [...currentMaterials];
-        newMaterials[index] = savedMaterial;
-      } else {
-        // Add new item
-        newMaterials = [...currentMaterials, savedMaterial];
-      }
-      // Re-sort the list to maintain a consistent order
-      newMaterials.sort((a, b) => {
-          const categoryA = a.category || '';
-          const categoryB = b.category || '';
-          const nameA = a.name || '';
-          const nameB = b.name || '';
-          const categoryCompare = categoryA.localeCompare(categoryB);
-          if (categoryCompare !== 0) return categoryCompare;
-          return nameA.localeCompare(nameB);
-      });
-      return newMaterials;
-    });
+  const handleSaveSuccess = () => {
+    setEditingMaterial(null);
+    fetchMaterials();
   };
 
   const handleDeleteConfirm = async () => {
