@@ -54,7 +54,7 @@ import {
 } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const financialBadgeVariant = (status: Customer['financialStatus']) => {
+const financialBadgeVariant = (status: NonNullable<Customer['financialStatus']> | undefined) => {
   switch (status) {
     case 'Pago':
       return 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30';
@@ -67,7 +67,7 @@ const financialBadgeVariant = (status: Customer['financialStatus']) => {
   }
 };
 
-const productionBadgeVariant = (status: Customer['productionStatus']) => {
+const productionBadgeVariant = (status: NonNullable<Customer['productionStatus']> | undefined) => {
   switch (status) {
     case 'Em orçamento':
       return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -88,7 +88,7 @@ const productionBadgeVariant = (status: Customer['productionStatus']) => {
   }
 };
 
-const productionStatuses: Customer['productionStatus'][] = [
+const productionStatuses: NonNullable<Customer['productionStatus']>[] = [
   'Em orçamento',
   'Aprovado',
   'Produção',
