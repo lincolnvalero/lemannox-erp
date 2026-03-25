@@ -43,7 +43,7 @@ export default function ProductionSchedulePage() {
     setLoading(true);
     const result = await getProductionScheduleItems();
     if (result.success) {
-      setSchedule(result.schedule || []);
+      setSchedule(result.items || []);
     } else {
       toast({
         variant: 'destructive',

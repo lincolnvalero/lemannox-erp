@@ -18,7 +18,7 @@ export default function ProductionSchedulePage() {
     (async () => {
       const result = await getProductionScheduleItems();
       if (result.success) {
-        setSchedule(result.schedule || []);
+        setSchedule(result.items || []);
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: result.error });
       }
