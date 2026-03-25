@@ -5,13 +5,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { FileDown, Loader2 } from 'lucide-react';
-import type { FinancialTransaction } from '@/lib/types';
+import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transactions: FinancialTransaction[];
+  accounts?: ChartOfAccount[];
 };
 
 export function FinancialReportDialog({ open, onOpenChange, transactions }: Props) {
