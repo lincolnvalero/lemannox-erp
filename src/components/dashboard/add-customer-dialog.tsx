@@ -50,7 +50,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingCustomer: Customer | null;
-  onSaveSuccess: () => void;
+  onSaveSuccess: (customer: Customer) => void;
 }
 
 export function AddCustomerDialog({
@@ -125,9 +125,9 @@ export function AddCustomerDialog({
 
     setLoading(false);
 
-    if (result.success) {
+    if (result.success && result.customer) {
       onOpenChange(false);
-      onSaveSuccess();
+      onSaveSuccess(result.customer);
     }
   }
 
