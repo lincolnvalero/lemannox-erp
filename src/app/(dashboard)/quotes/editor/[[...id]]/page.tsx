@@ -971,10 +971,8 @@ export default function QuoteEditorPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="print-container">
-                             <QuotePreview 
-                                quoteId={quoteNumber ? String(quoteNumber) : 'NOVO'}
-                                data={allWatchedData as QuoteFormValues} 
-                                customer={selectedCustomer}
+                             <QuotePreview
+                                quote={{ ...allWatchedData, id: quoteId ?? '', quoteNumber: quoteNumber ?? 0, customerId: watchedCustomerId, subtotal: 0, total: 0 } as unknown as Quote}
                              />
                         </CardContent>
                     </Card>
