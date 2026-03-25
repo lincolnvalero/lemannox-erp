@@ -131,7 +131,7 @@ export default function CostCalculatorPage() {
     setIsDataLoading(true);
     const result = await getMaterials();
     if(result.success) {
-        setMaterials(result.materials || []);
+        setMaterials((result.materials || []).map(m => ({ ...m, price: m.unitCost })));
     } else {
         toast({ variant: 'destructive', title: 'Erro ao carregar materiais', description: result.error });
     }
