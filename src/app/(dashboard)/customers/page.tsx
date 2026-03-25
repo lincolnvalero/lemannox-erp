@@ -394,12 +394,10 @@ export default function CustomersPage() {
                         <TableCell className="hidden lg:table-cell">
                           <Select
                             value={customer.productionStatus}
-                            onValueChange={(
-                              newStatus: Customer['productionStatus']
-                            ) =>
+                            onValueChange={(newStatus) =>
                               handleProductionStatusChange(
                                 customer.id,
-                                newStatus
+                                newStatus as NonNullable<Customer['productionStatus']>
                               )
                             }
                           >
