@@ -142,7 +142,7 @@ export default function QuoteEditorPage() {
     [customers, watchedCustomerId]
   );
   
-  const fullQuoteDataForOs = isEditMode ? { ...allWatchedData, id: quoteId, quoteNumber: quoteNumber!, customerId: watchedCustomerId } as Quote : null;
+  const fullQuoteDataForOs = isEditMode ? { ...allWatchedData, id: quoteId, quoteNumber: quoteNumber!, customerId: watchedCustomerId, subtotal: 0, total: 0 } as unknown as Quote : null;
 
 
   useEffect(() => {
