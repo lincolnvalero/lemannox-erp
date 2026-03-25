@@ -11,9 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import type { Quote } from '@/lib/types';
 
 type Props = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  quote: Quote;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  quote: Quote | null;
   onSuccess?: (osNumber: number) => void;
 };
 
@@ -22,6 +22,8 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('aberta');
+
+  if (!quote) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +34,7 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
       if (result.success) {
         toast({ title: 'OS criada com sucesso!', description: `OS #${result.osNumber} gerada.` });
         onSuccess?.(result.osNumber || 0);
-        onOpenChange(false);
+        onOpenChange?.(false);
       } else {
         toast({ variant: 'destructive', title: 'Erro ao criar OS', description: result.error });
       }
@@ -91,7 +93,7 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange?.(false)}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Gerar OS
