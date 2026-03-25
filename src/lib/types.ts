@@ -27,7 +27,8 @@ export type Customer = {
   rating?: number;
   totalSpent?: number;
   joinDate?: string;
-  productionStatus?: 'nenhum' | 'ativo' | 'em_producao' | 'entregue' | 'pausado';
+  financialStatus?: 'Pago' | 'Em dia' | 'Vencido';
+  productionStatus?: 'Em orçamento' | 'Aprovado' | 'Produção' | 'Entrega' | 'Concluído' | 'Devolução para ajuste' | 'Pausado';
 };
 
 export type ProductionStatus = {
@@ -170,5 +171,5 @@ export type RawMaterial = Material & {
   height?: number;
   thickness?: number;
   density?: number;
-  price?: number;
+  price: number;
 };
