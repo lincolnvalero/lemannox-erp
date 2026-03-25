@@ -47,7 +47,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingMaterial: Material | null;
-  suppliers: Supplier[];
+  suppliers?: Supplier[];
   onSaveSuccess: () => void;
 }
 
@@ -55,7 +55,7 @@ export function AddMaterialDialog({
   open,
   onOpenChange,
   editingMaterial,
-  suppliers,
+  suppliers = [],
   onSaveSuccess,
 }: Props) {
   const [loading, setLoading] = useState(false);
