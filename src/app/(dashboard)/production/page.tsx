@@ -128,7 +128,7 @@ export default function ProductionSchedulePage() {
       <ExportSchedulePdfDialog
         open={isExportDialogOpen}
         onOpenChange={setIsExportDialogOpen}
-        scheduleItems={filteredSchedule}
+        schedule={filteredSchedule}
       />
        <div className="flex-1 space-y-4 p-4 md:p-8">
         <h1 className="text-2xl font-bold tracking-tight">Produção</h1>
