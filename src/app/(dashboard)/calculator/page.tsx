@@ -37,6 +37,7 @@ import { getMaterials } from '@/app/(dashboard)/materials/actions';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle } from 'lucide-react';
+import { CalculatorDiagram } from '@/components/dashboard/calculator-diagram';
 import type { RawMaterial } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -168,6 +169,9 @@ export default function CostCalculatorPage() {
   const { watch, setValue } = form;
   const watchedHasLighting = watch('hasLighting');
   const watchedLampType = watch('lightingLampType');
+  const watchedWidth = watch('width');
+  const watchedDepth = watch('depth');
+  const watchedHeight = watch('height');
 
   useEffect(() => {
     if (watchedLampType === 'none') {
@@ -577,10 +581,13 @@ export default function CostCalculatorPage() {
                       {isLoading && <div className="flex items-center justify-center h-96"><Sparkles className="h-8 w-8 animate-spin text-primary" /></div>}
                       
                       {!results && !isLoading && (
-                          <div className="flex flex-col items-center justify-center h-96 text-center text-muted-foreground p-4">
-                              <Bot className="h-10 w-10 mb-4" />
-                              <p className="font-semibold">Aguardando cálculo</p>
-                              <p className="text-sm">Preencha os dados e clique em "Calcular" para ver os resultados.</p>
+                          <div className="space-y-4">
+                              <CalculatorDiagram width={watchedWidth} height={watchedHeight} depth={watchedDepth} />
+                              <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                                  <Bot className="h-10 w-10 mb-4" />
+                                  <p className="font-semibold">Aguardando cálculo</p>
+                                  <p className="text-sm">Preencha os dados e clique em "Calcular" para ver os resultados.</p>
+                              </div>
                           </div>
                       )}
                       

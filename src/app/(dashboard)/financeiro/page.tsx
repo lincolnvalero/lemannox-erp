@@ -167,22 +167,17 @@ export default function FinancialDashboardPage() {
     const monthlyData = filtered
         .filter(t => t.status === 'pago')
         .reduce((acc, t) => {
-            const month = new Date(t.transactionDate).toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
-            if (!acc[month]) {
-                acc[month] = { name: month, entrada: 0, saida: 0 };
+            const date = new Date(t.transactionDate + 'T00:00:00');
+            const sortKey = date.getFullYear() * 100 + date.getMonth() + 1;
+            const month = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
+            if (!acc[sortKey]) {
+                acc[sortKey] = { name: month, entrada: 0, saida: 0, sortKey };
             }
-            acc[month][t.type] += t.amount;
+            acc[sortKey][t.type] += t.amount;
             return acc;
-        }, {} as Record<string, { name: string; entrada: number; saida: number }>);
+        }, {} as Record<number, { name: string; entrada: number; saida: number; sortKey: number }>);
     
-    const chartData = Object.values(monthlyData).sort((a,b) => {
-        const [mA, yA] = a.name.split('/');
-        const [mB, yB] = b.name.split('/');
-        const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-        const dateA = new Date(parseInt(`20${yA}`, 10), months.indexOf(mA.toLowerCase()));
-        const dateB = new Date(parseInt(`20${yB}`, 10), months.indexOf(mB.toLowerCase()));
-        return dateA.getTime() - dateB.getTime();
-    });
+    const chartData = Object.values(monthlyData).sort((a, b) => a.sortKey - b.sortKey).map(({ sortKey: _sk, ...rest }) => rest);
 
     const recentTransactionsForDisplay = filtered.slice(0, 10);
 

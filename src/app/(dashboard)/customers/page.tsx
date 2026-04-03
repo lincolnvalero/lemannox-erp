@@ -388,7 +388,7 @@ export default function CustomersPage() {
                               financialBadgeVariant(customer.financialStatus)
                             )}
                           >
-                            {customer.financialStatus}
+                            {customer.financialStatus || '—'}
                           </Badge>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">

@@ -13,7 +13,7 @@ function rowToQuote(row: Record<string, unknown>): Quote {
     customerDetails: (row.customer_details as Quote['customerDetails']) || undefined,
     obra: (row.obra as string) || undefined,
     status: row.status as Quote['status'],
-    items: (row.items ?? []) as QuoteItem[],
+    items: (Array.isArray(row.items) ? row.items : []) as QuoteItem[],
     subtotal: row.subtotal as number,
     total: row.total as number,
     freight: (row.freight as number) || undefined,

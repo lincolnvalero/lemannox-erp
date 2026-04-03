@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { FilePenLine, PlusCircle, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { getMaterials, deleteMaterial } from './actions';
+import { StockIndicator } from '@/components/dashboard/stock-indicator';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -48,7 +49,7 @@ export default function MaterialsPage() {
     setLoading(true);
     const result = await getMaterials();
     if (result.success) {
-      setMaterials((result.materials || []).map(m => ({ ...m, price: m.unitCost })));
+      setMaterials((result.materials || []).map(m => ({ ...m, price: m.unitCost ?? 0 })));
     } else {
       toast({
         variant: 'destructive',
@@ -148,6 +149,7 @@ export default function MaterialsPage() {
                   <TableHead>Item</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Dimensões/Especificação</TableHead>
+                  <TableHead>Estoque</TableHead>
                   <TableHead className="text-right">Custo</TableHead>
                   <TableHead><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
@@ -159,6 +161,7 @@ export default function MaterialsPage() {
                             <TableCell><Skeleton className="h-5 w-40" /></TableCell>
                             <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                             <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                             <TableCell><Skeleton className="h-5 w-28 ml-auto" /></TableCell>
                             <TableCell><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
                         </TableRow>
@@ -174,6 +177,9 @@ export default function MaterialsPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {material.category === 'Chapa' ? `${material.width}x${material.height}mm` : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <StockIndicator stock={material.quantity} maxStock={material.minQuantity > 0 ? material.minQuantity * 3 : 10} />
                       </TableCell>
                       <TableCell className="text-right font-code">
                         {formatCurrency(material.price)} / {material.unit}
