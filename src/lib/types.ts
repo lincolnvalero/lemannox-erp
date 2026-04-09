@@ -158,6 +158,7 @@ export type OrdemServico = {
   quoteId?: string;
   quoteNumber?: number;
   customerName?: string;
+  obra?: string;
   status: 'aberta' | 'em_andamento' | 'concluida' | 'cancelada';
   notes?: string;
   createdAt: string;

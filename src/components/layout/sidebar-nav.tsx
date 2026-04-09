@@ -35,7 +35,10 @@ const navItems: NavItem[] = [
   ]},
   { title: 'Clientes', href: '/customers', icon: Users },
   { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'Produção', href: '/production', icon: Factory },
+  { title: 'Produção', icon: Factory, children: [
+    { title: 'Programação', href: '/production' },
+    { title: 'Ordens de Serviço', href: '/os' },
+  ]},
   { title: 'Financeiro', icon: DollarSign, children: [
     { title: 'Visão Geral', href: '/financeiro' },
     { title: 'Controle do Caixa', href: '/financeiro/caixa' },

@@ -13,7 +13,8 @@ interface Props {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("pt-BR");
+  // Usa timeZone UTC para evitar shift de -1 dia em fusos negativos (ex: BRT = UTC-3)
+  return new Date(dateStr).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 const STATUS_LABEL: Record<string, string> = {
