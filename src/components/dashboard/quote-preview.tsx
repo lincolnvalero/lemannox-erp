@@ -29,9 +29,6 @@ export function QuotePreview({ quote }: Props) {
           .print-this { position: fixed; top: 0; left: 0; width: 100%; }
           .no-print { display: none !important; }
         }
-        @media screen {
-          .print-this { display: none; }
-        }
       `}</style>
 
       <div className="print-this bg-white text-gray-900 p-10 min-h-screen font-sans">

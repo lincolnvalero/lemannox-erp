@@ -972,7 +972,7 @@ export default function QuoteEditorPage() {
                         </CardHeader>
                         <CardContent className="print-container">
                              <QuotePreview
-                                quote={{ ...allWatchedData, id: quoteId ?? '', quoteNumber: quoteNumber ?? 0, customerId: watchedCustomerId, subtotal: 0, total: 0 } as unknown as Quote}
+                                quote={{ ...allWatchedData, id: quoteId ?? '', quoteNumber: quoteNumber ?? 0, customerId: watchedCustomerId, subtotal: totals.itemsSubtotal, total: totals.grandTotal } as unknown as Quote}
                              />
                         </CardContent>
                     </Card>
