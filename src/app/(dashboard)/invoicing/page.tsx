@@ -152,36 +152,46 @@ export default function InvoicingPage() {
   // ── Load inicial ────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
-    const [sett, nfs] = await Promise.all([
-      getNfeSettings(),
-      listNotasFiscais(30),
-    ]);
-    setSettings(sett);
-    setHistorico(nfs);
-    setForm(DEFAULT_FORM(sett));
+    try {
+      const [sett, nfs] = await Promise.all([
+        getNfeSettings(),
+        listNotasFiscais(30),
+      ]);
+      setSettings(sett);
+      setHistorico(nfs);
+      setForm(DEFAULT_FORM(sett));
 
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('quotes')
-      .select('id,quote_number,customer_id,customer_name,customer_details,items,total,freight,status')
-      .in('status', ['aprovado', 'faturado'])
-      .order('quote_number', { ascending: false })
-      .limit(100);
-    setQuotes((data ?? []).map((q: Record<string, unknown>) => ({
-      id: q.id,
-      quoteNumber: q.quote_number,
-      customerId: q.customer_id as string ?? '',
-      customerName: q.customer_name,
-      customerDetails: q.customer_details,
-      status: q.status,
-      items: q.items ?? [],
-      subtotal: 0,
-      total: q.total,
-      freight: q.freight,
-      date: '',
-    })) as Quote[]);
-    setLoading(false);
-  }, []);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('quotes')
+        .select('id,quote_number,customer_id,customer_name,customer_details,items,total,freight,status')
+        .in('status', ['aprovado', 'faturado'])
+        .order('quote_number', { ascending: false })
+        .limit(100);
+      setQuotes(((data ?? []) as Record<string, unknown>[]).map((q) => ({
+        id: q.id as string,
+        quoteNumber: q.quote_number as number,
+        customerId: (q.customer_id as string | null) ?? '',
+        customerName: q.customer_name as string,
+        customerDetails: q.customer_details as Record<string, string> | undefined,
+        status: q.status as Quote['status'],
+        items: (q.items as Quote['items']) ?? [],
+        subtotal: 0,
+        total: (q.total as number) ?? 0,
+        freight: (q.freight as number) ?? 0,
+        date: '',
+      })));
+    } catch (err) {
+      console.error('[InvoicingPage] load error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao carregar faturamento',
+        description: err instanceof Error ? err.message : 'Tente recarregar a página.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
