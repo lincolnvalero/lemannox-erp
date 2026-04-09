@@ -182,7 +182,25 @@ export async function updateQuoteStatus(
 
     if (error) throw error;
 
+    // Auto-cria OS quando status muda para 'aprovado' e ainda não tem OS
+    if (data.status === 'aprovado' && !data.os_number) {
+      const { data: osData } = await supabase
+        .from('ordens_servico')
+        .insert({ quote_id: data.id, status: 'aberta' })
+        .select()
+        .single();
+
+      if (osData) {
+        await supabase
+          .from('quotes')
+          .update({ os_number: osData.os_number })
+          .eq('id', data.id);
+        data.os_number = osData.os_number;
+      }
+    }
+
     revalidatePath('/quotes');
+    revalidatePath('/production');
     return { success: true, quote: rowToQuote(data) };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar status';
