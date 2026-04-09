@@ -15,10 +15,20 @@ function formatDate(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString("pt-BR");
 }
 
+const TAX_RATE = 0.045;
+
 export function QuotePreview({ quote }: Props) {
   const discount = quote.discount ?? 0;
   const freight = quote.freight ?? 0;
-  const total = quote.subtotal - discount + freight;
+
+  // Valor da mercadoria (sem imposto)
+  const merchandise = quote.items.reduce((sum, item) => sum + (item.total ?? 0), 0);
+
+  // Imposto total (4,5% sobre a mercadoria)
+  const taxTotal = quote.items.reduce((sum, item) => sum + (item.tax ?? item.total * TAX_RATE ?? 0), 0);
+
+  // Total final
+  const grandTotal = merchandise + taxTotal + freight - discount;
 
   return (
     <>
@@ -32,6 +42,7 @@ export function QuotePreview({ quote }: Props) {
       `}</style>
 
       <div className="print-this bg-white text-gray-900 p-10 min-h-screen font-sans">
+        {/* Cabeçalho */}
         <header className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
           <div>
             <h1 className="text-3xl font-black tracking-tight text-gray-900">LEMANNOX</h1>
@@ -43,17 +54,14 @@ export function QuotePreview({ quote }: Props) {
             </p>
             <p className="text-xs text-gray-500 mt-1">Data: {formatDate(quote.date)}</p>
             {quote.expiryDate && (
-              <p className="text-xs text-gray-500">
-                Validade: {formatDate(quote.expiryDate)}
-              </p>
+              <p className="text-xs text-gray-500">Validade: {formatDate(quote.expiryDate)}</p>
             )}
           </div>
         </header>
 
+        {/* Cliente */}
         <section className="mb-6">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
-            Cliente
-          </h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Cliente</h2>
           <div className="bg-gray-50 rounded p-4 text-sm">
             <p className="font-semibold text-base">{quote.customerName}</p>
             {quote.customerDetails?.cnpj && (
@@ -74,10 +82,9 @@ export function QuotePreview({ quote }: Props) {
           </div>
         </section>
 
+        {/* Itens */}
         <section className="mb-6">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
-            Itens
-          </h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Itens</h2>
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-800 text-white">
@@ -85,33 +92,41 @@ export function QuotePreview({ quote }: Props) {
                 <th className="text-left px-3 py-2 font-semibold">Material</th>
                 <th className="text-left px-3 py-2 font-semibold">Medida</th>
                 <th className="text-center px-3 py-2 font-semibold">Qtd</th>
-                <th className="text-right px-3 py-2 font-semibold">Preço Unit.</th>
+                <th className="text-right px-3 py-2 font-semibold">Vlr. Unit.</th>
+                <th className="text-right px-3 py-2 font-semibold">Imposto (4,5%)</th>
                 <th className="text-right px-3 py-2 font-semibold">Total</th>
               </tr>
             </thead>
             <tbody>
-              {quote.items.map((item, idx) => (
-                <tr
-                  key={item.id}
-                  className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                >
-                  <td className="px-3 py-2">{item.name}</td>
-                  <td className="px-3 py-2 text-gray-600">{item.material}</td>
-                  <td className="px-3 py-2 text-gray-600">{item.measurement}</td>
-                  <td className="px-3 py-2 text-center">{item.quantity}</td>
-                  <td className="px-3 py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{formatCurrency(item.total)}</td>
-                </tr>
-              ))}
+              {quote.items.map((item, idx) => {
+                const itemTax = item.tax ?? item.total * TAX_RATE;
+                const itemTotal = item.total + itemTax;
+                return (
+                  <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <td className="px-3 py-2">{item.name}</td>
+                    <td className="px-3 py-2 text-gray-600">{item.material}</td>
+                    <td className="px-3 py-2 text-gray-600">{item.measurement}</td>
+                    <td className="px-3 py-2 text-center">{item.quantity}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(item.unitPrice)}</td>
+                    <td className="px-3 py-2 text-right text-orange-700">{formatCurrency(itemTax)}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatCurrency(itemTotal)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>
 
+        {/* Totais */}
         <div className="flex justify-end mb-6">
-          <div className="w-64 text-sm space-y-1">
+          <div className="w-72 text-sm space-y-1">
             <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-600">Subtotal</span>
-              <span>{formatCurrency(quote.subtotal)}</span>
+              <span className="text-gray-600">Valor da Mercadoria</span>
+              <span>{formatCurrency(merchandise)}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-gray-200">
+              <span className="text-orange-700 font-medium">Impostos (4,5% Simples Nacional)</span>
+              <span className="text-orange-700">{formatCurrency(taxTotal)}</span>
             </div>
             {freight > 0 && (
               <div className="flex justify-between py-1 border-b border-gray-200">
@@ -127,16 +142,15 @@ export function QuotePreview({ quote }: Props) {
             )}
             <div className="flex justify-between py-2 font-bold text-base border-t-2 border-gray-800">
               <span>TOTAL</span>
-              <span>{formatCurrency(total)}</span>
+              <span>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
         </div>
 
+        {/* Condições */}
         {(quote.paymentTerms || quote.deliveryTime || quote.expiryDate || quote.notes) && (
           <section className="border-t border-gray-200 pt-4">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">
-              Condições
-            </h2>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Condições</h2>
             <div className="grid grid-cols-3 gap-4 text-sm">
               {quote.paymentTerms && (
                 <div>
@@ -147,7 +161,7 @@ export function QuotePreview({ quote }: Props) {
               {quote.deliveryTime && (
                 <div>
                   <p className="text-xs text-gray-500 font-semibold mb-1">Prazo de entrega</p>
-                  <p className="text-gray-800">{quote.deliveryTime}</p>
+                  <p className="text-gray-800">{formatDate(quote.deliveryTime)}</p>
                 </div>
               )}
               {quote.expiryDate && (

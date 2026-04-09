@@ -78,7 +78,8 @@ export async function upsertQuote(
     const discount = parseFloat(String(data.discount || 0)) || 0;
 
     const subtotal = items.reduce((sum, item) => sum + (item.total ?? 0), 0);
-    const total = subtotal + freight - discount;
+    const taxTotal = items.reduce((sum, item) => sum + (Number(item.tax) || item.total * 0.045 || 0), 0);
+    const total = subtotal + taxTotal + freight - discount;
 
     // Busca detalhes do cliente para snapshot
     let customerDetails: Quote['customerDetails'] = {};
