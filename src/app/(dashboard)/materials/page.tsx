@@ -192,7 +192,7 @@ export default function MaterialsPage() {
                         <div className="flex items-center gap-2">
                           {material.name}
                           {material.minQuantity > 0 && material.quantity <= material.minQuantity && (
-                            <AlertTriangle className="h-3.5 w-3.5 text-orange-400" title="Abaixo do estoque mínimo" />
+                            <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
                           )}
                         </div>
                       </TableCell>
