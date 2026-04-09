@@ -7,18 +7,11 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -31,16 +24,7 @@ import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,15 +42,20 @@ import { getTransactions, getAccounts, deleteTransaction } from './actions';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  BarChart3,
   DollarSign,
   FileDown,
-  FilePenLine,
-  MoreHorizontal,
-  Trash2,
   TrendingDown,
   TrendingUp,
+  Wallet,
 } from 'lucide-react';
-import { isWithinInterval, startOfMonth, subMonths, format } from 'date-fns';
+import {
+  isWithinInterval,
+  startOfMonth,
+  startOfYear,
+  subMonths,
+  format,
+} from 'date-fns';
 import { FinancialReportDialog } from '@/components/dashboard/financial-report-dialog';
 
 const chartConfig = {
@@ -74,28 +63,45 @@ const chartConfig = {
   saida: { label: 'Saídas', color: 'hsl(var(--chart-6))' },
 };
 
+type QuickFilter = 'month' | '3m' | '6m' | 'year' | 'custom';
+
 type DateRange = {
   from?: Date;
   to?: Date;
 };
+
+const quickFilters: { label: string; value: QuickFilter }[] = [
+  { label: 'Este mês', value: 'month' },
+  { label: '3 meses', value: '3m' },
+  { label: '6 meses', value: '6m' },
+  { label: 'Este ano', value: 'year' },
+];
+
+function getDateRangeForFilter(filter: QuickFilter): DateRange {
+  const now = new Date();
+  if (filter === 'month') return { from: startOfMonth(now), to: now };
+  if (filter === '3m') return { from: startOfMonth(subMonths(now, 2)), to: now };
+  if (filter === '6m') return { from: startOfMonth(subMonths(now, 5)), to: now };
+  if (filter === 'year') return { from: startOfYear(now), to: now };
+  return { from: undefined, to: undefined };
+}
 
 export default function FinancialDashboardPage() {
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<QuickFilter>('6m');
+  const [dateRange, setDateRange] = useState<DateRange>(getDateRangeForFilter('6m'));
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfMonth(subMonths(new Date(), 5)),
-    to: new Date(),
-  });
-  
-  const formatDateForInput = (date?: Date) => {
-    if (!date) return '';
-    return format(date, 'yyyy-MM-dd');
+  const formatDateForInput = (date?: Date) =>
+    date ? format(date, 'yyyy-MM-dd') : '';
+
+  const applyQuickFilter = (f: QuickFilter) => {
+    setActiveFilter(f);
+    setDateRange(getDateRangeForFilter(f));
   };
 
   useEffect(() => {
@@ -105,30 +111,12 @@ export default function FinancialDashboardPage() {
         getTransactions(),
         getAccounts(),
       ]);
-
-      if (transactionsResult.success) {
-        setTransactions(transactionsResult.transactions || []);
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao carregar dados',
-          description: transactionsResult.error,
-        });
-      }
-      
-      if (accountsResult.success) {
-        setAccounts(accountsResult.accounts || []);
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao carregar plano de contas',
-          description: accountsResult.error,
-        });
-      }
-
+      if (transactionsResult.success) setTransactions(transactionsResult.transactions || []);
+      else toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: transactionsResult.error });
+      if (accountsResult.success) setAccounts(accountsResult.accounts || []);
+      else toast({ variant: 'destructive', title: 'Erro ao carregar plano de contas', description: accountsResult.error });
       setLoading(false);
     };
-
     fetchFinancialData();
   }, [toast]);
 
@@ -136,10 +124,10 @@ export default function FinancialDashboardPage() {
     if (!deletingTransaction) return;
     const result = await deleteTransaction(deletingTransaction.id);
     if (result.success) {
-        toast({ title: 'Transação Excluída', description: `A transação "${deletingTransaction.description}" foi removida.`});
-        setTransactions(prev => prev.filter(t => t.id !== deletingTransaction.id));
+      toast({ title: 'Transação excluída', description: `"${deletingTransaction.description}" foi removida.` });
+      setTransactions(prev => prev.filter(t => t.id !== deletingTransaction.id));
     } else {
-        toast({ variant: 'destructive', title: 'Erro ao Excluir', description: result.error });
+      toast({ variant: 'destructive', title: 'Erro ao excluir', description: result.error });
     }
     setDeletingTransaction(null);
   };
@@ -147,7 +135,7 @@ export default function FinancialDashboardPage() {
   const analysis = useMemo(() => {
     const filtered = transactions.filter((t) => {
       if (!dateRange?.from) return true;
-      const transactionDate = new Date(t.transactionDate);
+      const transactionDate = new Date(t.transactionDate + 'T00:00:00');
       return isWithinInterval(transactionDate, {
         start: dateRange.from,
         end: dateRange.to || new Date(),
@@ -165,51 +153,58 @@ export default function FinancialDashboardPage() {
     const resultadoLiquido = totalEntradas - totalSaidas;
 
     const monthlyData = filtered
-        .filter(t => t.status === 'pago')
-        .reduce((acc, t) => {
-            const date = new Date(t.transactionDate + 'T00:00:00');
-            const sortKey = date.getFullYear() * 100 + date.getMonth() + 1;
-            const month = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
-            if (!acc[sortKey]) {
-                acc[sortKey] = { name: month, entrada: 0, saida: 0, sortKey };
-            }
-            acc[sortKey][t.type] += t.amount;
-            return acc;
-        }, {} as Record<number, { name: string; entrada: number; saida: number; sortKey: number }>);
-    
-    const chartData = Object.values(monthlyData).sort((a, b) => a.sortKey - b.sortKey).map(({ sortKey: _sk, ...rest }) => rest);
+      .filter(t => t.status === 'pago')
+      .reduce((acc, t) => {
+        const date = new Date(t.transactionDate + 'T00:00:00');
+        const sortKey = date.getFullYear() * 100 + date.getMonth() + 1;
+        const month = date.toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
+        if (!acc[sortKey]) acc[sortKey] = { name: month, entrada: 0, saida: 0, sortKey };
+        acc[sortKey][t.type] += t.amount;
+        return acc;
+      }, {} as Record<number, { name: string; entrada: number; saida: number; sortKey: number }>);
 
-    const recentTransactionsForDisplay = filtered.slice(0, 10);
+    const chartData = Object.values(monthlyData)
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ sortKey: _sk, ...rest }) => rest);
 
-    return {
-      totalEntradas,
-      totalSaidas,
-      resultadoLiquido,
-      chartData,
-      recentTransactions: recentTransactionsForDisplay,
-    };
+    const recentTransactions = filtered
+      .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
+      .slice(0, 10);
+
+    return { totalEntradas, totalSaidas, resultadoLiquido, chartData, recentTransactions };
   }, [transactions, dateRange]);
 
   if (loading) {
-    return <Skeleton className="h-[80vh] w-full" />;
+    return (
+      <div className="space-y-6 p-4 md:p-8">
+        <Skeleton className="h-12 w-64" />
+        <div className="grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-28" />)}
+        </div>
+        <Skeleton className="h-[300px]" />
+      </div>
+    );
   }
+
+  const isPositive = analysis.resultadoLiquido >= 0;
 
   return (
     <>
       <AlertDialog open={!!deletingTransaction} onOpenChange={() => setDeletingTransaction(null)}>
         <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Esta ação não pode ser desfeita. Isso irá excluir permanentemente a transação &quot;{deletingTransaction?.description}&quot;.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteConfirm}>Excluir</AlertDialogAction>
-            </AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Isso irá excluir permanentemente a transação &quot;{deletingTransaction?.description}&quot;.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
       <FinancialReportDialog
         open={isReportDialogOpen}
         onOpenChange={setIsReportDialogOpen}
@@ -217,207 +212,207 @@ export default function FinancialDashboardPage() {
         accounts={accounts}
       />
 
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <CardTitle>Filtros do Dashboard</CardTitle>
-                    <CardDescription>
-                        Selecione um período para analisar o fluxo de caixa.
-                    </CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                     <Button variant="secondary" onClick={() => setIsReportDialogOpen(true)}>
-                        <FileDown className="mr-2 h-4 w-4" />
-                        Gerar Relatório em PDF
-                    </Button>
-                     <Button variant="outline" asChild>
-                        <Link href="/financeiro/editor?type=saida">
-                          <ArrowDownCircle className="mr-2 h-4 w-4" />
-                          Nova Despesa
-                        </Link>
-                    </Button>
-                    <Button asChild>
-                        <Link href="/financeiro/editor?type=entrada">
-                          <ArrowUpCircle className="mr-2 h-4 w-4" />
-                          Nova Receita
-                        </Link>
-                    </Button>
-                </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="date-from">De</Label>
-                <Input
-                  id="date-from"
-                  type="date"
-                  value={formatDateForInput(dateRange?.from)}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setDateRange((prev) => ({
-                      ...prev,
-                      from: value ? new Date(value + "T00:00:00") : undefined,
-                    }));
-                  }}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="date-to">Até</Label>
-                <Input
-                  id="date-to"
-                  type="date"
-                  value={formatDateForInput(dateRange?.to)}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setDateRange((prev) => ({
-                      ...prev,
-                      to: value ? new Date(value + "T23:59:59") : undefined,
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-6 p-4 md:p-8">
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Entradas</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-500 font-code">
-                {formatCurrency(analysis.totalEntradas)}
-              </div>
-              <p className="text-xs text-muted-foreground">Receitas pagas no período</p>
+        {/* Page header */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 border border-primary/25">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Visão Geral Financeira</h1>
+              <p className="text-sm text-muted-foreground">Fluxo de caixa e resultados do período selecionado</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setIsReportDialogOpen(true)}>
+              <FileDown className="mr-2 h-4 w-4" />
+              Relatório PDF
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/financeiro/editor?type=saida">
+                <ArrowDownCircle className="mr-2 h-4 w-4 text-red-400" />
+                Nova Despesa
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/financeiro/editor?type=entrada">
+                <ArrowUpCircle className="mr-2 h-4 w-4" />
+                Nova Receita
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium mr-1">Período:</span>
+          {quickFilters.map(f => (
+            <button
+              key={f.value}
+              onClick={() => applyQuickFilter(f.value)}
+              className={cn(
+                'h-7 px-3 text-xs rounded-full border transition-colors',
+                activeFilter === f.value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+          <span className="text-border mx-1">|</span>
+          <Input
+            type="date"
+            className="h-7 text-xs w-[130px]"
+            value={formatDateForInput(dateRange?.from)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setActiveFilter('custom');
+              setDateRange(prev => ({ ...prev, from: v ? new Date(v + 'T00:00:00') : undefined }));
+            }}
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <Input
+            type="date"
+            className="h-7 text-xs w-[130px]"
+            value={formatDateForInput(dateRange?.to)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setActiveFilter('custom');
+              setDateRange(prev => ({ ...prev, to: v ? new Date(v + 'T23:59:59') : undefined }));
+            }}
+          />
+        </div>
+
+        {/* KPI cards */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="border-t-2 border-t-green-500">
+            <CardContent className="pt-5">
+              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+                Total de Entradas
+              </p>
+              <p className="text-2xl font-bold font-mono text-green-400">{formatCurrency(analysis.totalEntradas)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Receitas pagas no período</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Saídas</CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-500 font-code">
-                {formatCurrency(analysis.totalSaidas)}
-              </div>
-              <p className="text-xs text-muted-foreground">Despesas pagas no período</p>
+          <Card className="border-t-2 border-t-red-500">
+            <CardContent className="pt-5">
+              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                Total de Saídas
+              </p>
+              <p className="text-2xl font-bold font-mono text-red-400">{formatCurrency(analysis.totalSaidas)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Despesas pagas no período</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Resultado Líquido</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div
-                className={cn(
-                  'text-2xl font-bold font-code',
-                  analysis.resultadoLiquido >= 0 ? 'text-primary' : 'text-destructive'
-                )}
-              >
+          <Card className={cn('border-t-2', isPositive ? 'border-t-primary' : 'border-t-destructive')}>
+            <CardContent className="pt-5">
+              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Resultado Líquido
+              </p>
+              <p className={cn('text-2xl font-bold font-mono', isPositive ? 'text-primary' : 'text-destructive')}>
                 {formatCurrency(analysis.resultadoLiquido)}
-              </div>
-              <p className="text-xs text-muted-foreground">Entradas - Saídas</p>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Entradas − Saídas</p>
             </CardContent>
           </Card>
         </div>
 
+        {/* Chart + Recent transactions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-                <CardHeader>
-                <CardTitle>Fluxo de Caixa Mensal</CardTitle>
-                <CardDescription>
-                    Comparativo de entradas e saídas (valores pagos) por mês.
-                </CardDescription>
-                </CardHeader>
-                <CardContent className="pl-2">
-                <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                    <BarChart data={analysis.chartData}>
+          <Card>
+            <CardHeader className="pb-2">
+              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1.5">
+                <BarChart3 className="h-3.5 w-3.5" />
+                Fluxo de Caixa Mensal
+              </p>
+              <CardDescription className="text-xs">Comparativo de entradas e saídas (valores pagos) por mês.</CardDescription>
+            </CardHeader>
+            <CardContent className="pl-2">
+              {analysis.chartData.length === 0 ? (
+                <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
+                  Nenhum dado no período selecionado.
+                </div>
+              ) : (
+                <ChartContainer config={chartConfig} className="h-[260px] w-full">
+                  <BarChart data={analysis.chartData}>
                     <CartesianGrid vertical={false} />
-                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} />
-                    <YAxis tickFormatter={(value) => formatCurrency(value as number).replace('R$', '')} />
+                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(value) => formatCurrency(value as number).replace('R$\u00a0', '').replace('R$', '')} tick={{ fontSize: 11 }} />
                     <Tooltip cursor={false} content={<ChartTooltipContent />} />
                     <Bar dataKey="entrada" fill="var(--color-entrada)" radius={4} />
                     <Bar dataKey="saida" fill="var(--color-saida)" radius={4} />
-                    </BarChart>
+                  </BarChart>
                 </ChartContainer>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                <CardTitle>Transações Recentes</CardTitle>
-                <CardDescription>
-                    As últimas movimentações financeiras no período selecionado.
-                </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Descrição</TableHead>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Valor</TableHead>
-                                <TableHead><span className="sr-only">Ações</span></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                        {analysis.recentTransactions.map(t => (
-                            <TableRow key={t.id}>
-                                <TableCell>
-                                    <div className="flex items-center gap-2">
-                                        {t.type === 'entrada' ? <ArrowUpCircle className="h-4 w-4 text-green-500" /> : <ArrowDownCircle className="h-4 w-4 text-red-500" />}
-                                        <div className="font-medium">{t.description}</div>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground ml-6">{t.category}</div>
-                                </TableCell>
-                                <TableCell>{new Date(t.transactionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</TableCell>
-                                <TableCell>
-                                    <Badge variant={t.status === 'pago' ? 'default' : 'outline'} className={cn(t.status === 'pago' && 'bg-green-500/80')}>{t.status}</Badge>
-                                </TableCell>
-                                <TableCell className={cn("text-right font-code font-semibold", t.type === 'entrada' ? 'text-green-500' : 'text-red-500')}>
-                                    {t.type === 'entrada' ? '+ ' : '- '} {formatCurrency(t.amount)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent>
-                                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                            <DropdownMenuItem asChild>
-                                                <Link href={`/financeiro/editor/${t.id}`}>
-                                                  <FilePenLine className="mr-2 h-4 w-4" />
-                                                  <span>Editar</span>
-                                                </Link>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeletingTransaction(t)}>
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                <span>Excluir</span>
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                        {analysis.recentTransactions.length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                                    Nenhuma transação no período selecionado.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1.5">
+                <ArrowUpCircle className="h-3.5 w-3.5" />
+                Transações Recentes
+              </p>
+              <CardDescription className="text-xs">Últimas movimentações no período selecionado.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Descrição</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right pr-6">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analysis.recentTransactions.map(t => (
+                    <TableRow key={t.id}>
+                      <TableCell className="pl-6">
+                        <div className="flex items-center gap-2">
+                          {t.type === 'entrada'
+                            ? <ArrowUpCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                            : <ArrowDownCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                          <div>
+                            <div className="font-medium text-sm leading-tight">{t.description}</div>
+                            <div className="text-xs text-muted-foreground">{t.category}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(t.transactionDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={t.status === 'pago' ? 'default' : 'outline'}
+                          className={cn('text-xs', t.status === 'pago' ? 'bg-green-500/20 text-green-400 border-green-500/30' : '')}
+                        >
+                          {t.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className={cn('text-right font-mono font-semibold text-sm pr-6', t.type === 'entrada' ? 'text-green-400' : 'text-red-400')}>
+                        {t.type === 'entrada' ? '+' : '−'} {formatCurrency(t.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {analysis.recentTransactions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        Nenhuma transação no período selecionado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
+
       </div>
     </>
   );
