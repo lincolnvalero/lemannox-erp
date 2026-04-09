@@ -38,10 +38,9 @@ const navItems: NavItem[] = [
   { title: 'Produção', href: '/production', icon: Factory },
   { title: 'Financeiro', icon: DollarSign, children: [
     { title: 'Visão Geral', href: '/financeiro' },
-    { title: 'Nova Transação', href: '/financeiro/editor' },
+    { title: 'Controle do Caixa', href: '/financeiro/caixa' },
     { title: 'Contas a Pagar', href: '/financeiro/pagar' },
     { title: 'Contas a Receber', href: '/financeiro/receber' },
-    { title: 'Histórico', href: '/financeiro/historico' },
     { title: 'Plano de Contas', href: '/financeiro/contas' },
   ]},
   { title: 'Fornecedores', icon: Truck, children: [
