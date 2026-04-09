@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -45,6 +46,71 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
     setLoading(false);
   };
 
+  const formFields = (
+    <>
+      <div className="grid gap-2">
+        <Label>Status Inicial</Label>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="aberta">Aberta</SelectItem>
+            <SelectItem value="em_andamento">Em andamento</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="os-notes">Observações</Label>
+        <Textarea
+          id="os-notes"
+          placeholder="Instruções especiais, materiais, prioridades..."
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={4}
+        />
+      </div>
+      <div className="rounded-md bg-muted/50 border border-border p-3 text-sm space-y-1">
+        <p className="font-medium text-foreground">{quote.items.length} item(s) no orçamento:</p>
+        {quote.items.slice(0, 3).map((item, i) => (
+          <p key={i} className="text-muted-foreground">
+            · {item.quantity}x {item.name} {item.measurement} ({item.material})
+          </p>
+        ))}
+        {quote.items.length > 3 && (
+          <p className="text-muted-foreground">...e mais {quote.items.length - 3} itens</p>
+        )}
+      </div>
+    </>
+  );
+
+  // Modo inline (usado dentro de TabsContent — sem prop open)
+  if (open === undefined) {
+    return (
+      <Card className="max-w-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Gerar Ordem de Serviço
+          </CardTitle>
+          <CardDescription>Orçamento #{quote.quoteNumber} — {quote.customerName}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="grid gap-4">
+            {formFields}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Gerar OS
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Modo dialog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -59,39 +125,7 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Status Inicial</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="aberta">Aberta</SelectItem>
-                  <SelectItem value="em_andamento">Em andamento</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="os-notes">Observações</Label>
-              <Textarea
-                id="os-notes"
-                placeholder="Instruções especiais, materiais, prioridades..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={4}
-              />
-            </div>
-            <div className="rounded-md bg-muted/50 border border-border p-3 text-sm space-y-1">
-              <p className="font-medium text-foreground">{quote.items.length} item(s) no orçamento:</p>
-              {quote.items.slice(0, 3).map((item, i) => (
-                <p key={i} className="text-muted-foreground">
-                  · {item.quantity}x {item.name} {item.measurement} ({item.material})
-                </p>
-              ))}
-              {quote.items.length > 3 && (
-                <p className="text-muted-foreground">...e mais {quote.items.length - 3} itens</p>
-              )}
-            </div>
+            {formFields}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange?.(false)}>Cancelar</Button>

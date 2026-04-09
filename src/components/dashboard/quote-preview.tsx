@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Quote } from "@/lib/types";
+import { getNfeSettings } from "@/app/actions/nfe";
 
 interface Props {
   quote: Quote;
@@ -18,6 +20,20 @@ function formatDate(dateStr?: string) {
 const TAX_RATE = 0.045;
 
 export function QuotePreview({ quote }: Props) {
+  const [companyName, setCompanyName] = useState("LEMANNOX");
+  const [companyTagline, setCompanyTagline] = useState("Produtos em Inox e Aço");
+
+  useEffect(() => {
+    getNfeSettings().then((s) => {
+      if (s) {
+        setCompanyName(s.nomeFantasia || s.razaoSocial || "LEMANNOX");
+        if (s.razaoSocial && s.nomeFantasia && s.nomeFantasia !== s.razaoSocial) {
+          setCompanyTagline(s.razaoSocial);
+        }
+      }
+    });
+  }, []);
+
   const discount = quote.discount ?? 0;
   const freight = quote.freight ?? 0;
 
@@ -45,8 +61,8 @@ export function QuotePreview({ quote }: Props) {
         {/* Cabeçalho */}
         <header className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-gray-900">LEMANNOX</h1>
-            <p className="text-xs text-gray-500 mt-1">Produtos em Inox e Aço</p>
+            <h1 className="text-3xl font-black tracking-tight text-gray-900">{companyName}</h1>
+            <p className="text-xs text-gray-500 mt-1">{companyTagline}</p>
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold text-gray-700">
@@ -181,7 +197,7 @@ export function QuotePreview({ quote }: Props) {
         )}
 
         <footer className="mt-10 pt-4 border-t border-gray-200 text-center text-xs text-gray-400">
-          <p>LEMANNOX — Obrigado pela preferência.</p>
+          <p>{companyName} — Obrigado pela preferência.</p>
         </footer>
       </div>
     </>
