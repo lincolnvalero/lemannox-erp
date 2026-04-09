@@ -25,7 +25,7 @@ export function QuotePreview({ quote }: Props) {
   const merchandise = quote.items.reduce((sum, item) => sum + (item.total ?? 0), 0);
 
   // Imposto total (4,5% sobre a mercadoria)
-  const taxTotal = quote.items.reduce((sum, item) => sum + (item.tax ?? item.total * TAX_RATE ?? 0), 0);
+  const taxTotal = quote.items.reduce((sum, item) => sum + (item.tax != null ? item.tax : item.total * TAX_RATE), 0);
 
   // Total final
   const grandTotal = merchandise + taxTotal + freight - discount;
