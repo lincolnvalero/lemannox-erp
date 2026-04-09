@@ -230,7 +230,7 @@ export default function ProductionSchedulePage() {
                             {item.produto}
                         </td>
                         <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">
-                            {item.previsao || <span>—</span>}
+                            {item.previsao ? format(new Date(item.previsao), 'dd/MM/yyyy') : <span>—</span>}
                         </td>
                         <td className="py-2.5 px-2">
                             <Input
