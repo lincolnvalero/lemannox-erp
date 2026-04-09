@@ -166,85 +166,103 @@ export default function ProductionSchedulePage() {
             </div>
             </CardHeader>
             <CardContent>
-            <Table>
-                <TableHeader>
-                <TableRow>
-                    <TableHead>Pedido</TableHead>
-                    <TableHead>OS</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead className="w-[30%]">Produto</TableHead>
-                    <TableHead>Previsão</TableHead>
-                    <TableHead className="text-center w-[150px]">Concluído em</TableHead>
-                    <TableHead className="text-center w-[150px]">Entregue em</TableHead>
-                </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                    <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[64px]">Pedido</th>
+                    <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[52px]">OS</th>
+                    <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[88px]">Data</th>
+                    <th className="py-3 px-2 text-left font-medium min-w-[140px]">Cliente</th>
+                    <th className="py-3 px-2 text-left font-medium min-w-[80px] max-w-[120px]">Obra</th>
+                    <th className="py-3 px-2 text-left font-medium min-w-[180px]">Produto</th>
+                    <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[80px]">Previsão</th>
+                    <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Concluído em</th>
+                    <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Entregue em</th>
+                </tr>
+                </thead>
+                <tbody>
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-full" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                        <TableCell className="text-center"><Skeleton className="h-9 w-32 mx-auto" /></TableCell>
-                        <TableCell className="text-center"><Skeleton className="h-9 w-32 mx-auto" /></TableCell>
-                    </TableRow>
+                    <tr key={i} className="border-b border-border/50">
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-12" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-10" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-36" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-44" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-4 w-16" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-8 w-[100px] mx-auto" /></td>
+                        <td className="py-3 px-2"><Skeleton className="h-8 w-[100px] mx-auto" /></td>
+                    </tr>
                     ))
                 ) : filteredSchedule.length > 0 ? (
-                    filteredSchedule.map((item, idx) => {
+                    filteredSchedule.map((item) => {
                     const concluidoKey = `${item.quoteId}-${item.itemIndex}-concluidoEm`;
                     const entregueKey = `${item.quoteId}-${item.itemIndex}-entregueEm`;
                     const isSavingConcluido = savingStatus[concluidoKey];
                     const isSavingEntregue = savingStatus[entregueKey];
+                    const isDelivered = !!item.entregueEm;
 
                     return (
-                        <TableRow key={`${item.quoteId}-${item.itemIndex}`} className={isSavingConcluido || isSavingEntregue ? 'opacity-50' : ''}>
-                        <TableCell className="font-medium font-code">#{item.pedido}</TableCell>
-                        <TableCell className="font-medium font-code">{item.osNumber || 'N/A'}</TableCell>
-                        <TableCell>{format(new Date(item.data), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell>{item.cliente}</TableCell>
-                        <TableCell>{item.obra}</TableCell>
-                        <TableCell>{item.produto}</TableCell>
-                        <TableCell>{item.previsao}</TableCell>
-                        <TableCell className="text-center">
+                        <tr
+                        key={`${item.quoteId}-${item.itemIndex}`}
+                        className={`border-b border-border/50 transition-opacity hover:bg-muted/30 ${
+                            isSavingConcluido || isSavingEntregue ? 'opacity-40' : ''
+                        } ${isDelivered ? 'opacity-60' : ''}`}
+                        >
+                        <td className="py-2.5 px-2 font-mono text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            #{item.pedido}
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-xs font-medium whitespace-nowrap">
+                            {item.osNumber || <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">
+                            {format(new Date(item.data), 'dd/MM/yy')}
+                        </td>
+                        <td className="py-2.5 px-2 text-sm font-medium leading-tight">
+                            {item.cliente}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-muted-foreground max-w-[120px] truncate" title={item.obra}>
+                            {item.obra || <span>—</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-sm leading-tight">
+                            {item.produto}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">
+                            {item.previsao || <span>—</span>}
+                        </td>
+                        <td className="py-2.5 px-2">
                             <Input
                             type="date"
-                            className="h-8"
+                            className="h-7 text-xs px-2 w-[100px] mx-auto"
                             defaultValue={formatDateForInput(item.concluidoEm)}
-                            onBlur={(e) =>
-                                handleDateChange(item, 'concluidoEm', e.target.value)
-                            }
+                            onBlur={(e) => handleDateChange(item, 'concluidoEm', e.target.value)}
                             disabled={isSavingConcluido || isSavingEntregue}
                             />
-                        </TableCell>
-                        <TableCell className="text-center">
+                        </td>
+                        <td className="py-2.5 px-2">
                             <Input
                             type="date"
-                            className="h-8"
+                            className="h-7 text-xs px-2 w-[100px] mx-auto"
                             defaultValue={formatDateForInput(item.entregueEm)}
-                            onBlur={(e) =>
-                                handleDateChange(item, 'entregueEm', e.target.value)
-                            }
+                            onBlur={(e) => handleDateChange(item, 'entregueEm', e.target.value)}
                             disabled={isSavingConcluido || isSavingEntregue}
                             />
-                        </TableCell>
-                        </TableRow>
+                        </td>
+                        </tr>
                     );
                     })
                 ) : (
-                    <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    <tr>
+                    <td colSpan={9} className="h-24 text-center text-muted-foreground">
                         {schedule.length > 0 ? 'Nenhum item corresponde aos filtros.' : 'Nenhum item na programação de produção.'}
-                    </TableCell>
-                    </TableRow>
+                    </td>
+                    </tr>
                 )}
-                </TableBody>
-            </Table>
+                </tbody>
+            </table>
+            </div>
             </CardContent>
         </Card>
       </div>
