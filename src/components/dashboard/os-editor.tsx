@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { Quote } from '@/lib/types';
+import type { Quote, OrdemServico } from '@/lib/types';
+import { OsPreview } from '@/components/dashboard/os-preview';
 
 type Props = {
   open?: boolean;
@@ -23,6 +24,7 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('aberta');
+  const [createdOs, setCreatedOs] = useState<OrdemServico | null>(null);
 
   if (!quote) return null;
 
@@ -35,6 +37,7 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
       if (result.success) {
         toast({ title: 'OS criada com sucesso!', description: `OS #${result.ordem?.osNumber} gerada.` });
         onSuccess?.(result.ordem?.osNumber || 0);
+        if (result.ordem) setCreatedOs(result.ordem);
         onOpenChange?.(false);
       } else {
         toast({ variant: 'destructive', title: 'Erro ao criar OS', description: result.error });
@@ -86,6 +89,9 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
 
   // Modo inline (usado dentro de TabsContent — sem prop open)
   if (open === undefined) {
+    if (createdOs) {
+      return <OsPreview os={createdOs} quote={quote} />;
+    }
     return (
       <Card className="max-w-lg">
         <CardHeader>
