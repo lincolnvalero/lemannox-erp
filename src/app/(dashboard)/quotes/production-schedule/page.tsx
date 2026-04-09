@@ -66,8 +66,8 @@ export default function ProductionSchedulePage() {
                       <TableCell className="text-sm">{item.obra}</TableCell>
                       <TableCell className="text-sm">{item.produto}</TableCell>
                       <TableCell className="text-sm">{item.previsao}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{item.concluidoEm || '-'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{item.entregueEm || '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{item.concluidoEm ? new Date(item.concluidoEm).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{item.entregueEm ? new Date(item.entregueEm).toLocaleDateString('pt-BR') : '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

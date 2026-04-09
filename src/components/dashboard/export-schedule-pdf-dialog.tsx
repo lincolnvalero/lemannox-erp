@@ -30,7 +30,9 @@ export function ExportSchedulePdfDialog({ open, onOpenChange, schedule }: Props)
         head: [['Pedido', 'OS', 'Cliente', 'Obra', 'Produto', 'Previsão', 'Concluído', 'Entregue']],
         body: schedule.map(s => [
           `#${s.pedido}`, s.osNumber || '-', s.cliente, s.obra, s.produto,
-          s.previsao, s.concluidoEm || '-', s.entregueEm || '-',
+          s.previsao,
+          s.concluidoEm ? new Date(s.concluidoEm).toLocaleDateString('pt-BR') : '-',
+          s.entregueEm ? new Date(s.entregueEm).toLocaleDateString('pt-BR') : '-',
         ]),
         styles: { fontSize: 7 },
         headStyles: { fillColor: [45, 55, 90] },
