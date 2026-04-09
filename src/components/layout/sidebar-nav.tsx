@@ -49,6 +49,7 @@ const navItems: NavItem[] = [
     { title: 'Dashboard', href: '/suppliers/dashboard' },
   ]},
   { title: 'Materiais', href: '/materials', icon: Archive },
+  { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
   { title: 'Calculadora', href: '/calculator', icon: Calculator },
   { title: 'Faturamento', href: '/invoicing', icon: Receipt },
   { title: 'Admin', icon: Settings, children: [

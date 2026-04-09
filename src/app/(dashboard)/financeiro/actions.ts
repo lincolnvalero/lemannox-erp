@@ -112,6 +112,44 @@ export async function upsertTransaction(formData: FormData): Promise<{
   }
 }
 
+export async function getPendingTransactions(type: 'entrada' | 'saida'): Promise<{
+  success: boolean;
+  transactions?: FinancialTransaction[];
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .select('*')
+      .eq('type', type)
+      .eq('status', 'pendente')
+      .order('due_date', { ascending: true });
+
+    if (error) throw error;
+    return { success: true, transactions: (data ?? []).map(rowToTransaction) };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar lançamentos pendentes';
+    return { success: false, error: message };
+  }
+}
+
+export async function markAsPaid(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('financial_transactions')
+      .update({ status: 'pago', transaction_date: new Date().toISOString().split('T')[0] })
+      .eq('id', id);
+    if (error) throw error;
+    revalidatePath('/financeiro', 'layout');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao marcar como pago';
+    return { success: false, error: message };
+  }
+}
+
 export async function deleteTransaction(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();

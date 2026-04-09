@@ -10,7 +10,7 @@ export default function SuppliersLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const activeTab = pathname.endsWith('dashboard') ? 'dashboard' : 'list';
+  const activeTab = pathname.endsWith('dashboard') ? 'dashboard' : pathname.endsWith('historico') ? 'historico' : 'list';
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8">
@@ -22,6 +22,9 @@ export default function SuppliersLayout({
                 </TabsTrigger>
                 <TabsTrigger value="dashboard" asChild>
                     <Link href="/suppliers/dashboard">Dashboard</Link>
+                </TabsTrigger>
+                <TabsTrigger value="historico" asChild>
+                    <Link href="/suppliers/historico">Histórico de Compras</Link>
                 </TabsTrigger>
             </TabsList>
             {children}

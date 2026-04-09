@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FilePenLine, PlusCircle, Trash2 } from 'lucide-react';
+import { FilePenLine, PlusCircle, Trash2, ArrowDownUp, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { getMaterials, deleteMaterial } from './actions';
 import { StockIndicator } from '@/components/dashboard/stock-indicator';
@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { AddMaterialDialog } from '@/components/dashboard/add-material-dialog';
+import { StockMovementDialog } from '@/components/dashboard/stock-movement-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function MaterialsPage() {
@@ -43,6 +44,8 @@ export default function MaterialsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<RawMaterial | null>(null);
   const [materialToDelete, setMaterialToDelete] = useState<RawMaterial | null>(null);
+  const [movementMaterial, setMovementMaterial] = useState<RawMaterial | null>(null);
+  const [isMovementOpen, setIsMovementOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchMaterials = useCallback(async () => {
@@ -99,8 +102,16 @@ export default function MaterialsPage() {
   };
 
 
+  const criticalCount = materials.filter(m => m.minQuantity > 0 && m.quantity <= m.minQuantity).length;
+
   return (
     <>
+      <StockMovementDialog
+        open={isMovementOpen}
+        onOpenChange={setIsMovementOpen}
+        material={movementMaterial}
+        onSuccess={fetchMaterials}
+      />
       <AddMaterialDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
@@ -129,7 +140,15 @@ export default function MaterialsPage() {
 
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Catálogo de Matérias-Primas e Custos</h1>
+            <div>
+              <h1 className="text-2xl font-bold">Catálogo de Matérias-Primas e Custos</h1>
+              {criticalCount > 0 && (
+                <p className="flex items-center gap-1.5 text-sm text-orange-400 mt-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  {criticalCount} {criticalCount === 1 ? 'material abaixo' : 'materiais abaixo'} do estoque mínimo
+                </p>
+              )}
+            </div>
             <Button onClick={handleAddNew}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Novo Item
@@ -168,9 +187,14 @@ export default function MaterialsPage() {
                     ))
                 ) : materials.length > 0 ? (
                   materials.map((material) => (
-                    <TableRow key={material.id}>
+                    <TableRow key={material.id} className={material.minQuantity > 0 && material.quantity <= material.minQuantity ? 'bg-orange-500/5' : ''}>
                       <TableCell className="font-medium">
-                        {material.name}
+                        <div className="flex items-center gap-2">
+                          {material.name}
+                          {material.minQuantity > 0 && material.quantity <= material.minQuantity && (
+                            <AlertTriangle className="h-3.5 w-3.5 text-orange-400" title="Abaixo do estoque mínimo" />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{material.category}</Badge>
@@ -179,13 +203,20 @@ export default function MaterialsPage() {
                         {material.category === 'Chapa' ? `${material.width}x${material.height}mm` : '-'}
                       </TableCell>
                       <TableCell>
-                        <StockIndicator stock={material.quantity} maxStock={material.minQuantity > 0 ? material.minQuantity * 3 : 10} />
+                        <div className="flex flex-col gap-0.5">
+                          <StockIndicator stock={material.quantity} maxStock={material.minQuantity > 0 ? material.minQuantity * 3 : 10} />
+                          <span className="text-xs text-muted-foreground">{material.quantity} {material.unit} {material.minQuantity > 0 ? `(mín: ${material.minQuantity})` : ''}</span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-code">
                         {formatCurrency(material.price)} / {material.unit}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" title="Movimentar estoque" onClick={() => { setMovementMaterial(material); setIsMovementOpen(true); }}>
+                            <ArrowDownUp className="h-4 w-4" />
+                            <span className="sr-only">Movimentar</span>
+                          </Button>
                            <Button variant="ghost" size="icon" onClick={() => handleEdit(material)}>
                             <FilePenLine className="h-4 w-4" />
                             <span className="sr-only">Editar</span>

@@ -128,7 +128,25 @@ export async function upsertQuote(
 
     if (error) throw error;
 
+    // Auto-cria OS quando status muda para 'aprovado' e ainda não tem OS
+    if (saved.status === 'aprovado' && !saved.os_number) {
+      const { data: osData } = await supabase
+        .from('ordens_servico')
+        .insert({ quote_id: saved.id, status: 'aberta' })
+        .select()
+        .single();
+
+      if (osData) {
+        await supabase
+          .from('quotes')
+          .update({ os_number: osData.os_number })
+          .eq('id', saved.id);
+        saved.os_number = osData.os_number;
+      }
+    }
+
     revalidatePath('/quotes');
+    revalidatePath('/production');
     return { success: true, quote: rowToQuote(saved) };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao salvar orçamento';

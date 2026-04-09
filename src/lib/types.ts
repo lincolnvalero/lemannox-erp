@@ -172,6 +172,22 @@ export type UserProfile = {
   createdAt?: string;
 };
 
+export type StockMovement = {
+  id: string;
+  materialId: string;
+  materialName?: string;
+  movementType: 'entrada' | 'consumo' | 'ajuste';
+  quantity: number;
+  unitCost?: number;
+  totalCost?: number;
+  supplierId?: string;
+  supplierName?: string;
+  reference?: string;
+  notes?: string;
+  date: string;
+  createdAt: string;
+};
+
 // Extended type for calculator page (sheet metal with dimensions)
 export type RawMaterial = Material & {
   width?: number;
