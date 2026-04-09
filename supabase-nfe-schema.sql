@@ -114,6 +114,17 @@ ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS address_complement TEXT;
 ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS neighborhood     TEXT;
 ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS zip_code         TEXT;
 
+-- ────────────────────────────────────────────────────────────
+-- MIGRAÇÃO: clientes importados do Firebase
+-- Copia campo 'address' (texto livre) para address_street
+-- onde address_street ainda está vazio
+-- ────────────────────────────────────────────────────────────
+UPDATE public.customers
+SET address_street = address
+WHERE address IS NOT NULL
+  AND address <> ''
+  AND (address_street IS NULL OR address_street = '');
+
 -- ============================================================
 -- FIM
 -- ============================================================

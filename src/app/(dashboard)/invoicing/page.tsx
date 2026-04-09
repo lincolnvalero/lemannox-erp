@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Receipt, Plus, Trash2, Download, AlertTriangle, CheckCircle2,
   Clock, XCircle, ChevronDown, FileText, RefreshCw, Building2,
+  Lock, Pencil, Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -142,12 +143,39 @@ export default function InvoicingPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState<NfForm>(() => DEFAULT_FORM(null));
+  const [nfNumberLocked, setNfNumberLocked] = useState(true);
+  const [loadingCep, setLoadingCep] = useState(false);
 
   // Dialogs
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState<{ nfId: string; nfNumber: number } | null>(null);
   const [confirmData, setConfirmData] = useState({ chave: '', protocolo: '' });
   const [xmlPreview, setXmlPreview] = useState<{ xml: string; filename: string } | null>(null);
+
+  // ── ViaCEP lookup para destinatário ─────────────────────────
+  async function lookupDestCep(raw: string) {
+    const cep = raw.replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setLoadingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (res.ok) {
+        const d = await res.json();
+        if (!d.erro) {
+          setForm((f) => ({
+            ...f,
+            destLogradouro: d.logradouro ?? f.destLogradouro,
+            destBairro:     d.bairro     ?? f.destBairro,
+            destMunicipio:  d.localidade ?? f.destMunicipio,
+            destUF:         d.uf         ?? f.destUF,
+            // ibge tem 7 dígitos — exatamente o cMun da NF-e
+            destCMun:       d.ibge       ?? f.destCMun,
+          }));
+        }
+      }
+    } catch { /* silent */ }
+    setLoadingCep(false);
+  }
 
   // ── Load inicial ────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -160,6 +188,7 @@ export default function InvoicingPage() {
       setSettings(sett);
       setHistorico(nfs);
       setForm(DEFAULT_FORM(sett));
+      setNfNumberLocked(true);
 
       const supabase = createClient();
       const { data } = await supabase
@@ -450,17 +479,36 @@ export default function InvoicingPage() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="col-span-2 space-y-1.5">
-                <Label>Número da NF</Label>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    value={form.nfNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, nfNumber: Number(e.target.value) }))}
-                    className="pr-9"
-                  />
-                  <AlertTriangle className="absolute right-3 top-2.5 h-4 w-4 text-yellow-400" />
+                <div className="flex items-center justify-between">
+                  <Label>Número da NF</Label>
+                  <button
+                    type="button"
+                    onClick={() => setNfNumberLocked((v) => !v)}
+                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {nfNumberLocked
+                      ? <><Lock className="h-3 w-3" /> Alterar</>
+                      : <><Pencil className="h-3 w-3" /> Travar</>}
+                  </button>
                 </div>
-                <p className="text-[11px] text-yellow-500/80">⚠ Verifique o próximo número no Sebrae</p>
+                {nfNumberLocked ? (
+                  <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 font-mono text-sm font-semibold text-primary">
+                    #{String(form.nfNumber).padStart(6, '0')}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      value={form.nfNumber}
+                      onChange={(e) => setForm((f) => ({ ...f, nfNumber: Number(e.target.value) }))}
+                      className="pr-9 border-yellow-500/50"
+                    />
+                    <AlertTriangle className="absolute right-3 top-2.5 h-4 w-4 text-yellow-400" />
+                  </div>
+                )}
+                {!nfNumberLocked && (
+                  <p className="text-[11px] text-yellow-500/80">⚠ Confirme o próximo número no Sebrae antes de alterar</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Série</Label>
@@ -576,7 +624,22 @@ export default function InvoicingPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>CEP</Label>
-                  <Input value={form.destCEP} onChange={(e) => setForm((f) => ({ ...f, destCEP: e.target.value }))} placeholder="00000-000" />
+                  <div className="relative">
+                    <Input
+                      value={form.destCEP}
+                      placeholder="00000-000"
+                      className="pr-8"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setForm((f) => ({ ...f, destCEP: v }));
+                        lookupDestCep(v);
+                      }}
+                    />
+                    {loadingCep && (
+                      <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">8 dígitos → auto-preenche endereço e cód. IBGE</p>
                 </div>
               </div>
             </CardContent>
