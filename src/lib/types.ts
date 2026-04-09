@@ -16,10 +16,16 @@ export type Customer = {
   id: string;
   name: string;
   cnpj?: string;
+  ie?: string;
   contactName?: string;
   contactPhone?: string;
   email?: string;
   address?: string;
+  addressStreet?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  neighborhood?: string;
+  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;
@@ -173,4 +179,68 @@ export type RawMaterial = Material & {
   thickness?: number;
   density?: number;
   price: number;
+};
+
+// ─── NF-e ────────────────────────────────────────────────────
+
+export type NfeSettings = {
+  id: string;
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  ie: string;
+  crt: 1 | 3;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  municipio: string;
+  cMun: string;
+  uf: string;
+  cUF: number;
+  cep: string;
+  telefone: string;
+  proximaNf: number;
+  serie: number;
+  ambiente: '1' | '2';
+  naturezaOp: string;
+};
+
+export type NotaFiscalItem = {
+  id: string;
+  cProd: string;
+  xProd: string;
+  ncm: string;
+  cfop: string;
+  uCom: string;
+  qCom: number;
+  vUnCom: number;
+  vProd: number;
+  ipiCst: string;
+};
+
+export type NotaFiscal = {
+  id: string;
+  nfNumber: number;
+  serie: number;
+  quoteId?: string;
+  customerName: string;
+  customerDoc: string;
+  naturezaOp: string;
+  cfop: string;
+  items: NotaFiscalItem[];
+  totalProdutos: number;
+  totalFrete: number;
+  totalNf: number;
+  regimeTrib: 1 | 3;
+  modFrete: number;
+  tpPagamento: string;
+  status: 'rascunho' | 'xml_gerado' | 'emitida' | 'cancelada';
+  xmlGerado?: string;
+  chaveAcesso?: string;
+  protocolo?: string;
+  dataEmissao: string;
+  observacoes?: string;
+  createdAt: string;
+  updatedAt: string;
 };

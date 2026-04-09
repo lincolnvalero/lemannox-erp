@@ -51,7 +51,10 @@ const navItems: NavItem[] = [
   { title: 'Materiais', href: '/materials', icon: Archive },
   { title: 'Calculadora', href: '/calculator', icon: Calculator },
   { title: 'Faturamento', href: '/invoicing', icon: Receipt },
-  { title: 'Admin', href: '/admin/users', icon: Settings },
+  { title: 'Admin', icon: Settings, children: [
+    { title: 'Usuários', href: '/admin/users' },
+    { title: 'Empresa / NF-e', href: '/admin/empresa' },
+  ]},
 ];
 
 export function SidebarNav({ user }: { user: User }) {
