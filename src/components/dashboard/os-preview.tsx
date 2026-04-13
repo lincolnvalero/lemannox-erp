@@ -105,7 +105,7 @@ export function OsPreview({ os, quote }: Props) {
           </div>
         </section>
 
-        {/* Itens a produzir */}
+        {/* Itens a produzir — usa customItems da OS se existir, senão usa itens do orçamento */}
         <section className="mb-6">
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Itens a Produzir</h2>
           <table className="w-full text-sm border-collapse">
@@ -119,8 +119,8 @@ export function OsPreview({ os, quote }: Props) {
               </tr>
             </thead>
             <tbody>
-              {quote.items.map((item, idx) => (
-                <tr key={item.id ?? idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+              {(os.customItems && os.customItems.length > 0 ? os.customItems : quote.items).map((item, idx) => (
+                <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                   <td className="px-3 py-2 font-medium">{item.name}</td>
                   <td className="px-3 py-2 text-gray-600">{item.material}</td>
                   <td className="px-3 py-2 text-gray-600">{item.measurement}</td>

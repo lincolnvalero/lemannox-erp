@@ -16,6 +16,7 @@ function rowToOrdem(row: Record<string, unknown>): OrdemServico {
     obra: (q?.obra as string) || undefined,
     status: row.status as OrdemServico['status'],
     notes: (row.notes as string) || undefined,
+    customItems: (row.custom_items as OrdemServico['customItems']) ?? null,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) || undefined,
   };
@@ -109,6 +110,7 @@ export async function updateOrdemServico(
     if (updateData.status !== undefined) payload.status = updateData.status;
     if (updateData.notes !== undefined) payload.notes = updateData.notes;
     if (updateData.quoteId !== undefined) payload.quote_id = updateData.quoteId;
+    if ('customItems' in updateData) payload.custom_items = updateData.customItems ?? null;
 
     const { data, error } = await supabase
       .from('ordens_servico')

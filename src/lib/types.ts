@@ -15,6 +15,7 @@ export type Product = {
 export type Customer = {
   id: string;
   name: string;
+  tradeName?: string;
   cnpj?: string;
   ie?: string;
   contactName?: string;
@@ -152,6 +153,14 @@ export type ScheduleItem = {
   entregueEm: string | null;
 };
 
+export type OsItem = {
+  name: string;
+  material: string;
+  measurement: string;
+  quantity: number;
+  notes?: string;
+};
+
 export type OrdemServico = {
   id: string;
   osNumber: number;
@@ -161,6 +170,7 @@ export type OrdemServico = {
   obra?: string;
   status: 'aberta' | 'em_andamento' | 'concluida' | 'cancelada';
   notes?: string;
+  customItems?: OsItem[] | null;
   createdAt: string;
   updatedAt?: string;
 };

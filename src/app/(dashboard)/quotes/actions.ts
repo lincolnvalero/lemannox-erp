@@ -83,9 +83,10 @@ export async function upsertQuote(
 
     // Busca detalhes do cliente para snapshot
     let customerDetails: Quote['customerDetails'] = {};
+    let resolvedCustomerName = data.customerName as string;
     const { data: customerRow } = await supabase
       .from('customers')
-      .select('cnpj, contact_name, contact_phone, email')
+      .select('cnpj, contact_name, contact_phone, email, trade_name, name')
       .eq('id', customerId)
       .maybeSingle();
 
@@ -96,11 +97,13 @@ export async function upsertQuote(
         contactPhone: customerRow.contact_phone || undefined,
         email: customerRow.email || undefined,
       };
+      // Usa nome de fantasia se existir
+      if (customerRow.trade_name) resolvedCustomerName = customerRow.trade_name;
     }
 
     const payload: Record<string, unknown> = {
       customer_id: customerId,
-      customer_name: data.customerName as string,
+      customer_name: resolvedCustomerName,
       customer_details: customerDetails,
       obra: (data.obra as string) || null,
       status: (data.status as string) || 'rascunho',

@@ -8,6 +8,7 @@ function rowToCustomer(row: Record<string, unknown>): Customer {
   return {
     id: row.id as string,
     name: row.name as string,
+    tradeName: (row.trade_name as string) || undefined,
     cnpj: (row.cnpj as string) || undefined,
     ie: (row.ie as string) || undefined,
     contactName: (row.contact_name as string) || undefined,
@@ -52,6 +53,7 @@ export async function upsertCustomer(
 
     const payload: Record<string, unknown> = {
       name: formData.get('name') as string,
+      trade_name: (formData.get('tradeName') as string) || null,
       cnpj: (formData.get('cnpj') as string) || null,
       ie: (formData.get('ie') as string) || null,
       contact_name: (formData.get('contactName') as string) || null,

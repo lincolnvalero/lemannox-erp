@@ -4,61 +4,108 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Package, FileText, DollarSign,
-  Factory, Truck, Wrench, Calculator, LogOut, ChevronRight,
+  Factory, Truck, Calculator, LogOut, ChevronDown,
   ShoppingCart, Settings, Receipt, BarChart3, Archive,
 } from 'lucide-react';
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
   SidebarRail, SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { logout } from '@/app/(auth)/actions';
 import type { User } from '@supabase/supabase-js';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
+
+type NavGroup = {
+  label?: string;
+  items: NavItem[];
+};
 
 type NavItem = {
   title: string;
-  href?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children?: { title: string; href: string }[];
+  href: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  indent?: boolean;
 };
 
-const navItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Orçamentos', icon: FileText, children: [
-    { title: 'Lista de Orçamentos', href: '/quotes' },
-    { title: 'Novo Orçamento', href: '/quotes/editor' },
-    { title: 'Análise por IA', href: '/quotes/analysis' },
-  ]},
-  { title: 'Clientes', href: '/customers', icon: Users },
-  { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'Produção', icon: Factory, children: [
-    { title: 'Programação', href: '/production' },
-    { title: 'Ordens de Serviço', href: '/os' },
-  ]},
-  { title: 'Financeiro', icon: DollarSign, children: [
-    { title: 'Visão Geral', href: '/financeiro' },
-    { title: 'Controle do Caixa', href: '/financeiro/caixa' },
-    { title: 'Contas a Pagar', href: '/financeiro/pagar' },
-    { title: 'Contas a Receber', href: '/financeiro/receber' },
-    { title: 'Plano de Contas', href: '/financeiro/contas' },
-  ]},
-  { title: 'Fornecedores', icon: Truck, children: [
-    { title: 'Lista', href: '/suppliers' },
-    { title: 'Dashboard', href: '/suppliers/dashboard' },
-  ]},
-  { title: 'Materiais', href: '/materials', icon: Archive },
-  { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
-  { title: 'Calculadora', href: '/calculator', icon: Calculator },
-  { title: 'Faturamento', href: '/invoicing', icon: Receipt },
-  { title: 'Admin', icon: Settings, children: [
-    { title: 'Usuários', href: '/admin/users' },
-    { title: 'Empresa / NF-e', href: '/admin/empresa' },
-  ]},
+const navGroups: NavGroup[] = [
+  {
+    items: [
+      { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'COMERCIAL',
+    items: [
+      { title: 'Orçamentos', href: '/quotes', icon: FileText },
+      { title: 'Lista de Orçamentos', href: '/quotes', indent: true },
+      { title: 'Novo Orçamento', href: '/quotes/editor', indent: true },
+      { title: 'Análise por IA', href: '/quotes/analysis', indent: true },
+      { title: 'Clientes', href: '/customers', icon: Users },
+    ],
+  },
+  {
+    label: 'PRODUTOS',
+    items: [
+      { title: 'Produtos', href: '/products', icon: Package },
+    ],
+  },
+  {
+    label: 'PRODUÇÃO',
+    items: [
+      { title: 'Programação', href: '/production', icon: Factory },
+      { title: 'Ordens de Serviço', href: '/os', icon: ShoppingCart },
+    ],
+  },
+  {
+    label: 'FINANCEIRO',
+    items: [
+      { title: 'Visão Geral', href: '/financeiro', icon: DollarSign },
+      { title: 'Controle do Caixa', href: '/financeiro/caixa', indent: true },
+      { title: 'Contas a Pagar', href: '/financeiro/pagar', indent: true },
+      { title: 'Contas a Receber', href: '/financeiro/receber', indent: true },
+      { title: 'Plano de Contas', href: '/financeiro/contas', indent: true },
+    ],
+  },
+  {
+    label: 'COMPRAS',
+    items: [
+      { title: 'Fornecedores', href: '/suppliers', icon: Truck },
+      { title: 'Dashboard', href: '/suppliers/dashboard', indent: true },
+    ],
+  },
+  {
+    label: 'ESTOQUE',
+    items: [
+      { title: 'Materiais', href: '/materials', icon: Archive },
+    ],
+  },
+  {
+    label: 'RELATÓRIOS',
+    items: [
+      { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
+      { title: 'Calculadora', href: '/calculator', icon: Calculator },
+    ],
+  },
+  {
+    label: 'FATURAMENTO',
+    items: [
+      { title: 'Faturamento', href: '/invoicing', icon: Receipt },
+    ],
+  },
+  {
+    label: 'CONFIGURAÇÕES',
+    items: [
+      { title: 'Usuários', href: '/admin/users', icon: Settings },
+      { title: 'Empresa / NF-e', href: '/admin/empresa', indent: true },
+    ],
+  },
 ];
+
+// Grupos colapsáveis (que têm label e mais de 1 item ou sub-itens)
+const COLLAPSIBLE_LABELS = new Set(['COMERCIAL', 'FINANCEIRO', 'COMPRAS', 'CONFIGURAÇÕES']);
 
 export function SidebarNav({ user }: { user: User }) {
   const pathname = usePathname();
@@ -67,9 +114,19 @@ export function SidebarNav({ user }: { user: User }) {
   const initials = (user.user_metadata?.name as string || user.email || 'U')
     .split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase();
 
+  // Descobre qual grupo está ativo pela rota atual
+  const activeGroupLabel = navGroups.find(g =>
+    g.label && COLLAPSIBLE_LABELS.has(g.label) &&
+    g.items.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
+  )?.label ?? null;
+
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupLabel);
+
   const handleLogout = async () => {
     await logout();
   };
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   return (
     <Sidebar>
@@ -87,53 +144,70 @@ export function SidebarNav({ user }: { user: User }) {
 
       <SidebarSeparator />
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
-          <SidebarMenu>
-            {navItems.map((item) => {
-              if (item.children) {
-                const isActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'));
-                return (
-                  <Collapsible key={item.title} defaultOpen={isActive} className="group/collapsible">
-                    <SidebarMenuItem>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className={cn(isActive && 'text-primary')}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                          <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {item.children.map(child => (
-                            <SidebarMenuSubItem key={child.href}>
-                              <SidebarMenuSubButton asChild isActive={pathname === child.href}>
-                                <Link href={child.href}>{child.title}</Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </SidebarMenuItem>
-                  </Collapsible>
-                );
-              }
+      <SidebarContent className="overflow-y-auto">
+        {navGroups.map((group, gi) => {
+          const isCollapsible = !!(group.label && COLLAPSIBLE_LABELS.has(group.label));
+          const isOpen = !isCollapsible || openGroup === group.label;
+          const groupActive = group.items.some(i => isActive(i.href));
 
-              const isActive = pathname === item.href;
-              return (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive}>
-                    <Link href={item.href!}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
+          return (
+            <SidebarGroup key={gi} className="py-1">
+              {group.label && (
+                <button
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold tracking-widest uppercase',
+                    groupActive ? 'text-primary' : 'text-muted-foreground/60',
+                    isCollapsible && 'hover:text-muted-foreground cursor-pointer transition-colors'
+                  )}
+                  onClick={() => {
+                    if (!isCollapsible) return;
+                    setOpenGroup(prev => prev === group.label ? null : group.label!);
+                  }}
+                >
+                  <span>{group.label}</span>
+                  {isCollapsible && (
+                    <ChevronDown className={cn(
+                      'h-3 w-3 transition-transform duration-200',
+                      isOpen && 'rotate-180'
+                    )} />
+                  )}
+                </button>
+              )}
+
+              {isOpen && (
+                <SidebarMenu>
+                  {group.items.map((item) => {
+                    const active = isActive(item.href);
+                    // Itens com indent são sub-itens sem ícone
+                    if (item.indent) {
+                      return (
+                        <SidebarMenuItem key={item.href + item.title}>
+                          <SidebarMenuButton asChild isActive={active} className="pl-7 text-xs h-7">
+                            <Link href={item.href}>
+                              <span className={cn('truncate', active ? 'text-primary font-medium' : 'text-muted-foreground')}>
+                                {item.title}
+                              </span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    }
+                    return (
+                      <SidebarMenuItem key={item.href + item.title}>
+                        <SidebarMenuButton asChild isActive={active}>
+                          <Link href={item.href}>
+                            {item.icon && <item.icon className="h-4 w-4" />}
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              )}
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
 
       <SidebarSeparator />

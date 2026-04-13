@@ -36,6 +36,7 @@ import { upsertCustomer } from "@/app/(dashboard)/customers/actions";
 
 const schema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
+  tradeName: z.string().optional(),
   cnpj: z.string().optional(),
   ie: z.string().optional(),
   contactName: z.string().optional(),
@@ -55,7 +56,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const EMPTY: FormValues = {
-  name: "", cnpj: "", ie: "",
+  name: "", tradeName: "", cnpj: "", ie: "",
   contactName: "", contactPhone: "", email: "",
   zipCode: "", addressStreet: "", addressNumber: "",
   addressComplement: "", neighborhood: "",
@@ -98,6 +99,7 @@ export function AddCustomerDialog({ open, onOpenChange, editingCustomer, onSaveS
     if (editingCustomer) {
       form.reset({
         name: editingCustomer.name,
+        tradeName: editingCustomer.tradeName ?? "",
         cnpj: editingCustomer.cnpj ?? "",
         ie: editingCustomer.ie ?? "",
         contactName: editingCustomer.contactName ?? "",
@@ -137,6 +139,7 @@ export function AddCustomerDialog({ open, onOpenChange, editingCustomer, onSaveS
     const fd = new FormData();
     if (editingCustomer?.id) fd.append("id", editingCustomer.id);
     fd.append("name", values.name);
+    fd.append("tradeName", values.tradeName ?? "");
     fd.append("cnpj", values.cnpj ?? "");
     fd.append("ie", values.ie ?? "");
     fd.append("contactName", values.contactName ?? "");
@@ -179,6 +182,16 @@ export function AddCustomerDialog({ open, onOpenChange, editingCustomer, onSaveS
                   <FormLabel>Nome / Razão Social *</FormLabel>
                   <FormControl>
                     <Input {...field} className="bg-zinc-800 border-zinc-700" placeholder="Razão social ou nome" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="tradeName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome de Fantasia</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="bg-zinc-800 border-zinc-700" placeholder="Nome comercial / fantasia" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

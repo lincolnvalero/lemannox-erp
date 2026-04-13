@@ -194,7 +194,7 @@ export default function QuoteEditorPage() {
 
   const customerOptions: ComboboxOption[] = customers.map((c) => ({
     value: c.id,
-    label: c.name,
+    label: c.tradeName ? `${c.tradeName} (${c.name})` : c.name,
   }));
 
   useEffect(() => {
@@ -254,7 +254,8 @@ export default function QuoteEditorPage() {
       const customer = customers.find((c) => c.id === watchedCustomerId);
       if (customer) {
         setValue('cpf', customer.cnpj || '');
-        setValue('customerName', customer.name);
+        // Usa Nome de Fantasia no orçamento se disponível
+        setValue('customerName', customer.tradeName || customer.name);
       }
     }
   }, [watchedCustomerId, customers, setValue]);
@@ -284,13 +285,20 @@ export default function QuoteEditorPage() {
     setIsSaving(true);
     const result = await upsertQuote(data, quoteId);
 
-    if (result.success) {
+    if (result.success && result.quote) {
       toast({
         title: `Orçamento ${isEditMode ? 'Atualizado' : 'Criado'}!`,
         description: `O orçamento foi salvo com sucesso.`,
       });
-      router.push('/quotes');
-      router.refresh(); 
+      if (isEditMode) {
+        router.push('/quotes');
+        router.refresh();
+      } else {
+        // Redireciona para o editor com o ID do novo orçamento,
+        // evitando que saves subsequentes criem novos orçamentos
+        router.replace(`/quotes/editor/${result.quote.id}`);
+        router.refresh();
+      }
     } else {
       toast({
         variant: 'destructive',

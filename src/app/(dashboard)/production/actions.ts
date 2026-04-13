@@ -2,19 +2,23 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
-import type { Quote, QuoteItem, ScheduleItem } from '@/lib/types';
+import type { QuoteItem, ScheduleItem } from '@/lib/types';
 
 const PRODUCTION_STATUSES = ['aprovado', 'produzindo', 'entregue'];
 
 function quoteToScheduleItems(quote: Record<string, unknown>): ScheduleItem[] {
   const items = (quote.items ?? []) as QuoteItem[];
+  // Pega o os_number da tabela ordens_servico via join (mais confiável que quotes.os_number)
+  const osRows = (quote.ordens_servico as { os_number: number }[] | null) ?? [];
+  const osNumber = osRows.length > 0 ? osRows[0].os_number : ((quote.os_number as number) || undefined);
+
   return items.map((item, index) => ({
     quoteId: quote.id as string,
     itemIndex: index,
     pedido: quote.quote_number as number,
-    osNumber: (quote.os_number as number) || undefined,
+    osNumber,
     data: quote.date as string,
-    cliente: quote.customer_name as string,
+    cliente: (quote.trade_name as string) || (quote.customer_name as string),
     obra: (quote.obra as string) || '',
     produto: item.name,
     previsao: (quote.manufacturing_deadline as string) || (quote.delivery_time as string) || '',
@@ -32,13 +36,21 @@ export async function getProductionScheduleItems(): Promise<{
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('quotes')
-      .select('id, quote_number, os_number, customer_name, obra, date, manufacturing_deadline, delivery_time, items, status')
-      .in('status', PRODUCTION_STATUSES)
-      .order('quote_number', { ascending: false });
+      .select('id, quote_number, os_number, customer_name, obra, date, manufacturing_deadline, delivery_time, items, status, ordens_servico(os_number)')
+      .in('status', PRODUCTION_STATUSES);
 
     if (error) throw error;
 
     const scheduleItems: ScheduleItem[] = (data ?? []).flatMap(quoteToScheduleItems);
+
+    // Ordena por previsão ascendente — mais antigas (mais urgentes) primeiro
+    // Itens sem previsão ficam no final
+    scheduleItems.sort((a, b) => {
+      if (!a.previsao && !b.previsao) return 0;
+      if (!a.previsao) return 1;
+      if (!b.previsao) return -1;
+      return new Date(a.previsao).getTime() - new Date(b.previsao).getTime();
+    });
 
     return { success: true, items: scheduleItems };
   } catch (err: unknown) {

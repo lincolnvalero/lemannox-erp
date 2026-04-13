@@ -3,19 +3,20 @@
 import { useState, useEffect } from 'react';
 import { getOrdensServico, updateOrdemServico, deleteOrdemServico } from './actions';
 import { getQuote } from '../quotes/actions';
-import type { OrdemServico, Quote } from '@/lib/types';
+import type { OrdemServico, OsItem, Quote } from '@/lib/types';
 import { OsPreview } from '@/components/dashboard/os-preview';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { FileText, Pencil, Printer, Trash2, Loader2 } from 'lucide-react';
+import { FileText, Pencil, Printer, Trash2, Loader2, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -38,6 +39,10 @@ function formatDate(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
+function emptyItem(): OsItem {
+  return { name: '', material: '', measurement: '', quantity: 1, notes: '' };
+}
+
 export default function OrdensServicoPage() {
   const { toast } = useToast();
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
@@ -47,6 +52,7 @@ export default function OrdensServicoPage() {
   const [editingOs, setEditingOs] = useState<OrdemServico | null>(null);
   const [editStatus, setEditStatus] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editItems, setEditItems] = useState<OsItem[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Delete confirmation
@@ -68,10 +74,34 @@ export default function OrdensServicoPage() {
 
   useEffect(() => { load(); }, []);
 
-  const openEdit = (os: OrdemServico) => {
+  const openEdit = (os: OrdemServico, quote?: Quote) => {
     setEditingOs(os);
     setEditStatus(os.status);
     setEditNotes(os.notes ?? '');
+    // Usa custom_items se existir, caso contrário traz os itens do orçamento
+    if (os.customItems && os.customItems.length > 0) {
+      setEditItems(os.customItems);
+    } else if (quote) {
+      setEditItems(quote.items.map(i => ({
+        name: i.name,
+        material: i.material,
+        measurement: i.measurement,
+        quantity: i.quantity,
+        notes: i.notes ?? '',
+      })));
+    } else {
+      setEditItems([]);
+    }
+  };
+
+  const handleOpenEdit = async (os: OrdemServico) => {
+    // Carrega o orçamento para pré-preencher itens
+    if (os.quoteId) {
+      const result = await getQuote(os.quoteId);
+      openEdit(os, result.success ? result.quote : undefined);
+    } else {
+      openEdit(os);
+    }
   };
 
   const handleUpdate = async () => {
@@ -80,6 +110,7 @@ export default function OrdensServicoPage() {
     const result = await updateOrdemServico(editingOs.id, {
       status: editStatus as OrdemServico['status'],
       notes: editNotes,
+      customItems: editItems.filter(i => i.name.trim()),
     });
     if (result.success) {
       toast({ title: 'OS atualizada.' });
@@ -123,16 +154,21 @@ export default function OrdensServicoPage() {
     setPreviewLoading(false);
   };
 
+  const updateItem = (idx: number, field: keyof OsItem, value: string | number) => {
+    setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  };
+
   return (
     <>
       {/* Edit Dialog */}
       <Dialog open={!!editingOs} onOpenChange={() => setEditingOs(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar OS #{String(editingOs?.osNumber ?? '').padStart(4, '0')}</DialogTitle>
             <DialogDescription>{editingOs?.customerName} — Pedido #{String(editingOs?.quoteNumber ?? '').padStart(4, '0')}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            {/* Status e Observações */}
             <div className="grid gap-2">
               <Label>Status</Label>
               <Select value={editStatus} onValueChange={setEditStatus}>
@@ -150,9 +186,74 @@ export default function OrdensServicoPage() {
               <Textarea
                 value={editNotes}
                 onChange={e => setEditNotes(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder="Instruções especiais, prioridades..."
               />
+            </div>
+
+            {/* Itens a produzir */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Itens a Produzir</Label>
+                <Button type="button" size="sm" variant="outline" onClick={() => setEditItems(prev => [...prev, emptyItem()])}>
+                  <PlusCircle className="h-3.5 w-3.5 mr-1" />
+                  Adicionar
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {editItems.map((item, idx) => (
+                  <div key={idx} className="grid gap-1.5 border rounded-md p-2 bg-muted/30 relative">
+                    <button
+                      type="button"
+                      className="absolute top-1.5 right-1.5 text-muted-foreground hover:text-destructive"
+                      onClick={() => setEditItems(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className="col-span-3">
+                        <Input
+                          placeholder="Descrição do produto"
+                          value={item.name}
+                          onChange={e => updateItem(idx, 'name', e.target.value)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <Input
+                        placeholder="Material"
+                        value={item.material}
+                        onChange={e => updateItem(idx, 'material', e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                      <Input
+                        placeholder="Medida"
+                        value={item.measurement}
+                        onChange={e => updateItem(idx, 'measurement', e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Qtd"
+                        value={item.quantity}
+                        min={1}
+                        onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <Input
+                      placeholder="Obs. do item (opcional)"
+                      value={item.notes ?? ''}
+                      onChange={e => updateItem(idx, 'notes', e.target.value)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                ))}
+                {editItems.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    Nenhum item. Clique em "Adicionar" para inserir.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -278,7 +379,7 @@ export default function OrdensServicoPage() {
                         <Button size="sm" variant="ghost" title="Visualizar / Imprimir" onClick={() => handlePrint(os)}>
                           <Printer className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" title="Editar" onClick={() => openEdit(os)}>
+                        <Button size="sm" variant="ghost" title="Editar" onClick={() => handleOpenEdit(os)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" title="Excluir" onClick={() => setDeletingOs(os)}>

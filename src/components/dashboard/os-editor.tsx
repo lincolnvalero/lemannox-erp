@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, FileText, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, FileText, Pencil, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Quote, OrdemServico } from '@/lib/types';
 import { OsPreview } from '@/components/dashboard/os-preview';
@@ -85,6 +85,26 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
         toast({ title: 'OS atualizada!' });
         setExistingOs({ ...existingOs, status: editStatus as OrdemServico['status'], notes: editNotes });
         setShowEditForm(false);
+      } else {
+        toast({ variant: 'destructive', title: 'Erro', description: result.error });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro inesperado';
+      toast({ variant: 'destructive', title: 'Erro', description: message });
+    }
+    setSaving(false);
+  };
+
+  // Atualiza a OS com os itens atuais do orçamento (reseta customItems)
+  const handleSyncFromQuote = async () => {
+    if (!existingOs) return;
+    setSaving(true);
+    try {
+      const { updateOrdemServico } = await import('@/app/(dashboard)/os/actions');
+      const result = await updateOrdemServico(existingOs.id, { customItems: null });
+      if (result.success) {
+        toast({ title: 'OS atualizada com os itens do orçamento!' });
+        setExistingOs({ ...existingOs, customItems: null });
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: result.error });
       }
@@ -173,7 +193,25 @@ export function OsEditor({ open, onOpenChange, quote, onSuccess }: Props) {
     return (
       <div>
         <OsPreview os={osToShow} quote={quote} />
-        <div className="mt-4 border rounded-lg p-4 bg-muted/30">
+        <div className="mt-4 border rounded-lg p-4 bg-muted/30 space-y-3">
+          {/* Botão de sincronizar itens do orçamento */}
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div>
+              <p className="text-sm font-medium">Atualizar OS com este orçamento</p>
+              <p className="text-xs text-muted-foreground">Substitui os itens da OS pelos itens atuais do orçamento, mantendo o número da OS.</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleSyncFromQuote}
+              disabled={saving}
+              className="shrink-0"
+            >
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+              Atualizar OS
+            </Button>
+          </div>
           <button
             onClick={() => setShowEditForm(v => !v)}
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
