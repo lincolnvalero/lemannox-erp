@@ -10,7 +10,7 @@ import {
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarRail, SidebarSeparator,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { logout } from '@/app/(auth)/actions';
@@ -235,7 +235,6 @@ export function SidebarNav({ user }: { user: User }) {
         </SidebarMenu>
       </SidebarFooter>
 
-      <SidebarRail />
     </Sidebar>
   );
 }
