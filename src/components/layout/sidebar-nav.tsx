@@ -10,7 +10,7 @@ import {
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarSeparator,
+  SidebarSeparator, SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { logout } from '@/app/(auth)/actions';
@@ -132,13 +132,14 @@ export function SidebarNav({ user }: { user: User }) {
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 border border-primary/25">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 border border-primary/25">
             <span className="text-sm font-bold text-primary">L</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col flex-1 min-w-0">
             <span className="font-semibold text-sm leading-tight">Lemannox</span>
             <span className="text-xs text-muted-foreground leading-tight">ERP Industrial</span>
           </div>
+          <SidebarTrigger className="shrink-0 text-muted-foreground hover:text-foreground" />
         </div>
       </SidebarHeader>
 

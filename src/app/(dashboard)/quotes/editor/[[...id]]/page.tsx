@@ -742,17 +742,13 @@ export default function QuoteEditorPage() {
                             <Table>
                             <TableHeader>
                                 <TableRow>
-                                <TableHead className="min-w-[280px]">Produto</TableHead>
-                                <TableHead className="w-[130px]">Medida</TableHead>
-                                <TableHead className="w-[160px]">Material</TableHead>
-                                <TableHead className="w-[70px] text-center">Qtd.</TableHead>
-                                <TableHead className="w-[120px] text-right">
-                                    Vlr. Unitário
-                                </TableHead>
-                                <TableHead className="w-[100px] text-right">Impostos</TableHead>
-                                <TableHead className="w-[120px] text-right">
-                                    Total Item
-                                </TableHead>
+                                <TableHead className="w-[40%] min-w-[240px]">Produto</TableHead>
+                                <TableHead className="w-[110px]">Medida</TableHead>
+                                <TableHead className="w-[140px]">Material</TableHead>
+                                <TableHead className="w-[60px] text-center">Qtd.</TableHead>
+                                <TableHead className="w-[100px] text-right">Vlr. Unit.</TableHead>
+                                <TableHead className="w-[90px] text-right">Impostos</TableHead>
+                                <TableHead className="w-[100px] text-right">Total</TableHead>
                                 <TableHead className="w-[50px]">
                                     <span className="sr-only">Ações</span>
                                 </TableHead>
@@ -768,8 +764,13 @@ export default function QuoteEditorPage() {
                                       <TableCell className="align-top">
                                       <Textarea
                                           {...register(`items.${index}.name`)}
-                                          className="font-medium min-h-[40px] p-2 resize-none"
-                                          rows={2}
+                                          className="font-medium p-2 resize-none overflow-hidden w-full"
+                                          rows={1}
+                                          onInput={(e) => {
+                                            const el = e.currentTarget;
+                                            el.style.height = 'auto';
+                                            el.style.height = el.scrollHeight + 'px';
+                                          }}
                                       />
                                       </TableCell>
                                       <TableCell className="align-top">
