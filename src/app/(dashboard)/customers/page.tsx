@@ -1,6 +1,6 @@
 
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Customer } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
   FilePenLine,
   Trash2,
   MessageSquare,
+  Pencil,
 } from 'lucide-react';
 import { AddCustomerDialog } from '@/components/dashboard/add-customer-dialog';
 import {
@@ -51,8 +52,12 @@ import {
   getCustomers,
   deleteCustomer,
   updateProductionStatus,
+  patchCustomer,
 } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
+
+type InlineField = 'tradeName' | 'contactPhone';
+type InlineEdit = { id: string; field: InlineField; value: string } | null;
 
 const financialBadgeVariant = (status: NonNullable<Customer['financialStatus']> | undefined) => {
   switch (status) {
@@ -114,12 +119,12 @@ export default function CustomersPage() {
   const [segmentFilter, setSegmentFilter] = useState('all');
   const [productionStatusFilter, setProductionStatusFilter] = useState('all');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(
-    null
-  );
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<InlineEdit>(null);
+  const inlineRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
     const result = await getCustomers();
     if (result.success) {
@@ -132,11 +137,11 @@ export default function CustomersPage() {
       });
     }
     setLoading(false);
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [fetchCustomers]);
 
   const handleDialogOpen = (customer: Customer | null) => {
     setEditingCustomer(customer);
@@ -207,6 +212,30 @@ export default function CustomersPage() {
       });
     }
   };
+
+  const startInlineEdit = useCallback((id: string, field: InlineField, current: string) => {
+    setInlineEdit({ id, field, value: current });
+    setTimeout(() => inlineRef.current?.focus(), 0);
+  }, []);
+
+  const commitInlineEdit = useCallback(async () => {
+    if (!inlineEdit) return;
+    const { id, field, value } = inlineEdit;
+    setInlineEdit(null);
+
+    // Optimistic update
+    setCustomers(prev => prev.map(c =>
+      c.id === id ? { ...c, [field]: value || undefined } : c
+    ));
+
+    const dbField = field === 'tradeName' ? 'trade_name' : 'contact_phone';
+    const result = await patchCustomer(id, { [dbField]: value || null });
+    if (!result.success) {
+      toast({ variant: 'destructive', title: 'Erro ao salvar', description: result.error });
+      // Reverte buscando de novo
+      fetchCustomers();
+    }
+  }, [inlineEdit, toast, fetchCustomers]);
 
   const filteredCustomers = customers.filter((customer) => {
     const name = customer.name || '';
@@ -357,25 +386,83 @@ export default function CustomersPage() {
                     filteredCustomers.map((customer) => (
                       <TableRow key={customer.id}>
                         <TableCell>
+                          {/* Nome / Razão Social */}
                           <div className="font-medium">{customer.name}</div>
-                          {customer.contactPhone ? (
-                            <a
-                              href={`https://wa.me/55${customer.contactPhone.replace(
-                                /\D/g,
-                                ''
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-muted-foreground hidden items-center gap-1.5 hover:text-primary md:inline-flex"
-                            >
-                              <MessageSquare className="h-3 w-3" />
-                              {customer.contactPhone}
-                            </a>
-                          ) : (
-                            <span className="hidden text-sm text-muted-foreground md:inline">
-                              -
-                            </span>
-                          )}
+
+                          {/* Nome Fantasia — inline editável */}
+                          <div className="mt-0.5 flex items-center gap-1 group/trade">
+                            {inlineEdit?.id === customer.id && inlineEdit.field === 'tradeName' ? (
+                              <input
+                                ref={inlineRef}
+                                className="text-xs h-5 px-1 rounded border border-primary bg-background text-foreground w-40 focus:outline-none"
+                                value={inlineEdit.value}
+                                onChange={e => setInlineEdit(prev => prev ? { ...prev, value: e.target.value } : prev)}
+                                onBlur={commitInlineEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitInlineEdit(); }
+                                  if (e.key === 'Escape') setInlineEdit(null);
+                                }}
+                              />
+                            ) : (
+                              <button
+                                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                                title="Clique para editar nome fantasia"
+                                onClick={() => startInlineEdit(customer.id, 'tradeName', customer.tradeName ?? '')}
+                              >
+                                {customer.tradeName
+                                  ? <span className="italic">{customer.tradeName}</span>
+                                  : <span className="opacity-40">+ nome fantasia</span>
+                                }
+                                <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/trade:opacity-60 transition-opacity" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Telefone — inline editável */}
+                          <div className="mt-0.5 flex items-center gap-1 group/phone">
+                            {inlineEdit?.id === customer.id && inlineEdit.field === 'contactPhone' ? (
+                              <input
+                                ref={inlineRef}
+                                className="text-xs h-5 px-1 rounded border border-primary bg-background text-foreground w-36 focus:outline-none"
+                                value={inlineEdit.value}
+                                placeholder="(11) 99999-9999"
+                                onChange={e => setInlineEdit(prev => prev ? { ...prev, value: e.target.value } : prev)}
+                                onBlur={commitInlineEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitInlineEdit(); }
+                                  if (e.key === 'Escape') setInlineEdit(null);
+                                }}
+                              />
+                            ) : customer.contactPhone ? (
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={`https://wa.me/55${customer.contactPhone.replace(/\D/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-muted-foreground hidden items-center gap-1 hover:text-primary md:inline-flex"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  {customer.contactPhone}
+                                </a>
+                                <button
+                                  className="opacity-0 group-hover/phone:opacity-60 transition-opacity"
+                                  title="Editar telefone"
+                                  onClick={() => startInlineEdit(customer.id, 'contactPhone', customer.contactPhone ?? '')}
+                                >
+                                  <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="text-xs text-muted-foreground hidden md:inline-flex items-center gap-1 hover:text-foreground transition-colors opacity-40 hover:opacity-100"
+                                title="Adicionar telefone"
+                                onClick={() => startInlineEdit(customer.id, 'contactPhone', '')}
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                + telefone
+                              </button>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           {customer.company}

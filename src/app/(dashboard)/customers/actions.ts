@@ -101,6 +101,29 @@ export async function deleteCustomer(id: string): Promise<{ success: boolean; er
   }
 }
 
+export async function patchCustomer(
+  id: string,
+  fields: Partial<{
+    trade_name: string | null;
+    contact_phone: string | null;
+    name: string | null;
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('customers')
+      .update(fields)
+      .eq('id', id);
+    if (error) throw error;
+    revalidatePath('/customers');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao atualizar cliente';
+    return { success: false, error: message };
+  }
+}
+
 export async function updateProductionStatus(
   id: string,
   productionStatus: Customer['productionStatus']
