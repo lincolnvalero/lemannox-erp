@@ -4,12 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Package, FileText, DollarSign,
-  Factory, Truck, LogOut,
-  Settings, Receipt, BarChart3, Archive,
+  Factory, Truck, Settings, Receipt, BarChart3, Archive,
 } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { logout } from '@/app/(auth)/actions';
-import type { User } from '@supabase/supabase-js';
 import { cn } from '@/lib/utils';
 import { useState, useRef, useCallback } from 'react';
 
@@ -81,16 +77,13 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const RAIL_W = 84;
+export const RAIL_W = 84;
 
-export function SidebarNav({ user }: { user: User }) {
+export function SidebarNav() {
   const pathname = usePathname();
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [flyoutTop, setFlyoutTop] = useState(0);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const initials = (user.user_metadata?.name as string || user.email || 'U')
-    .split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase();
 
   const isActive = useCallback(
     (href: string) => pathname === href || pathname.startsWith(href + '/'),
@@ -118,7 +111,6 @@ export function SidebarNav({ user }: { user: User }) {
   };
 
   const activeFlyout = navGroups.find(g => g.label === activeLabel && g.items);
-  const userFlyoutOpen = activeLabel === '__user__';
 
   return (
     <>
@@ -189,24 +181,6 @@ export function SidebarNav({ user }: { user: User }) {
             );
           })}
         </nav>
-
-        {/* User avatar */}
-        <div className="shrink-0 border-t border-border p-3 flex justify-center">
-          <div
-            className="cursor-pointer"
-            onMouseEnter={(e) => {
-              clearLeave();
-              setActiveLabel('__user__');
-            }}
-            onMouseLeave={scheduleClose}
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-        </div>
       </aside>
 
       {/* ── Submenu flyout ── */}
@@ -237,26 +211,6 @@ export function SidebarNav({ user }: { user: User }) {
               {item.title}
             </Link>
           ))}
-        </div>
-      )}
-
-      {/* ── User flyout ── */}
-      {userFlyoutOpen && (
-        <div
-          className="fixed z-50 bg-sidebar border border-border rounded-r-lg shadow-2xl p-3 min-w-[210px]"
-          style={{ left: RAIL_W, bottom: 12 }}
-          onMouseEnter={clearLeave}
-          onMouseLeave={scheduleClose}
-        >
-          <p className="text-sm font-medium truncate">{user.user_metadata?.name || 'Usuário'}</p>
-          <p className="text-xs text-muted-foreground truncate mb-3">{user.email}</p>
-          <button
-            onClick={async () => { await logout(); }}
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Sair
-          </button>
         </div>
       )}
     </>
