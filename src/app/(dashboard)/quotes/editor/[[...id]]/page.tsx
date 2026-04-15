@@ -230,7 +230,7 @@ export default function QuoteEditorPage() {
           setQuoteNumber(existingQuote.quoteNumber);
           form.reset({
             ...existingQuote,
-            date: format(new Date(existingQuote.date), 'yyyy-MM-dd'),
+            date: format(new Date(), 'yyyy-MM-dd'), // sempre hoje — emissão/reemissão
             items: existingQuote.items.map((item) => ({ ...item })),
           });
         } else {
