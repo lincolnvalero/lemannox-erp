@@ -1,6 +1,4 @@
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { SidebarNav } from '@/components/layout/sidebar-nav';
-import { SidebarToggle } from '@/components/layout/sidebar-toggle';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 
@@ -11,10 +9,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect('/login');
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <div className="min-h-screen bg-background">
       <SidebarNav user={user} />
-      <SidebarToggle />
-      <SidebarInset>{children}</SidebarInset>
-    </SidebarProvider>
+      <div className="ml-[68px] min-h-screen">
+        {children}
+      </div>
+    </div>
   );
 }

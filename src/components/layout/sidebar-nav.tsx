@@ -1,241 +1,264 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, Package, FileText, DollarSign,
-  Factory, Truck, Calculator, LogOut, ChevronDown,
-  ShoppingCart, Settings, Receipt, BarChart3, Archive,
+  LayoutDashboard, Package, FileText, DollarSign,
+  Factory, Truck, LogOut,
+  Settings, Receipt, BarChart3, Archive,
 } from 'lucide-react';
-import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
-  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarSeparator, SidebarTrigger,
-} from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { logout } from '@/app/(auth)/actions';
 import type { User } from '@supabase/supabase-js';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
+type NavItem = { title: string; href: string };
 type NavGroup = {
-  label?: string;
-  items: NavItem[];
-};
-
-type NavItem = {
-  title: string;
-  href: string;
-  icon?: React.ComponentType<{ className?: string }>;
-  indent?: boolean;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href?: string;
+  items?: NavItem[];
 };
 
 const navGroups: NavGroup[] = [
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   {
+    label: 'Comercial',
+    icon: FileText,
     items: [
-      { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { title: 'Lista de Orçamentos', href: '/quotes' },
+      { title: 'Novo Orçamento', href: '/quotes/editor' },
+      { title: 'Análise por IA', href: '/quotes/analysis' },
+      { title: 'Clientes', href: '/customers' },
+    ],
+  },
+  { label: 'Produtos', icon: Package, href: '/products' },
+  {
+    label: 'Produção',
+    icon: Factory,
+    items: [
+      { title: 'Programação', href: '/production' },
+      { title: 'Ordens de Serviço', href: '/os' },
     ],
   },
   {
-    label: 'COMERCIAL',
+    label: 'Financeiro',
+    icon: DollarSign,
     items: [
-      { title: 'Orçamentos', href: '/quotes', icon: FileText },
-      { title: 'Lista de Orçamentos', href: '/quotes', indent: true },
-      { title: 'Novo Orçamento', href: '/quotes/editor', indent: true },
-      { title: 'Análise por IA', href: '/quotes/analysis', indent: true },
-      { title: 'Clientes', href: '/customers', icon: Users },
+      { title: 'Visão Geral', href: '/financeiro' },
+      { title: 'Controle do Caixa', href: '/financeiro/caixa' },
+      { title: 'Contas a Pagar', href: '/financeiro/pagar' },
+      { title: 'Contas a Receber', href: '/financeiro/receber' },
+      { title: 'Plano de Contas', href: '/financeiro/contas' },
     ],
   },
   {
-    label: 'PRODUTOS',
+    label: 'Compras',
+    icon: Truck,
     items: [
-      { title: 'Produtos', href: '/products', icon: Package },
+      { title: 'Fornecedores', href: '/suppliers' },
+      { title: 'Dashboard', href: '/suppliers/dashboard' },
     ],
   },
+  { label: 'Estoque', icon: Archive, href: '/materials' },
   {
-    label: 'PRODUÇÃO',
+    label: 'Relatórios',
+    icon: BarChart3,
     items: [
-      { title: 'Programação', href: '/production', icon: Factory },
-      { title: 'Ordens de Serviço', href: '/os', icon: ShoppingCart },
+      { title: 'Relatórios', href: '/relatorios' },
+      { title: 'Calculadora', href: '/calculator' },
     ],
   },
+  { label: 'Fatura', icon: Receipt, href: '/invoicing' },
   {
-    label: 'FINANCEIRO',
+    label: 'Config',
+    icon: Settings,
     items: [
-      { title: 'Visão Geral', href: '/financeiro', icon: DollarSign },
-      { title: 'Controle do Caixa', href: '/financeiro/caixa', indent: true },
-      { title: 'Contas a Pagar', href: '/financeiro/pagar', indent: true },
-      { title: 'Contas a Receber', href: '/financeiro/receber', indent: true },
-      { title: 'Plano de Contas', href: '/financeiro/contas', indent: true },
-    ],
-  },
-  {
-    label: 'COMPRAS',
-    items: [
-      { title: 'Fornecedores', href: '/suppliers', icon: Truck },
-      { title: 'Dashboard', href: '/suppliers/dashboard', indent: true },
-    ],
-  },
-  {
-    label: 'ESTOQUE',
-    items: [
-      { title: 'Materiais', href: '/materials', icon: Archive },
-    ],
-  },
-  {
-    label: 'RELATÓRIOS',
-    items: [
-      { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
-      { title: 'Calculadora', href: '/calculator', icon: Calculator },
-    ],
-  },
-  {
-    label: 'FATURAMENTO',
-    items: [
-      { title: 'Faturamento', href: '/invoicing', icon: Receipt },
-    ],
-  },
-  {
-    label: 'CONFIGURAÇÕES',
-    items: [
-      { title: 'Usuários', href: '/admin/users', icon: Settings },
-      { title: 'Empresa / NF-e', href: '/admin/empresa', indent: true },
+      { title: 'Usuários', href: '/admin/users' },
+      { title: 'Empresa / NF-e', href: '/admin/empresa' },
     ],
   },
 ];
 
-// Grupos colapsáveis (que têm label e mais de 1 item ou sub-itens)
-const COLLAPSIBLE_LABELS = new Set(['COMERCIAL', 'FINANCEIRO', 'COMPRAS', 'CONFIGURAÇÕES']);
+const RAIL_W = 68;
 
 export function SidebarNav({ user }: { user: User }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [flyoutTop, setFlyoutTop] = useState(0);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initials = (user.user_metadata?.name as string || user.email || 'U')
     .split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase();
 
-  // Descobre qual grupo está ativo pela rota atual
-  const activeGroupLabel = navGroups.find(g =>
-    g.label && COLLAPSIBLE_LABELS.has(g.label) &&
-    g.items.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
-  )?.label ?? null;
+  const isActive = useCallback(
+    (href: string) => pathname === href || pathname.startsWith(href + '/'),
+    [pathname]
+  );
 
-  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupLabel);
+  const isGroupActive = useCallback(
+    (g: NavGroup) => g.href ? isActive(g.href) : (g.items?.some(i => isActive(i.href)) ?? false),
+    [isActive]
+  );
 
-  const handleLogout = async () => {
-    await logout();
+  const clearLeave = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
   };
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  const scheduleClose = () => {
+    leaveTimer.current = setTimeout(() => setActiveLabel(null), 130);
+  };
+
+  const openFlyout = (label: string, el: HTMLElement) => {
+    clearLeave();
+    const rect = el.getBoundingClientRect();
+    setFlyoutTop(rect.top);
+    setActiveLabel(label);
+  };
+
+  const activeFlyout = navGroups.find(g => g.label === activeLabel && g.items);
+  const userFlyoutOpen = activeLabel === '__user__';
 
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 border border-primary/25">
+    <>
+      {/* ── Rail ── */}
+      <aside
+        className="fixed left-0 top-0 bottom-0 z-40 flex flex-col bg-sidebar border-r border-border"
+        style={{ width: RAIL_W }}
+      >
+        {/* Logo */}
+        <div className="flex h-14 items-center justify-center shrink-0 border-b border-border">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 border border-primary/25">
             <span className="text-sm font-bold text-primary">L</span>
           </div>
-          <div className="flex flex-col flex-1 min-w-0">
-            <span className="font-semibold text-sm leading-tight">Lemannox</span>
-            <span className="text-xs text-muted-foreground leading-tight">ERP Industrial</span>
-          </div>
-          <SidebarTrigger className="shrink-0 text-muted-foreground hover:text-foreground" />
         </div>
-      </SidebarHeader>
 
-      <SidebarSeparator />
+        {/* Nav items */}
+        <nav
+          className="flex-1 overflow-y-auto py-2 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {navGroups.map((group) => {
+            const active = isGroupActive(group);
+            const hovered = activeLabel === group.label;
+            const hasSubmenu = !!(group.items?.length);
 
-      <SidebarContent className="overflow-y-auto">
-        {navGroups.map((group, gi) => {
-          const isCollapsible = !!(group.label && COLLAPSIBLE_LABELS.has(group.label));
-          const isOpen = !isCollapsible || openGroup === group.label;
-          const groupActive = group.items.some(i => isActive(i.href));
+            const cls = cn(
+              'flex flex-col items-center justify-center gap-0.5 w-full py-2.5 rounded-lg transition-colors duration-150 select-none',
+              active
+                ? 'bg-primary/15 text-primary'
+                : hovered
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground/60 hover:bg-muted hover:text-foreground'
+            );
 
-          return (
-            <SidebarGroup key={gi} className="py-1">
-              {group.label && (
-                <button
-                  className={cn(
-                    'flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold tracking-widest uppercase',
-                    groupActive ? 'text-primary' : 'text-muted-foreground/60',
-                    isCollapsible && 'hover:text-muted-foreground cursor-pointer transition-colors'
-                  )}
-                  onClick={() => {
-                    if (!isCollapsible) return;
-                    setOpenGroup(prev => prev === group.label ? null : group.label!);
-                  }}
+            const inner = (
+              <>
+                <group.icon className="h-[18px] w-[18px] shrink-0" />
+                <span className="text-[8.5px] font-semibold tracking-wide uppercase leading-tight text-center mt-0.5 px-0.5 max-w-full truncate">
+                  {group.label}
+                </span>
+              </>
+            );
+
+            if (!hasSubmenu && group.href) {
+              return (
+                <div key={group.label} className="px-1.5 my-0.5">
+                  <Link
+                    href={group.href}
+                    className={cls}
+                    onMouseEnter={() => { clearLeave(); setActiveLabel(null); }}
+                  >
+                    {inner}
+                  </Link>
+                </div>
+              );
+            }
+
+            return (
+              <div key={group.label} className="px-1.5 my-0.5">
+                <div
+                  className={cn(cls, 'cursor-pointer')}
+                  onMouseEnter={(e) => openFlyout(group.label, e.currentTarget)}
+                  onMouseLeave={scheduleClose}
                 >
-                  <span>{group.label}</span>
-                  {isCollapsible && (
-                    <ChevronDown className={cn(
-                      'h-3 w-3 transition-transform duration-200',
-                      isOpen && 'rotate-180'
-                    )} />
-                  )}
-                </button>
-              )}
-
-              {isOpen && (
-                <SidebarMenu>
-                  {group.items.map((item) => {
-                    const active = isActive(item.href);
-                    // Itens com indent são sub-itens sem ícone
-                    if (item.indent) {
-                      return (
-                        <SidebarMenuItem key={item.href + item.title}>
-                          <SidebarMenuButton asChild isActive={active} className="pl-7 text-xs h-7">
-                            <Link href={item.href}>
-                              <span className={cn('truncate', active ? 'text-primary font-medium' : 'text-muted-foreground')}>
-                                {item.title}
-                              </span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    }
-                    return (
-                      <SidebarMenuItem key={item.href + item.title}>
-                        <SidebarMenuButton asChild isActive={active}>
-                          <Link href={item.href}>
-                            {item.icon && <item.icon className="h-4 w-4" />}
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              )}
-            </SidebarGroup>
-          );
-        })}
-      </SidebarContent>
-
-      <SidebarSeparator />
-
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-3 px-2 py-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm font-medium truncate">{user.user_metadata?.name || 'Usuário'}</span>
-                <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+                  {inner}
+                </div>
               </div>
-              <button
-                onClick={handleLogout}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                title="Sair"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+            );
+          })}
+        </nav>
 
-    </Sidebar>
+        {/* User avatar */}
+        <div className="shrink-0 border-t border-border p-3 flex justify-center">
+          <div
+            className="cursor-pointer"
+            onMouseEnter={(e) => {
+              clearLeave();
+              setActiveLabel('__user__');
+            }}
+            onMouseLeave={scheduleClose}
+          >
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Submenu flyout ── */}
+      {activeFlyout && (
+        <div
+          className="fixed z-50 bg-sidebar border border-border rounded-r-lg shadow-2xl py-1.5 min-w-[210px]"
+          style={{ left: RAIL_W, top: flyoutTop }}
+          onMouseEnter={clearLeave}
+          onMouseLeave={scheduleClose}
+        >
+          <div className="px-3 pt-1 pb-1.5 mb-1 border-b border-border">
+            <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground/50">
+              {activeFlyout.label}
+            </span>
+          </div>
+          {activeFlyout.items?.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setActiveLabel(null)}
+              className={cn(
+                'block px-4 py-2 text-sm transition-colors',
+                isActive(item.href)
+                  ? 'text-primary font-medium bg-primary/10'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              {item.title}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* ── User flyout ── */}
+      {userFlyoutOpen && (
+        <div
+          className="fixed z-50 bg-sidebar border border-border rounded-r-lg shadow-2xl p-3 min-w-[210px]"
+          style={{ left: RAIL_W, bottom: 12 }}
+          onMouseEnter={clearLeave}
+          onMouseLeave={scheduleClose}
+        >
+          <p className="text-sm font-medium truncate">{user.user_metadata?.name || 'Usuário'}</p>
+          <p className="text-xs text-muted-foreground truncate mb-3">{user.email}</p>
+          <button
+            onClick={async () => { await logout(); }}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sair
+          </button>
+        </div>
+      )}
+    </>
   );
 }
