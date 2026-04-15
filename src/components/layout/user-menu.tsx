@@ -41,7 +41,7 @@ export function UserMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] min-w-[200px] rounded-lg border border-border bg-popover shadow-xl p-3 z-50">
+        <div className="absolute left-0 bottom-[calc(100%+6px)] min-w-[200px] rounded-lg border border-border bg-popover shadow-xl p-3 z-50">
           <p className="text-sm font-semibold truncate">{name}</p>
           <p className="text-xs text-muted-foreground truncate mb-3">{email}</p>
           <button

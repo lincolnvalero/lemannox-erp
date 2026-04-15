@@ -15,17 +15,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-background">
-      <SidebarNav />
-
-      {/* Ações top-right: usuário + tema */}
-      <div className="fixed top-3 right-4 z-50 flex items-center gap-1.5">
-        <UserMenu
-          name={user.user_metadata?.name || 'Usuário'}
-          email={user.email || ''}
-          initials={initials}
-        />
-        <ThemeToggle />
-      </div>
+      <SidebarNav
+        footer={
+          <>
+            <UserMenu
+              name={user.user_metadata?.name || 'Usuário'}
+              email={user.email || ''}
+              initials={initials}
+            />
+            <ThemeToggle />
+          </>
+        }
+      />
 
       <div className="ml-[84px] min-h-screen">
         {children}

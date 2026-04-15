@@ -79,7 +79,7 @@ const navGroups: NavGroup[] = [
 
 export const RAIL_W = 84;
 
-export function SidebarNav() {
+export function SidebarNav({ footer }: { footer?: React.ReactNode }) {
   const pathname = usePathname();
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [flyoutTop, setFlyoutTop] = useState(0);
@@ -181,6 +181,13 @@ export function SidebarNav() {
             );
           })}
         </nav>
+
+        {/* Footer: user + theme toggle */}
+        {footer && (
+          <div className="shrink-0 border-t border-border p-2 flex items-center justify-center gap-1.5">
+            {footer}
+          </div>
+        )}
       </aside>
 
       {/* ── Submenu flyout ── */}
