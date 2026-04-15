@@ -8,75 +8,93 @@
    DESIGN TOKENS — CSS Custom Properties
    ============================================= */
 @layer base {
+  /* ── LIGHT MODE — inspirado no MarketUp ── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Área de conteúdo: cinza claro */
+    --background: 90 5% 92%;          /* #ebebeb */
+    --foreground: 210 12% 16%;        /* #23272e */
+    /* Cards: branco puro */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 210 12% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 262.1 83.3% 57.8%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 262.1 83.3% 57.8%;
+    --popover-foreground: 210 12% 16%;
+    /* Accent primário: verde-lima MarketUp */
+    --primary: 74 100% 38%;           /* ~#a3c200 */
+    --primary-foreground: 0 0% 100%;
+    /* Secundário / muted */
+    --secondary: 90 8% 88%;
+    --secondary-foreground: 210 12% 22%;
+    --muted: 90 6% 88%;
+    --muted-foreground: 210 10% 46%;
+    --accent: 90 8% 85%;
+    --accent-foreground: 210 12% 16%;
+    /* Destrutivo */
+    --destructive: 4 86% 53%;
+    --destructive-foreground: 0 0% 100%;
+    /* Bordas e inputs */
+    --border: 90 6% 82%;
+    --input: 90 6% 86%;
+    --ring: 74 100% 38%;
     --radius: 0.5rem;
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 166.2 76.7% 39.4%;
-    --chart-3: 39.6 95.3% 52.9%;
-    --chart-4: 262.1 83.3% 57.8%;
-    --chart-5: 358.3 89.6% 62.2%;
-    --sidebar-background: 220 18% 91%;
-    --sidebar-foreground: 222.2 47.4% 11.2%;
-    --sidebar-primary: 262.1 83.3% 57.8%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 220 18% 84%;
-    --sidebar-accent-foreground: 222.2 47.4% 11.2%;
-    --sidebar-border: 220 18% 83%;
-    --sidebar-ring: 262.1 83.3% 57.8%;
+    /* Charts */
+    --chart-1: 74 100% 34%;
+    --chart-2: 200 80% 40%;
+    --chart-3: 38 90% 50%;
+    --chart-4: 262 70% 58%;
+    --chart-5: 4 86% 53%;
+    /* Sidebar: verde-musgo escuro, igual ao MarketUp */
+    --sidebar-background: 105 15% 11%; /* #1a2018 — verde-oliva muito escuro */
+    --sidebar-foreground: 90 20% 92%;  /* branco levemente esverdeado */
+    --sidebar-primary: 74 100% 42%;    /* verde-lima ativo */
+    --sidebar-primary-foreground: 105 15% 8%;
+    --sidebar-accent: 105 12% 18%;     /* hover: um tom mais claro */
+    --sidebar-accent-foreground: 90 20% 95%;
+    --sidebar-border: 105 12% 17%;
+    --sidebar-ring: 74 100% 42%;
   }
 
+  /* ── DARK MODE — refinado, profissional ── */
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --card: 224 71% 7%;
-    --card-foreground: 213 31% 91%;
-    --popover: 224 71% 5%;
-    --popover-foreground: 213 31% 91%;
-    --primary: 262.1 83.3% 62%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 224 71% 12%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 224 71% 11%;
-    --muted-foreground: 215.4 16.3% 58%;
-    --accent: 224 71% 12%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 35%;
+    /* Área de conteúdo: grafite escuro */
+    --background: 220 16% 8%;         /* #0e1017 */
+    --foreground: 215 25% 88%;        /* #d4dae8 */
+    /* Cards: um tom acima do background */
+    --card: 220 16% 11%;              /* #141720 */
+    --card-foreground: 215 25% 88%;
+    --popover: 220 16% 10%;
+    --popover-foreground: 215 25% 88%;
+    /* Accent primário: violeta/índigo vibrante */
+    --primary: 252 80% 65%;           /* #7b6ef6 */
+    --primary-foreground: 0 0% 100%;
+    /* Secundário */
+    --secondary: 220 18% 16%;
+    --secondary-foreground: 215 25% 82%;
+    --muted: 220 16% 15%;
+    --muted-foreground: 215 15% 55%;
+    --accent: 220 18% 16%;
+    --accent-foreground: 215 25% 88%;
+    /* Destrutivo */
+    --destructive: 4 72% 42%;
     --destructive-foreground: 0 0% 98%;
-    --border: 224 40% 14%;
-    --input: 224 40% 13%;
-    --ring: 262.1 83.3% 62%;
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 166.2 76.7% 39.4%;
-    --chart-3: 39.6 95.3% 52.9%;
-    --chart-4: 262.1 83.3% 57.8%;
-    --chart-5: 358.3 89.6% 62.2%;
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 213 31% 88%;
-    --sidebar-primary: 262.1 83.3% 62%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 222 47% 14%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 40% 15%;
-    --sidebar-ring: 262.1 83.3% 62%;
+    /* Bordas e inputs */
+    --border: 220 20% 18%;
+    --input: 220 18% 16%;
+    --ring: 252 80% 65%;
+    /* Charts */
+    --chart-1: 252 80% 65%;
+    --chart-2: 166 72% 44%;
+    --chart-3: 38 90% 52%;
+    --chart-4: 200 75% 50%;
+    --chart-5: 4 72% 52%;
+    /* Sidebar: grafite muito escuro, quase preto */
+    --sidebar-background: 220 20% 6%; /* #0a0c12 */
+    --sidebar-foreground: 215 20% 82%;
+    --sidebar-primary: 252 80% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 18% 13%;
+    --sidebar-accent-foreground: 215 20% 90%;
+    --sidebar-border: 220 18% 12%;
+    --sidebar-ring: 252 80% 65%;
   }
 
   * {

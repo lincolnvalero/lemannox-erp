@@ -79,6 +79,33 @@ const navGroups: NavGroup[] = [
 
 export const RAIL_W = 84;
 
+/* ── Leamnox Logo Mark ── */
+function LeamnoxLogo() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-0.5 text-sidebar-foreground">
+      <svg
+        width="34"
+        height="34"
+        viewBox="0 0 40 40"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-label="Leamnox"
+      >
+        {/* Fundo suave */}
+        <rect width="40" height="40" rx="9" fill="currentColor" fillOpacity={0.1} />
+        {/* "L" geométrico em negrito */}
+        <path
+          d="M11 9 L11 31 L29 31 L29 25 L17 25 L17 9 Z"
+          fill="currentColor"
+        />
+      </svg>
+      <span className="text-[7px] font-bold tracking-[0.15em] uppercase opacity-60 leading-none">
+        Leamnox
+      </span>
+    </div>
+  );
+}
+
 export function SidebarNav({ footer }: { footer?: React.ReactNode }) {
   const pathname = usePathname();
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
@@ -121,9 +148,7 @@ export function SidebarNav({ footer }: { footer?: React.ReactNode }) {
       >
         {/* Logo */}
         <div className="flex h-14 items-center justify-center shrink-0 border-b border-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 border border-primary/25">
-            <span className="text-sm font-bold text-primary">L</span>
-          </div>
+          <LeamnoxLogo />
         </div>
 
         {/* Nav items */}

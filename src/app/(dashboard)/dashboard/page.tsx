@@ -3,48 +3,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
 import {
-  DollarSign, TrendingUp, TrendingDown, Clock,
-  FileText, Factory, BarChart3, AlertTriangle,
+  DollarSign, TrendingUp, TrendingDown,
+  FileText, Factory, BarChart3, AlertTriangle, Clock,
 } from 'lucide-react';
-import { PeriodSelector } from './period-selector';
+import { DateRangeFilter } from './date-range-filter';
 import Link from 'next/link';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function getPeriodRange(period: string): string | null {
-  const now = new Date();
-  if (period === 'semana') {
-    const d = new Date(now); d.setDate(d.getDate() - 7);
-    return d.toISOString().split('T')[0];
-  }
-  if (period === 'mes') {
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  }
-  if (period === 'trimestre') {
-    const d = new Date(now); d.setMonth(d.getMonth() - 3);
-    return d.toISOString().split('T')[0];
-  }
-  return null; // 'total'
+function fmtDate(d: string) {
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-const PERIOD_LABEL: Record<string, string> = {
-  semana: 'esta semana',
-  mes: 'este mês',
-  trimestre: 'este trimestre',
-  total: 'todos os períodos',
-};
+function rangeLabel(from: string, to: string) {
+  if (!from && !to) return 'Todos os períodos';
+  if (from && to) return `${fmtDate(from)} — ${fmtDate(to)}`;
+  if (from) return `A partir de ${fmtDate(from)}`;
+  return `Até ${fmtDate(to)}`;
+}
 
-async function getDashboardData(period: string) {
+async function getDashboardData(from: string, to: string) {
   const supabase = await createClient();
-  const fromDate = getPeriodRange(period);
 
-  // Build recent quotes query (filtered by period)
   let recentQ = supabase
     .from('quotes')
     .select('id, quote_number, customer_name, total, status, date')
     .order('quote_number', { ascending: false })
     .limit(8);
-  if (fromDate) recentQ = recentQ.gte('date', fromDate);
+  if (from) recentQ = recentQ.gte('date', from);
+  if (to)   recentQ = recentQ.lte('date', to);
 
   const [
     recentQuotesRes,
@@ -62,7 +49,7 @@ async function getDashboardData(period: string) {
     supabase.from('products').select('id', { count: 'exact', head: true }),
     supabase.from('ordens_servico')
       .select('*', { count: 'exact', head: true })
-      .in('status', ['aberta', 'em_producao']),
+      .in('status', ['aberta', 'em_producao', 'em_andamento']),
     supabase
       .from('financial_transactions')
       .select('id, description, amount, due_date')
@@ -73,19 +60,23 @@ async function getDashboardData(period: string) {
       .limit(6),
   ]);
 
-  // ── Quote stats for selected period ────────────────────────────────────────
+  // ── Quote stats for selected range ────────────────────────────────────────
   const allQ = allQuotesRes.data ?? [];
-  const periodQ = fromDate ? allQ.filter(q => q.date >= fromDate) : allQ;
+  const periodQ = allQ.filter(q => {
+    if (from && q.date < from) return false;
+    if (to   && q.date > to)   return false;
+    return true;
+  });
 
   const quoteStats = {
-    total: periodQ.length,
-    aprovados: periodQ.filter(q => q.status === 'aprovado').length,
+    total:      periodQ.length,
+    aprovados:  periodQ.filter(q => q.status === 'aprovado').length,
     emProducao: periodQ.filter(q => q.status === 'produzindo').length,
-    faturados: periodQ.filter(q => q.status === 'faturado').length,
+    faturados:  periodQ.filter(q => q.status === 'faturado').length,
     valorTotal: periodQ.reduce((s, q) => s + (Number(q.total) || 0), 0),
   };
 
-  // ── Ticket médio: orçamentos com status produtivo (all-time) ───────────────
+  // ── Ticket médio (all-time, status produtivo) ─────────────────────────────
   const activeQ = allQ.filter(q =>
     ['aprovado', 'faturado', 'produzindo', 'entregue'].includes(q.status)
   );
@@ -93,36 +84,32 @@ async function getDashboardData(period: string) {
     ? activeQ.reduce((s, q) => s + (Number(q.total) || 0), 0) / activeQ.length
     : 0;
 
-  // ── Taxa de conversão do período ───────────────────────────────────────────
+  // ── Taxa de conversão do range ────────────────────────────────────────────
   const sentOrApproved = periodQ.filter(q =>
     ['enviado', 'aprovado', 'produzindo', 'faturado', 'entregue', 'rejeitado'].includes(q.status)
   );
   const taxaConversao = sentOrApproved.length > 0
     ? Math.round(
-        (periodQ.filter(q =>
+        periodQ.filter(q =>
           ['aprovado', 'produzindo', 'faturado', 'entregue'].includes(q.status)
-        ).length / sentOrApproved.length) * 100
+        ).length / sentOrApproved.length * 100
       )
     : null;
 
   // ── Financeiro ─────────────────────────────────────────────────────────────
-  const allTx = allTxRes.data ?? [];
+  const allTx   = allTxRes.data ?? [];
   const txPagas = allTx.filter(t => t.status === 'pago');
   const entradas = txPagas.filter(t => t.type === 'entrada').reduce((s, t) => s + Number(t.amount), 0);
-  const saidas = txPagas.filter(t => t.type === 'saida').reduce((s, t) => s + Number(t.amount), 0);
-  const aReceber = allTx
-    .filter(t => t.status === 'pendente' && t.type === 'entrada')
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const aPagar = allTx
-    .filter(t => t.status === 'pendente' && t.type === 'saida')
-    .reduce((s, t) => s + Number(t.amount), 0);
+  const saidas   = txPagas.filter(t => t.type === 'saida').reduce((s,   t) => s + Number(t.amount), 0);
+  const aReceber = allTx.filter(t => t.status === 'pendente' && t.type === 'entrada').reduce((s, t) => s + Number(t.amount), 0);
+  const aPagar   = allTx.filter(t => t.status === 'pendente' && t.type === 'saida').reduce((s,   t) => s + Number(t.amount), 0);
 
   return {
-    recentQuotes: recentQuotesRes.data ?? [],
-    upcomingPayments: upcomingPayRes.data ?? [],
-    customerCount: customersRes.count ?? 0,
-    productCount: productsRes.count ?? 0,
-    osCount: osRes.count ?? 0,
+    recentQuotes:     recentQuotesRes.data ?? [],
+    upcomingPayments: upcomingPayRes.data  ?? [],
+    customerCount:    customersRes.count   ?? 0,
+    productCount:     productsRes.count    ?? 0,
+    osCount:          osRes.count          ?? 0,
     quoteStats,
     ticketMedio,
     taxaConversao,
@@ -136,25 +123,24 @@ const STATUS_LABEL: Record<string, string> = {
   rascunho: 'Rascunho', enviado: 'Enviado', aprovado: 'Aprovado',
   rejeitado: 'Rejeitado', faturado: 'Faturado', produzindo: 'Em Prod.', entregue: 'Entregue',
 };
-
 const STATUS_CLS: Record<string, string> = {
-  rascunho: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  enviado: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  aprovado: 'bg-green-500/20 text-green-400 border-green-500/30',
+  rascunho:  'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  enviado:   'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  aprovado:  'bg-green-500/20 text-green-400 border-green-500/30',
   rejeitado: 'bg-red-500/20 text-red-400 border-red-500/30',
-  faturado: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  produzindo: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  entregue: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  faturado:  'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  produzindo:'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  entregue:  'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
 };
 
 function dueDateAlert(dueDate: string | null) {
   if (!dueDate) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDate + 'T00:00:00');
-  const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return { label: `Vencido há ${Math.abs(diff)}d`, cls: 'text-red-400' };
+  const due   = new Date(dueDate + 'T00:00:00');
+  const diff  = Math.floor((due.getTime() - today.getTime()) / 86400000);
+  if (diff < 0)  return { label: `Vencido há ${Math.abs(diff)}d`, cls: 'text-red-400' };
   if (diff === 0) return { label: 'Vence hoje', cls: 'text-orange-400' };
-  if (diff <= 7) return { label: `${diff}d`, cls: 'text-yellow-400' };
+  if (diff <= 7)  return { label: `${diff}d`,   cls: 'text-yellow-400' };
   return { label: `${diff}d`, cls: 'text-muted-foreground' };
 }
 
@@ -163,11 +149,17 @@ function dueDateAlert(dueDate: string | null) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  const { period = 'mes' } = await searchParams;
-  const data = await getDashboardData(period);
+  const now = new Date();
+  const todayStr    = now.toISOString().split('T')[0];
+  const monthStart  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+  const { from = monthStart, to = todayStr } = await searchParams;
+
+  const data = await getDashboardData(from, to);
   const { financeiro: fin, quoteStats: qs } = data;
+  const label = rangeLabel(from, to);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -177,10 +169,8 @@ export default async function DashboardPage({
 
       <main className="flex-1 space-y-6 p-4 md:p-6">
 
-        {/* ── Row 1: Financeiro (3 cards) ───────────────────────────────── */}
+        {/* ── Row 1: Financeiro ────────────────────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-3">
-
-          {/* Saldo em Caixa */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Saldo em Caixa</CardTitle>
@@ -196,7 +186,6 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          {/* A Receber */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">A Receber</CardTitle>
@@ -206,13 +195,10 @@ export default async function DashboardPage({
               <div className="text-2xl font-bold font-mono text-yellow-400">
                 {formatCurrency(fin.aReceber)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Transações pendentes de entrada
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Transações pendentes de entrada</p>
             </CardContent>
           </Card>
 
-          {/* A Pagar */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">A Pagar</CardTitle>
@@ -222,31 +208,29 @@ export default async function DashboardPage({
               <div className="text-2xl font-bold font-mono text-red-400">
                 {formatCurrency(fin.aPagar)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Despesas pendentes de quitação
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Despesas pendentes de quitação</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* ── Row 2: Operacional (3 cards) ─────────────────────────────── */}
+        {/* ── Row 2: Operacional ───────────────────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-3">
 
-          {/* Orçamentos do período — com filtro */}
+          {/* Orçamentos com date range filter */}
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between pb-2 gap-2">
-              <div>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
                   <FileText className="h-4 w-4" />
                   Orçamentos
                 </CardTitle>
+                <DateRangeFilter from={from} to={to} />
               </div>
-              <PeriodSelector current={period} />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{qs.total}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {qs.aprovados} aprovados · {qs.emProducao} em produção · {qs.faturados} faturados
+                {qs.aprovados} aprovados · {qs.emProducao} em prod. · {qs.faturados} faturados
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Volume: {formatCurrency(qs.valorTotal)}
@@ -254,7 +238,6 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          {/* Em Produção */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Em Produção</CardTitle>
@@ -262,16 +245,11 @@ export default async function DashboardPage({
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-400">{data.osCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Ordens de serviço ativas
-              </p>
-              <Link href="/os" className="text-xs text-primary hover:underline mt-0.5 block">
-                Ver todas →
-              </Link>
+              <p className="text-xs text-muted-foreground mt-1">Ordens de serviço ativas</p>
+              <Link href="/os" className="text-xs text-primary hover:underline mt-0.5 block">Ver todas →</Link>
             </CardContent>
           </Card>
 
-          {/* Ticket Médio */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Ticket Médio</CardTitle>
@@ -281,12 +259,11 @@ export default async function DashboardPage({
               <div className="text-2xl font-bold font-mono">
                 {data.ticketMedio > 0 ? formatCurrency(data.ticketMedio) : '—'}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Orçamentos aprovados / em produção
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Orçamentos aprovados / em produção</p>
               {data.taxaConversao !== null && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Conversão {PERIOD_LABEL[period]}: <span className="text-green-400 font-medium">{data.taxaConversao}%</span>
+                  Conversão no período:{' '}
+                  <span className="text-green-400 font-medium">{data.taxaConversao}%</span>
                 </p>
               )}
             </CardContent>
@@ -295,14 +272,10 @@ export default async function DashboardPage({
 
         {/* ── Bottom: tabelas ──────────────────────────────────────────── */}
         <div className="grid gap-6 lg:grid-cols-2">
-
-          {/* Orçamentos recentes */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Orçamentos Recentes</CardTitle>
-              <CardDescription>
-                {PERIOD_LABEL[period].charAt(0).toUpperCase() + PERIOD_LABEL[period].slice(1)}
-              </CardDescription>
+              <CardDescription>{label}</CardDescription>
             </CardHeader>
             <CardContent>
               {data.recentQuotes.length === 0 ? (
@@ -310,7 +283,7 @@ export default async function DashboardPage({
                   Nenhum orçamento no período.
                 </p>
               ) : (
-                <div className="space-y-0">
+                <div>
                   {data.recentQuotes.map((q: Record<string, unknown>) => (
                     <Link
                       key={q.id as string}
@@ -324,10 +297,7 @@ export default async function DashboardPage({
                         <span className="text-sm truncate">{q.customer_name as string}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${STATUS_CLS[q.status as string] || ''}`}
-                        >
+                        <Badge variant="outline" className={`text-xs ${STATUS_CLS[q.status as string] || ''}`}>
                           {STATUS_LABEL[q.status as string] || (q.status as string)}
                         </Badge>
                         <span className="text-sm font-mono font-medium w-24 text-right">
@@ -341,7 +311,6 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          {/* Próximos vencimentos a pagar */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Próximos Vencimentos</CardTitle>
@@ -353,9 +322,9 @@ export default async function DashboardPage({
                   Nenhuma conta a pagar pendente.
                 </p>
               ) : (
-                <div className="space-y-0">
+                <div>
                   {data.upcomingPayments.map((t: Record<string, unknown>) => {
-                    const alert = dueDateAlert(t.due_date as string | null);
+                    const alert    = dueDateAlert(t.due_date as string | null);
                     const isOverdue = t.due_date && new Date((t.due_date as string) + 'T00:00:00') < new Date();
                     return (
                       <div
@@ -369,11 +338,7 @@ export default async function DashboardPage({
                           <span className="text-sm truncate">{t.description as string}</span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          {alert && (
-                            <span className={`text-xs font-medium ${alert.cls}`}>
-                              {alert.label}
-                            </span>
-                          )}
+                          {alert && <span className={`text-xs font-medium ${alert.cls}`}>{alert.label}</span>}
                           <span className="text-sm font-mono font-medium text-red-400 w-24 text-right">
                             {formatCurrency(t.amount as number)}
                           </span>

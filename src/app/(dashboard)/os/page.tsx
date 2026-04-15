@@ -16,7 +16,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { FileText, Pencil, Printer, Trash2, Loader2, PlusCircle, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { FileText, Pencil, Printer, Trash2, Loader2, PlusCircle, X, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -152,6 +153,17 @@ export default function OrdensServicoPage() {
       setPreviewOs(null);
     }
     setPreviewLoading(false);
+  };
+
+  const handleInlineStatus = async (os: OrdemServico, newStatus: OrdemServico['status']) => {
+    // Optimistic update
+    setOrdens(prev => prev.map(o => o.id === os.id ? { ...o, status: newStatus } : o));
+    const result = await updateOrdemServico(os.id, { status: newStatus });
+    if (!result.success) {
+      // Reverte em caso de erro
+      setOrdens(prev => prev.map(o => o.id === os.id ? { ...o, status: os.status } : o));
+      toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: result.error });
+    }
   };
 
   const updateItem = (idx: number, field: keyof OsItem, value: string | number) => {
@@ -367,9 +379,40 @@ export default function OrdensServicoPage() {
                       {os.obra ?? '—'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn('text-xs', STATUS_COLOR[os.status])}>
-                        {STATUS_LABEL[os.status] ?? os.status}
-                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className={cn(
+                              'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-colors hover:opacity-80 focus:outline-none',
+                              STATUS_COLOR[os.status]
+                            )}
+                          >
+                            {STATUS_LABEL[os.status] ?? os.status}
+                            <ChevronDown className="h-3 w-3 opacity-60" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-[160px]">
+                          {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                            <DropdownMenuItem
+                              key={value}
+                              className={cn(
+                                'text-xs cursor-pointer',
+                                os.status === value && 'font-semibold'
+                              )}
+                              onClick={() => handleInlineStatus(os, value as OrdemServico['status'])}
+                            >
+                              <span className={cn(
+                                'inline-block w-2 h-2 rounded-full mr-2',
+                                value === 'aberta' && 'bg-blue-400',
+                                value === 'em_andamento' && 'bg-yellow-400',
+                                value === 'concluida' && 'bg-green-400',
+                                value === 'cancelada' && 'bg-red-400',
+                              )} />
+                              {label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                       {formatDate(os.createdAt)}

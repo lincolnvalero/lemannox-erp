@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <!-- Background rounded square -->
+  <rect width="40" height="40" rx="10" fill="currentColor" fill-opacity="0.12"/>
+  <!-- Bold geometric L mark -->
+  <path d="M11 9 L11 31 L29 31 L29 25 L17 25 L17 9 Z" fill="currentColor"/>
+</svg>
