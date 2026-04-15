@@ -742,15 +742,15 @@ export default function QuoteEditorPage() {
                             <Table>
                             <TableHeader>
                                 <TableRow>
-                                <TableHead className="w-[25%]">Produto</TableHead>
-                                <TableHead className="w-[150px]">Medida</TableHead>
-                                <TableHead className="w-[180px]">Material</TableHead>
-                                <TableHead className="w-[80px] text-center">Qtd.</TableHead>
-                                <TableHead className="w-[140px] text-right">
+                                <TableHead className="min-w-[280px]">Produto</TableHead>
+                                <TableHead className="w-[130px]">Medida</TableHead>
+                                <TableHead className="w-[160px]">Material</TableHead>
+                                <TableHead className="w-[70px] text-center">Qtd.</TableHead>
+                                <TableHead className="w-[120px] text-right">
                                     Vlr. Unitário
                                 </TableHead>
-                                <TableHead className="w-[120px] text-right">Impostos</TableHead>
-                                <TableHead className="w-[140px] text-right">
+                                <TableHead className="w-[100px] text-right">Impostos</TableHead>
+                                <TableHead className="w-[120px] text-right">
                                     Total Item
                                 </TableHead>
                                 <TableHead className="w-[50px]">
@@ -768,7 +768,8 @@ export default function QuoteEditorPage() {
                                       <TableCell className="align-top">
                                       <Textarea
                                           {...register(`items.${index}.name`)}
-                                          className="font-medium min-h-0 h-10 p-2"
+                                          className="font-medium min-h-[40px] p-2 resize-none"
+                                          rows={2}
                                       />
                                       </TableCell>
                                       <TableCell className="align-top">
