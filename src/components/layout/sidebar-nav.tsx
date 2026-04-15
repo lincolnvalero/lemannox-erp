@@ -81,7 +81,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const RAIL_W = 68;
+const RAIL_W = 84;
 
 export function SidebarNav({ user }: { user: User }) {
   const pathname = usePathname();
@@ -156,7 +156,7 @@ export function SidebarNav({ user }: { user: User }) {
             const inner = (
               <>
                 <group.icon className="h-[18px] w-[18px] shrink-0" />
-                <span className="text-[8.5px] font-semibold tracking-wide uppercase leading-tight text-center mt-0.5 px-0.5 max-w-full truncate">
+                <span className="text-[8.5px] font-semibold tracking-wide uppercase leading-tight text-center mt-0.5 px-0.5 w-full">
                   {group.label}
                 </span>
               </>
