@@ -24,15 +24,22 @@ export async function getReportData(months = 6): Promise<{ success: boolean; dat
     since.setMonth(since.getMonth() - months);
     const sinceStr = since.toISOString().split('T')[0];
 
-    const [quotesRes, transactionsRes, materialsRes] = await Promise.all([
+    const [quotesRes, transactionsRes, materialsRes, customersRes] = await Promise.all([
       supabase.from('quotes').select('*').gte('date', sinceStr),
       supabase.from('financial_transactions').select('*').gte('transaction_date', sinceStr),
       supabase.from('materials').select('name, quantity, min_quantity, unit'),
+      supabase.from('customers').select('id, name, trade_name'),
     ]);
 
     const quotes = quotesRes.data ?? [];
     const transactions = transactionsRes.data ?? [];
     const materials = materialsRes.data ?? [];
+
+    // Mapa de customer_id → nome fantasia (ou razão social como fallback)
+    const customerDisplayName = new Map<string, string>();
+    for (const c of (customersRes.data ?? [])) {
+      customerDisplayName.set(c.id, (c.trade_name as string) || (c.name as string));
+    }
 
     // Faturamento mensal por data do orçamento aprovado/entregue
     const monthMap = new Map<string, { total: number; quantidade: number }>();
@@ -51,11 +58,13 @@ export async function getReportData(months = 6): Promise<{ success: boolean; dat
       }));
 
     // Top 5 clientes por total de orçamentos aprovados
+    // Usa nome fantasia do cadastro; fallback para customer_name do orçamento
     const clienteMap = new Map<string, { total: number; count: number }>();
     for (const q of quotes) {
       if (['aprovado', 'produzindo', 'entregue', 'faturado'].includes(q.status)) {
-        const prev = clienteMap.get(q.customer_name) ?? { total: 0, count: 0 };
-        clienteMap.set(q.customer_name, { total: prev.total + (q.total ?? 0), count: prev.count + 1 });
+        const displayName = customerDisplayName.get(q.customer_id) || q.customer_name || 'Sem nome';
+        const prev = clienteMap.get(displayName) ?? { total: 0, count: 0 };
+        clienteMap.set(displayName, { total: prev.total + (q.total ?? 0), count: prev.count + 1 });
       }
     }
     const topClientes = Array.from(clienteMap.entries())
