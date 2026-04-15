@@ -122,15 +122,28 @@ export async function upsertQuote(
       warranty: (data.warranty as string) || null,
     };
 
-    if (quoteId) payload.id = quoteId;
+    let saved: Record<string, unknown>;
 
-    const { data: saved, error } = await supabase
-      .from('quotes')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (error) throw error;
+    if (quoteId) {
+      // EDIÇÃO: UPDATE direto — não toca na sequence do quote_number
+      const { data, error } = await supabase
+        .from('quotes')
+        .update(payload)
+        .eq('id', quoteId)
+        .select()
+        .single();
+      if (error) throw error;
+      saved = data;
+    } else {
+      // CRIAÇÃO: INSERT — gera quote_number uma única vez
+      const { data, error } = await supabase
+        .from('quotes')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      saved = data;
+    }
 
     // Auto-cria OS quando status muda para 'aprovado' e ainda não tem OS
     if (saved.status === 'aprovado' && !saved.os_number) {
