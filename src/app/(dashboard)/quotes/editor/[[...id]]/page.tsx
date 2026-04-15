@@ -761,78 +761,89 @@ export default function QuoteEditorPage() {
 
                                   return (
                                     <TableRow key={item.id}>
-                                      <TableCell className="align-top">
-                                      <Textarea
+                                      <TableCell className="align-middle">
+                                        <Textarea
                                           {...register(`items.${index}.name`)}
-                                          className="font-medium p-2 resize-none overflow-hidden w-full"
+                                          className="font-medium p-2 resize-none overflow-hidden w-full min-h-0"
                                           rows={1}
+                                          onFocus={(e) => {
+                                            const el = e.currentTarget;
+                                            el.style.height = 'auto';
+                                            el.style.height = el.scrollHeight + 'px';
+                                          }}
                                           onInput={(e) => {
                                             const el = e.currentTarget;
                                             el.style.height = 'auto';
                                             el.style.height = el.scrollHeight + 'px';
                                           }}
-                                      />
+                                          onBlur={(e) => {
+                                            e.currentTarget.style.height = '';
+                                          }}
+                                        />
                                       </TableCell>
-                                      <TableCell className="align-top">
-                                      <Input
+                                      <TableCell className="align-middle">
+                                        <Input
                                           {...register(`items.${index}.measurement`)}
-                                          className="min-h-0 h-10 p-2"
-                                      />
+                                          className="h-10 p-2"
+                                        />
                                       </TableCell>
-                                      <TableCell className="align-top">
-                                      <Select
+                                      <TableCell className="align-middle">
+                                        <Select
                                           value={item.material}
-                                          onValueChange={(value) =>
-                                          handleMaterialChange(index, value)
-                                          }
+                                          onValueChange={(value) => handleMaterialChange(index, value)}
                                           disabled={isOutrosItem}
-                                      >
-                                          <SelectTrigger>
-                                          <SelectValue placeholder="Material" />
+                                        >
+                                          <SelectTrigger className="h-10">
+                                            <SelectValue placeholder="Material" />
                                           </SelectTrigger>
                                           <SelectContent>
-                                          {products
+                                            {products
                                               .find((p) => p.id === item.productId)
                                               ?.variations.map((v) => (
-                                              <SelectItem key={v.id} value={v.material}>
+                                                <SelectItem key={v.id} value={v.material}>
                                                   {v.material}
-                                              </SelectItem>
+                                                </SelectItem>
                                               ))}
                                           </SelectContent>
-                                      </Select>
+                                        </Select>
                                       </TableCell>
-                                      <TableCell className="align-top">
-                                      <Input
+                                      <TableCell className="align-middle">
+                                        <Input
                                           type="number"
                                           {...register(`items.${index}.quantity`)}
-                                          className="text-center"
-                                      />
+                                          className="h-10 text-center"
+                                        />
                                       </TableCell>
-                                      <TableCell className="align-top">
-                                      <Input
+                                      <TableCell className="align-middle">
+                                        <Input
                                           type="number"
                                           step="0.01"
                                           {...register(`items.${index}.unitPrice`)}
-                                          className="text-right"
-                                      />
+                                          className="h-10 text-right"
+                                        />
                                       </TableCell>
-                                      <TableCell className="align-top text-right font-medium font-code">
+                                      <TableCell className="align-middle text-right">
+                                        <div className="h-10 flex items-center justify-end font-medium font-mono text-sm">
                                           {formatCurrency(watchedItems[index]?.tax || 0)}
+                                        </div>
                                       </TableCell>
-                                      <TableCell className="align-top text-right font-medium font-code">
-                                      {formatCurrency(watchedItems[index]?.total || 0)}
+                                      <TableCell className="align-middle text-right">
+                                        <div className="h-10 flex items-center justify-end font-medium font-mono text-sm">
+                                          {formatCurrency(watchedItems[index]?.total || 0)}
+                                        </div>
                                       </TableCell>
-                                      <TableCell className="align-top">
-                                      <Button
+                                      <TableCell className="align-middle">
+                                        <Button
                                           variant="ghost"
                                           size="icon"
                                           type="button"
+                                          className="h-10 w-10"
                                           onClick={() => remove(index)}
-                                      >
+                                        >
                                           <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
+                                        </Button>
                                       </TableCell>
-                                  </TableRow>
+                                    </TableRow>
                                   )
                                 })}
                             </TableBody>
