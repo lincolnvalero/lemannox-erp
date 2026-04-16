@@ -745,7 +745,7 @@ export default function QuoteEditorPage() {
                                 <TableHead className="w-[40%] min-w-[240px]">Produto</TableHead>
                                 <TableHead className="w-[110px]">Medida</TableHead>
                                 <TableHead className="w-[140px]">Material</TableHead>
-                                <TableHead className="w-[60px] text-center">Qtd.</TableHead>
+                                <TableHead className="w-[80px] text-center">Qtd.</TableHead>
                                 <TableHead className="w-[100px] text-right">Vlr. Unit.</TableHead>
                                 <TableHead className="w-[90px] text-right">Impostos</TableHead>
                                 <TableHead className="w-[100px] text-right">Total</TableHead>
@@ -811,7 +811,7 @@ export default function QuoteEditorPage() {
                                         <Input
                                           type="number"
                                           {...register(`items.${index}.quantity`)}
-                                          className="h-10 text-center"
+                                          className="h-10 text-center w-full"
                                         />
                                       </TableCell>
                                       <TableCell className="align-middle">

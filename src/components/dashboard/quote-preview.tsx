@@ -104,24 +104,23 @@ export function QuotePreview({ quote }: Props) {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-800 text-white">
-                <th className="text-left px-3 py-2 font-semibold">Descrição</th>
-                <th className="text-left px-3 py-2 font-semibold">Material</th>
-                <th className="text-left px-3 py-2 font-semibold">Medida</th>
-                <th className="text-center px-3 py-2 font-semibold">Qtd</th>
-                <th className="text-right px-3 py-2 font-semibold">Vlr. Unit.</th>
-                <th className="text-right px-3 py-2 font-semibold">Imposto (4,5%)</th>
-                <th className="text-right px-3 py-2 font-semibold">Total</th>
+                <th className="text-left px-3 py-2 font-semibold w-[50%]">Produto</th>
+                <th className="text-center px-3 py-2 font-semibold w-[6%]">Qtd</th>
+                <th className="text-right px-3 py-2 font-semibold w-[14%]">Vlr. Unit.</th>
+                <th className="text-right px-3 py-2 font-semibold w-[14%]">Imposto (4,5%)</th>
+                <th className="text-right px-3 py-2 font-semibold w-[16%]">Total</th>
               </tr>
             </thead>
             <tbody>
               {quote.items.map((item, idx) => {
                 const itemTax = item.tax ?? item.total * TAX_RATE;
                 const itemTotal = item.total + itemTax;
+                // Concatena: Descrição – Medida – Material
+                const parts = [item.name, item.measurement, item.material].filter(Boolean);
+                const productDesc = parts.join(' – ');
                 return (
                   <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                    <td className="px-3 py-2">{item.name}</td>
-                    <td className="px-3 py-2 text-gray-600">{item.material}</td>
-                    <td className="px-3 py-2 text-gray-600">{item.measurement}</td>
+                    <td className="px-3 py-2 leading-snug">{productDesc}</td>
                     <td className="px-3 py-2 text-center">{item.quantity}</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(item.unitPrice)}</td>
                     <td className="px-3 py-2 text-right text-orange-700">{formatCurrency(itemTax)}</td>
