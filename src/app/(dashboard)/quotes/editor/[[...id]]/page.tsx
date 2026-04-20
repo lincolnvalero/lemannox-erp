@@ -254,8 +254,8 @@ export default function QuoteEditorPage() {
       const customer = customers.find((c) => c.id === watchedCustomerId);
       if (customer) {
         setValue('cpf', customer.cnpj || '');
-        // Usa Nome de Fantasia no orçamento se disponível
-        setValue('customerName', customer.tradeName || customer.name);
+        // Orçamento impresso usa sempre a Razão Social
+        setValue('customerName', customer.name);
       }
     }
   }, [watchedCustomerId, customers, setValue]);

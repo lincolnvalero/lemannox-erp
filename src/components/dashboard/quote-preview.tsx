@@ -14,7 +14,9 @@ function formatCurrency(value: number) {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("pt-BR");
+  // Parse como data local para evitar desvio de fuso (UTC-3 voltaria 1 dia)
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("pt-BR");
 }
 
 const TAX_RATE = 0.045;
