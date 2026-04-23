@@ -173,6 +173,7 @@ export type OrdemServico = {
   customItems?: OsItem[] | null;
   createdAt: string;
   updatedAt?: string;
+  deliveryTime?: string; // manufacturing_deadline || delivery_time do orçamento vinculado
 };
 
 export type UserProfile = {

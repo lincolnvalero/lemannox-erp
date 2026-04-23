@@ -7,6 +7,7 @@ import type { OrdemServico } from '@/lib/types';
 function rowToOrdem(row: Record<string, unknown>): OrdemServico {
   // Suporte para dados com join de quotes (getOrdensServico) ou sem (create/update)
   const q = (row.quotes as Record<string, unknown> | null) ?? null;
+  const deliveryRaw = (q?.manufacturing_deadline as string) || (q?.delivery_time as string) || undefined;
   return {
     id: row.id as string,
     osNumber: row.os_number as number,
@@ -19,6 +20,7 @@ function rowToOrdem(row: Record<string, unknown>): OrdemServico {
     customItems: (row.custom_items as OrdemServico['customItems']) ?? null,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) || undefined,
+    deliveryTime: deliveryRaw,
   };
 }
 
@@ -31,7 +33,7 @@ export async function getOrdensServico(): Promise<{
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('ordens_servico')
-      .select('*, quotes(quote_number, customer_name, obra)')
+      .select('*, quotes(quote_number, customer_name, obra, manufacturing_deadline, delivery_time)')
       .order('os_number', { ascending: false });
 
     if (error) throw error;

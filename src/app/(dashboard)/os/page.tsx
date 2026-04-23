@@ -16,8 +16,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { FileText, Pencil, Printer, Trash2, Loader2, PlusCircle, X, ChevronDown } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
+import { FileText, Pencil, Printer, Trash2, Loader2, PlusCircle, X, ChevronDown, ListFilter } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -44,10 +44,23 @@ function emptyItem(): OsItem {
   return { name: '', material: '', measurement: '', quantity: 1, notes: '' };
 }
 
+const OS_STATUSES: OrdemServico['status'][] = ['aberta', 'em_andamento', 'concluida', 'cancelada'];
+
+function formatPrevisao(dateStr?: string) {
+  if (!dateStr) return '—';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('pt-BR');
+}
+
 export default function OrdensServicoPage() {
   const { toast } = useToast();
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtro de status
+  const [statusFilter, setStatusFilter] = useState<OrdemServico['status'][]>(['aberta', 'em_andamento']);
+  const [tempStatusFilter, setTempStatusFilter] = useState<OrdemServico['status'][]>(statusFilter);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
   // Edit dialog
   const [editingOs, setEditingOs] = useState<OrdemServico | null>(null);
@@ -165,6 +178,20 @@ export default function OrdensServicoPage() {
       toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: result.error });
     }
   };
+
+  const handleFilterOpenChange = (open: boolean) => {
+    if (open) setTempStatusFilter(statusFilter);
+    setFilterMenuOpen(open);
+  };
+
+  const applyFilter = () => {
+    setStatusFilter(tempStatusFilter);
+    setFilterMenuOpen(false);
+  };
+
+  const filteredOrdens = ordens.filter(os =>
+    statusFilter.length === 0 || statusFilter.includes(os.status)
+  );
 
   const updateItem = (idx: number, field: keyof OsItem, value: string | number) => {
     setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
@@ -333,9 +360,55 @@ export default function OrdensServicoPage() {
                 <CardTitle>Lista de OS</CardTitle>
                 <CardDescription className="text-xs">Ordenadas pela OS mais recente</CardDescription>
               </div>
-              {!loading && (
-                <span className="text-sm text-muted-foreground">{ordens.length} OS{ordens.length !== 1 ? 's' : ''}</span>
-              )}
+              <div className="flex items-center gap-2">
+                {!loading && (
+                  <span className="text-sm text-muted-foreground">{filteredOrdens.length} OS{filteredOrdens.length !== 1 ? 's' : ''}</span>
+                )}
+                {/* Filtro de status */}
+                <DropdownMenu open={filterMenuOpen} onOpenChange={handleFilterOpenChange}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                      <ListFilter className="h-3.5 w-3.5" />
+                      <span className="text-xs">Status</span>
+                      {statusFilter.length < OS_STATUSES.length && (
+                        <span className="ml-0.5 rounded-full bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 leading-none">
+                          {statusFilter.length}
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[180px]">
+                    <DropdownMenuLabel className="text-xs">Filtrar por status</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {OS_STATUSES.map(s => (
+                      <DropdownMenuCheckboxItem
+                        key={s}
+                        className="text-xs"
+                        checked={tempStatusFilter.includes(s)}
+                        onCheckedChange={checked => {
+                          setTempStatusFilter(prev =>
+                            checked ? [...prev, s] : prev.filter(x => x !== s)
+                          );
+                        }}
+                      >
+                        <span className={cn(
+                          'inline-block w-2 h-2 rounded-full mr-1.5',
+                          s === 'aberta' && 'bg-blue-400',
+                          s === 'em_andamento' && 'bg-yellow-400',
+                          s === 'concluida' && 'bg-green-400',
+                          s === 'cancelada' && 'bg-red-400',
+                        )} />
+                        {STATUS_LABEL[s]}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <div className="flex gap-1 px-2 pb-1">
+                      <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setTempStatusFilter([...OS_STATUSES])}>Todos</Button>
+                      <Button size="sm" className="flex-1 h-7 text-xs" onClick={applyFilter}>Aplicar</Button>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -347,6 +420,7 @@ export default function OrdensServicoPage() {
                   <TableHead>Cliente</TableHead>
                   <TableHead className="hidden md:table-cell">Obra</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[100px]">Previsão</TableHead>
                   <TableHead className="hidden sm:table-cell">Emissão</TableHead>
                   <TableHead className="text-right pr-6">Ações</TableHead>
                 </TableRow>
@@ -355,18 +429,18 @@ export default function OrdensServicoPage() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 8 }).map((__, j) => (
                         <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
-                ) : ordens.length === 0 ? (
+                ) : filteredOrdens.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                      Nenhuma OS emitida ainda.
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      Nenhuma OS encontrada para os filtros selecionados.
                     </TableCell>
                   </TableRow>
-                ) : ordens.map(os => (
+                ) : filteredOrdens.map(os => (
                   <TableRow key={os.id}>
                     <TableCell className="pl-6 font-mono font-semibold text-primary">
                       #{String(os.osNumber).padStart(4, '0')}
@@ -413,6 +487,9 @@ export default function OrdensServicoPage() {
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                      {formatPrevisao(os.deliveryTime)}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                       {formatDate(os.createdAt)}
