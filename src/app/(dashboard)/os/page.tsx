@@ -385,6 +385,7 @@ export default function OrdensServicoPage() {
                         key={s}
                         className="text-xs"
                         checked={tempStatusFilter.includes(s)}
+                        onSelect={e => e.preventDefault()}
                         onCheckedChange={checked => {
                           setTempStatusFilter(prev =>
                             checked ? [...prev, s] : prev.filter(x => x !== s)
