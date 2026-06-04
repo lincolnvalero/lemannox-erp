@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -49,7 +49,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Customer, Product, Quote } from '@/lib/types';
 import { getCustomers } from '@/app/(dashboard)/customers/actions';
 import { getProducts } from '@/app/(dashboard)/products/actions';
-import { getQuote, upsertQuote } from '@/app/(dashboard)/quotes/actions';
+import { upsertQuote } from '@/app/(dashboard)/quotes/actions';
+import { createClient } from '@/lib/supabase';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -90,21 +91,21 @@ export type QuoteFormValues = z.infer<typeof quoteSchema>;
 
 export default function QuoteEditorPage() {
   const router = useRouter();
-  const params = useParams();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
-  
+
   const [addItemGroup, setAddItemGroup] = useState('');
   const [addItemCategory, setAddItemCategory] = useState('');
   const [addItemModel, setAddItemModel] = useState('');
   const [addItemMeasurement, setAddItemMeasurement] = useState('');
   const [addItemMaterial, setAddItemMaterial] = useState('');
 
-  const quoteId = params.id ? (params.id as string[])[0] : null;
+  const quoteId = searchParams.get('id');
   const isEditMode = !!quoteId;
 
   const form = useForm<QuoteFormValues>({
@@ -224,22 +225,43 @@ export default function QuoteEditorPage() {
       }
 
       if (isEditMode && quoteId) {
-        const quoteResult = await getQuote(quoteId);
-        if (quoteResult.success && quoteResult.quote) {
-          const existingQuote = quoteResult.quote;
-          setQuoteNumber(existingQuote.quoteNumber);
-          form.reset({
-            ...existingQuote,
-            date: format(new Date(), 'yyyy-MM-dd'), // sempre hoje — emissão/reemissão
-            items: existingQuote.items.map((item) => ({ ...item })),
-          });
-        } else {
+        const supabase = createClient();
+        const { data: quoteRow, error: quoteError } = await supabase
+          .from('quotes')
+          .select('*')
+          .eq('id', quoteId)
+          .maybeSingle();
+
+        if (quoteError || !quoteRow) {
           toast({
             variant: 'destructive',
-            title: 'Erro',
-            description: quoteResult.error || 'Orçamento não encontrado.',
+            title: 'Orçamento não encontrado',
+            description: quoteError?.message || `ID: ${quoteId}`,
           });
-          router.push('/quotes');
+          // não redireciona automaticamente — mostra o erro e deixa o usuário decidir
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = quoteRow as any;
+          setQuoteNumber(row.quote_number);
+          const customerDetails = row.customer_details as { cnpj?: string } | null;
+          form.reset({
+            customerId: row.customer_id ?? '',
+            customerName: row.customer_name ?? '',
+            cpf: customerDetails?.cnpj ?? '',
+            obra: row.obra ?? '',
+            status: row.status ?? 'rascunho',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            items: Array.isArray(row.items) ? row.items.map((item: any) => ({ ...item })) : [],
+            discount: row.discount ?? 0,
+            freight: row.freight ?? 0,
+            date: row.date ? String(row.date).split('T')[0] : format(new Date(), 'yyyy-MM-dd'),
+            expiryDate: row.expiry_date ?? '',
+            deliveryTime: row.delivery_time ?? '',
+            manufacturingDeadline: row.manufacturing_deadline ?? '',
+            actualDeliveryDate: row.actual_delivery_date ?? '',
+            notes: row.notes ?? '',
+            paymentTerms: row.payment_terms ?? '',
+          });
         }
       } else {
         form.setValue('date', format(new Date(), 'yyyy-MM-dd'));
@@ -247,7 +269,7 @@ export default function QuoteEditorPage() {
       setIsLoading(false);
     }
     loadData();
-  }, [quoteId, isEditMode, router, toast, form]);
+  }, [quoteId, isEditMode, toast, form]);
 
   useEffect(() => {
     if (watchedCustomerId) {
@@ -296,7 +318,7 @@ export default function QuoteEditorPage() {
       } else {
         // Redireciona para o editor com o ID do novo orçamento,
         // evitando que saves subsequentes criem novos orçamentos
-        router.replace(`/quotes/editor/${result.quote.id}`);
+        router.replace(`/quotes/editor?id=${result.quote.id}`);
         router.refresh();
       }
     } else {
@@ -455,13 +477,13 @@ export default function QuoteEditorPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8">
-       <div className="flex items-center justify-between no-print">
+    <div className="flex-1 flex flex-col p-3 md:p-8">
+       <div className="flex items-center justify-between no-print mb-3 md:mb-0">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight">
               {isEditMode ? `Editar Orçamento #${quoteNumber}` : 'Novo Orçamento'}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground hidden md:block">
               {isEditMode
                 ? `Editando o orçamento para ${selectedCustomer?.name || '...'}`
                 : 'Preencha os detalhes para criar um novo orçamento.'}
@@ -469,12 +491,12 @@ export default function QuoteEditorPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="editor" className="mt-4 flex-1 flex flex-col">
+        <Tabs defaultValue="editor" className="mt-2 md:mt-4 flex-1 flex flex-col">
             <div className="flex justify-between items-center no-print">
                 <TabsList>
                     <TabsTrigger value="editor">Editor</TabsTrigger>
                     <TabsTrigger value="preview">Visualizar</TabsTrigger>
-                    <TabsTrigger value="os" disabled={!isEditMode}>Emitir OS</TabsTrigger>
+                    <TabsTrigger value="os" disabled={!isEditMode}>OS</TabsTrigger>
                 </TabsList>
             </div>
 
@@ -959,16 +981,17 @@ export default function QuoteEditorPage() {
                                 </FormItem>
                             )}
                             />
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-col sm:flex-row justify-end gap-2">
                             <Button
                               type="button"
                               variant="outline"
+                              className="w-full sm:w-auto"
                               onClick={() => router.push('/quotes')}
                             >
                               <X className="mr-2 h-4 w-4" />
                               Cancelar
                             </Button>
-                            <Button type="submit" disabled={isSaving}>
+                            <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
                               <Save className="mr-2 h-4 w-4" />
                               {isSaving ? 'Salvando...' : 'Salvar Orçamento'}
                             </Button>
