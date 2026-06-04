@@ -40,6 +40,37 @@ export async function getTransactions(): Promise<{
     const { data, error } = await supabase
       .from('financial_transactions')
       .select('*')
+      .order('transaction_date', { ascending: false })
+      .order('id_lanc', { ascending: false });
+
+    if (error) throw error;
+
+    return { success: true, transactions: (data ?? []).map(rowToTransaction) };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar lançamentos';
+    return { success: false, error: message };
+  }
+}
+
+// Busca transações por origem (related_type).
+// 'caixa' inclui os lançamentos legados marcados como 'manual'.
+export async function getTransactionsBySource(sources: string[]): Promise<{
+  success: boolean;
+  transactions?: FinancialTransaction[];
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    // Para 'caixa', inclui também os registros legados ('manual')
+    const effectiveSources = sources.includes('caixa')
+      ? [...sources, 'manual']
+      : sources;
+
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .select('*')
+      .in('related_type', effectiveSources)
+      .order('transaction_date', { ascending: false })
       .order('id_lanc', { ascending: false });
 
     if (error) throw error;
@@ -83,6 +114,10 @@ export async function upsertTransaction(formData: FormData): Promise<{
 
     const id = formData.get('id') as string | null;
 
+    // 'source' identifica a origem do lançamento (caixa | conta_pagar | conta_receber).
+    // Garante que edições via editor preservem a origem original.
+    const source = (formData.get('source') as string) || null;
+
     const payload: Record<string, unknown> = {
       description: formData.get('description') as string,
       amount: parseFloat(formData.get('amount') as string),
@@ -91,8 +126,10 @@ export async function upsertTransaction(formData: FormData): Promise<{
       transaction_date: formData.get('transactionDate') as string,
       due_date: (formData.get('dueDate') as string) || null,
       status: formData.get('status') as string,
-      related_type: 'manual',
     };
+
+    // Só sobrescreve related_type se uma origem explícita foi fornecida
+    if (source) payload.related_type = source;
 
     if (id) payload.id = id;
 

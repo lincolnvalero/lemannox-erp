@@ -180,31 +180,56 @@ export default function CustomersPage() {
       </AlertDialog>
 
       <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-sm md:px-8">
-          <div className="flex items-center gap-2 mr-auto">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 border border-primary/25">
-              <Users className="h-4 w-4 text-primary" />
+        {/* Header — sticky abaixo do top bar mobile */}
+        <header className="sticky top-14 md:top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+          {/* Linha 1: Título (desktop) + ações */}
+          <div className="flex items-center gap-3 px-4 py-2 md:py-0 md:h-16 md:px-8">
+            <div className="hidden md:flex items-center gap-2 mr-auto">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 border border-primary/25">
+                <Users className="h-4 w-4 text-primary" />
+              </div>
+              <h1 className="text-lg font-bold">Clientes</h1>
             </div>
-            <h1 className="text-lg font-bold">Clientes</h1>
+
+            {/* Mobile: busca full-width + botão */}
+            <div className="flex flex-1 md:ml-auto items-center gap-2 md:flex-none">
+              <div className="relative flex-1 md:w-auto">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  className="pl-8 h-9 w-full md:w-[220px] lg:w-[300px]"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Filtro categoria — apenas desktop */}
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-9 w-[160px] hidden md:flex">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as categorias</SelectItem>
+                  <SelectItem value="cliente">Cliente</SelectItem>
+                  <SelectItem value="revendedor">Revendedor</SelectItem>
+                  <SelectItem value="construtora">Construtora</SelectItem>
+                  <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button className="h-9 gap-1.5 shrink-0" onClick={() => handleDialogOpen(null)}>
+                <PlusCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Novo Cliente</span>
+                <span className="sm:hidden">Novo</span>
+              </Button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Busca */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Nome, fantasia ou CNPJ..."
-                className="pl-8 h-9 w-[220px] lg:w-[300px]"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Filtro categoria */}
+          {/* Linha 2: Filtro categoria no mobile */}
+          <div className="flex md:hidden items-center gap-2 px-4 pb-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="h-9 w-[160px] hidden md:flex">
-                <SelectValue placeholder="Categoria" />
+              <SelectTrigger className="h-8 flex-1 text-xs">
+                <SelectValue placeholder="Todas as categorias" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as categorias</SelectItem>
@@ -214,17 +239,122 @@ export default function CustomersPage() {
                 <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
               </SelectContent>
             </Select>
-
-            <Button className="h-9 gap-2" onClick={() => handleDialogOpen(null)}>
-              <PlusCircle className="h-4 w-4" />
-              <span>Novo Cliente</span>
-            </Button>
+            {!loading && (
+              <span className="text-xs text-muted-foreground shrink-0">{filtered.length} cliente{filtered.length !== 1 ? 's' : ''}</span>
+            )}
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-4 md:p-8">
-          <Card>
+        <main className="flex-1 p-3 md:p-8">
+          {/* ═══ MOBILE: Card list ═══ */}
+          <div className="md:hidden space-y-2">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="rounded-xl border bg-card p-4 space-y-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground text-sm">
+                Nenhum cliente encontrado.
+              </div>
+            ) : filtered.map(customer => (
+              <div
+                key={customer.id}
+                className="rounded-xl border bg-card px-4 py-3 flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  {/* Nome + categoria */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm leading-tight">{customer.name}</span>
+                    {customer.category && (
+                      <Badge variant="outline" className={cn('text-[10px] h-4 px-1.5', CATEGORY_COLOR[customer.category])}>
+                        {CATEGORY_LABEL[customer.category] ?? customer.category}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Nome fantasia */}
+                  {inlineEdit?.id === customer.id && inlineEdit.field === 'tradeName' ? (
+                    <input
+                      ref={inlineRef}
+                      className="mt-0.5 text-xs h-6 px-1.5 rounded border border-primary bg-background text-foreground w-full focus:outline-none"
+                      value={inlineEdit.value}
+                      placeholder="nome fantasia"
+                      onChange={e => setInlineEdit(prev => prev ? { ...prev, value: e.target.value } : prev)}
+                      onBlur={commitInlineEdit}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); commitInlineEdit(); }
+                        if (e.key === 'Escape') setInlineEdit(null);
+                      }}
+                    />
+                  ) : (
+                    <button
+                      className="mt-0.5 text-xs text-muted-foreground italic flex items-center gap-1"
+                      onClick={() => startInlineEdit(customer.id, 'tradeName', customer.tradeName ?? '')}
+                    >
+                      {customer.tradeName ?? <span className="opacity-40 not-italic">+ nome fantasia</span>}
+                      <Pencil className="h-2.5 w-2.5 opacity-40" />
+                    </button>
+                  )}
+
+                  {/* Linha de detalhes */}
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {customer.cnpj && (
+                      <span className="text-[11px] font-mono text-muted-foreground">{customer.cnpj}</span>
+                    )}
+                    {customer.contactPhone && (
+                      <a
+                        href={`https://wa.me/55${customer.contactPhone.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-muted-foreground inline-flex items-center gap-0.5 hover:text-primary"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        {customer.contactPhone}
+                      </a>
+                    )}
+                    {customer.city && (
+                      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-0.5">
+                        <MapPin className="h-3 w-3" />
+                        {customer.city}{customer.state ? `/${customer.state}` : ''}
+                      </span>
+                    )}
+                    {customer.email && (
+                      <a
+                        href={`mailto:${customer.email}`}
+                        className="text-[11px] text-muted-foreground inline-flex items-center gap-0.5 hover:text-primary"
+                      >
+                        <Mail className="h-3 w-3" />
+                        {customer.email}
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ações mobile */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDialogOpen(customer)}>
+                    <FilePenLine className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive"
+                    onClick={() => setCustomerToDelete(customer)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ═══ DESKTOP: Table ═══ */}
+          <Card className="hidden md:block">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -268,11 +398,8 @@ export default function CustomersPage() {
                     </TableRow>
                   ) : filtered.map(customer => (
                     <TableRow key={customer.id}>
-                      {/* ── Cliente: nome + fantasia (inline) + telefone (inline) ── */}
                       <TableCell className="pl-6 py-3">
                         <div className="font-medium leading-tight">{customer.name}</div>
-
-                        {/* Nome fantasia inline */}
                         <div className="mt-0.5 flex items-center gap-1 group/trade">
                           {inlineEdit?.id === customer.id && inlineEdit.field === 'tradeName' ? (
                             <input
@@ -290,19 +417,15 @@ export default function CustomersPage() {
                           ) : (
                             <button
                               className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
-                              title="Clique para editar nome fantasia"
                               onClick={() => startInlineEdit(customer.id, 'tradeName', customer.tradeName ?? '')}
                             >
                               {customer.tradeName
                                 ? <span className="italic">{customer.tradeName}</span>
-                                : <span className="opacity-35">+ nome fantasia</span>
-                              }
+                                : <span className="opacity-35">+ nome fantasia</span>}
                               <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/trade:opacity-50 transition-opacity" />
                             </button>
                           )}
                         </div>
-
-                        {/* Telefone inline */}
                         <div className="mt-0.5 flex items-center gap-1 group/phone">
                           {inlineEdit?.id === customer.id && inlineEdit.field === 'contactPhone' ? (
                             <input
@@ -330,7 +453,6 @@ export default function CustomersPage() {
                               </a>
                               <button
                                 className="opacity-0 group-hover/phone:opacity-50 transition-opacity"
-                                title="Editar telefone"
                                 onClick={() => startInlineEdit(customer.id, 'contactPhone', customer.contactPhone ?? '')}
                               >
                                 <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
@@ -347,66 +469,40 @@ export default function CustomersPage() {
                           )}
                         </div>
                       </TableCell>
-
-                      {/* ── CNPJ / CPF ── */}
                       <TableCell className="hidden md:table-cell">
                         {customer.cnpj
                           ? <span className="font-mono text-xs text-muted-foreground">{customer.cnpj}</span>
-                          : <span className="text-xs text-muted-foreground opacity-40">—</span>
-                        }
+                          : <span className="text-xs text-muted-foreground opacity-40">—</span>}
                       </TableCell>
-
-                      {/* ── E-mail ── */}
                       <TableCell className="hidden lg:table-cell">
                         {customer.email ? (
-                          <a
-                            href={`mailto:${customer.email}`}
-                            className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 transition-colors"
-                          >
+                          <a href={`mailto:${customer.email}`} className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 transition-colors">
                             <Mail className="h-3 w-3 shrink-0" />
                             {customer.email}
                           </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground opacity-40">—</span>
-                        )}
+                        ) : <span className="text-xs text-muted-foreground opacity-40">—</span>}
                       </TableCell>
-
-                      {/* ── Cidade / Estado ── */}
                       <TableCell className="hidden lg:table-cell">
                         {customer.city ? (
                           <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                             <MapPin className="h-3 w-3 shrink-0" />
                             {customer.city}{customer.state ? ` / ${customer.state}` : ''}
                           </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground opacity-40">—</span>
-                        )}
+                        ) : <span className="text-xs text-muted-foreground opacity-40">—</span>}
                       </TableCell>
-
-                      {/* ── Categoria ── */}
                       <TableCell className="hidden md:table-cell">
                         {customer.category ? (
                           <Badge variant="outline" className={cn('text-xs', CATEGORY_COLOR[customer.category])}>
                             {CATEGORY_LABEL[customer.category] ?? customer.category}
                           </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground opacity-40">—</span>
-                        )}
+                        ) : <span className="text-xs text-muted-foreground opacity-40">—</span>}
                       </TableCell>
-
-                      {/* ── Ações ── */}
                       <TableCell className="text-right pr-6">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" title="Editar" onClick={() => handleDialogOpen(customer)}>
                             <FilePenLine className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            title="Excluir"
-                            onClick={() => setCustomerToDelete(customer)}
-                          >
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" title="Excluir" onClick={() => setCustomerToDelete(customer)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>

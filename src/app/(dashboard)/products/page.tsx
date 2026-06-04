@@ -14,7 +14,6 @@ import {
 import {
   Search,
   PlusCircle,
-  FilePenLine,
   Trash2,
   Percent,
   FileDown,
@@ -55,7 +54,6 @@ const materialColumns = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 const ProductsTable = ({
   products,
   handlePriceChange,
-  handleEditProduct,
   setProductToDelete,
   isSavingPrice,
 }: {
@@ -65,7 +63,6 @@ const ProductsTable = ({
     material: string,
     newPriceStr: string
   ) => void;
-  handleEditProduct: (product: Product) => void;
   setProductToDelete: (product: Product | null) => void;
   isSavingPrice: string | null;
 }) => {
@@ -170,25 +167,15 @@ const ProductsTable = ({
                   ))
                 )}
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEditProduct(product)}
-                    >
-                      <FilePenLine className="h-4 w-4" />
-                      <span className="sr-only">Editar</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setProductToDelete(product)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Excluir</span>
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setProductToDelete(product)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Excluir</span>
+                  </Button>
                 </TableCell>
               </TableRow>
             );
@@ -616,7 +603,6 @@ export default function ProductsPage() {
                     <ProductsTable
                       products={filteredProducts}
                       handlePriceChange={handlePriceChange}
-                      handleEditProduct={handleOpenDialog}
                       setProductToDelete={setProductToDelete}
                       isSavingPrice={isSavingPrice}
                     />

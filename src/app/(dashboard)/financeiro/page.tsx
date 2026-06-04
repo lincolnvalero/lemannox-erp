@@ -38,7 +38,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
-import { getTransactions, getAccounts, deleteTransaction } from './actions';
+import { getTransactionsBySource, getAccounts, deleteTransaction } from './actions';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -108,7 +108,7 @@ export default function FinancialDashboardPage() {
     const fetchFinancialData = async () => {
       setLoading(true);
       const [transactionsResult, accountsResult] = await Promise.all([
-        getTransactions(),
+        getTransactionsBySource(['caixa']),
         getAccounts(),
       ]);
       if (transactionsResult.success) setTransactions(transactionsResult.transactions || []);
@@ -212,11 +212,12 @@ export default function FinancialDashboardPage() {
         accounts={accounts}
       />
 
-      <div className="space-y-6 p-4 md:p-8">
+      <div className="space-y-4 p-3 md:space-y-6 md:p-8">
 
         {/* Page header */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          {/* Título oculto em mobile */}
+          <div className="hidden md:flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 border border-primary/25">
               <DollarSign className="h-5 w-5 text-primary" />
             </div>
@@ -225,21 +226,24 @@ export default function FinancialDashboardPage() {
               <p className="text-sm text-muted-foreground">Fluxo de caixa e resultados do período selecionado</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <Button variant="ghost" size="sm" onClick={() => setIsReportDialogOpen(true)}>
               <FileDown className="mr-2 h-4 w-4" />
-              Relatório PDF
+              <span className="hidden sm:inline">Relatório PDF</span>
+              <span className="sm:hidden">PDF</span>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/financeiro/editor?type=saida">
                 <ArrowDownCircle className="mr-2 h-4 w-4 text-red-400" />
-                Nova Despesa
+                <span className="hidden sm:inline">Nova Despesa</span>
+                <span className="sm:hidden">Despesa</span>
               </Link>
             </Button>
             <Button size="sm" asChild>
               <Link href="/financeiro/editor?type=entrada">
                 <ArrowUpCircle className="mr-2 h-4 w-4" />
-                Nova Receita
+                <span className="hidden sm:inline">Nova Receita</span>
+                <span className="sm:hidden">Receita</span>
               </Link>
             </Button>
           </div>
@@ -247,7 +251,7 @@ export default function FinancialDashboardPage() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium mr-1">Período:</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Período:</span>
           {quickFilters.map(f => (
             <button
               key={f.value}
@@ -262,32 +266,33 @@ export default function FinancialDashboardPage() {
               {f.label}
             </button>
           ))}
-          <span className="text-border mx-1">|</span>
-          <Input
-            type="date"
-            className="h-7 text-xs w-[130px]"
-            value={formatDateForInput(dateRange?.from)}
-            onChange={(e) => {
-              const v = e.target.value;
-              setActiveFilter('custom');
-              setDateRange(prev => ({ ...prev, from: v ? new Date(v + 'T00:00:00') : undefined }));
-            }}
-          />
-          <span className="text-xs text-muted-foreground">até</span>
-          <Input
-            type="date"
-            className="h-7 text-xs w-[130px]"
-            value={formatDateForInput(dateRange?.to)}
-            onChange={(e) => {
-              const v = e.target.value;
-              setActiveFilter('custom');
-              setDateRange(prev => ({ ...prev, to: v ? new Date(v + 'T23:59:59') : undefined }));
-            }}
-          />
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Input
+              type="date"
+              className="h-7 text-xs w-[130px]"
+              value={formatDateForInput(dateRange?.from)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setActiveFilter('custom');
+                setDateRange(prev => ({ ...prev, from: v ? new Date(v + 'T00:00:00') : undefined }));
+              }}
+            />
+            <span className="text-xs text-muted-foreground">até</span>
+            <Input
+              type="date"
+              className="h-7 text-xs w-[130px]"
+              value={formatDateForInput(dateRange?.to)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setActiveFilter('custom');
+                setDateRange(prev => ({ ...prev, to: v ? new Date(v + 'T23:59:59') : undefined }));
+              }}
+            />
+          </div>
         </div>
 
         {/* KPI cards */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 md:gap-4">
           <Card className="border-t-2 border-t-green-500">
             <CardContent className="pt-5">
               <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
@@ -330,15 +335,15 @@ export default function FinancialDashboardPage() {
                 <BarChart3 className="h-3.5 w-3.5" />
                 Fluxo de Caixa Mensal
               </p>
-              <CardDescription className="text-xs">Comparativo de entradas e saídas (valores pagos) por mês.</CardDescription>
+              <CardDescription className="text-xs">Comparativo de entradas e saídas por mês.</CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
               {analysis.chartData.length === 0 ? (
-                <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
+                <div className="h-[200px] md:h-[260px] flex items-center justify-center text-sm text-muted-foreground">
                   Nenhum dado no período selecionado.
                 </div>
               ) : (
-                <ChartContainer config={chartConfig} className="h-[260px] w-full">
+                <ChartContainer config={chartConfig} className="h-[200px] md:h-[260px] w-full">
                   <BarChart data={analysis.chartData}>
                     <CartesianGrid vertical={false} />
                     <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} tick={{ fontSize: 11 }} />
@@ -358,9 +363,33 @@ export default function FinancialDashboardPage() {
                 <ArrowUpCircle className="h-3.5 w-3.5" />
                 Transações Recentes
               </p>
-              <CardDescription className="text-xs">Últimas movimentações no período selecionado.</CardDescription>
+              <CardDescription className="text-xs">Últimas movimentações no período.</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+
+            {/* Mobile: lista compacta */}
+            <div className="md:hidden px-4 pb-4 space-y-0.5">
+              {analysis.recentTransactions.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma transação no período.</p>
+              ) : analysis.recentTransactions.map(t => (
+                <div key={t.id} className="flex items-center justify-between gap-2 py-2 border-b border-border/40 last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {t.type === 'entrada'
+                      ? <ArrowUpCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                      : <ArrowDownCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{t.description}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(t.transactionDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                    </div>
+                  </div>
+                  <span className={cn('text-sm font-mono font-bold shrink-0', t.type === 'entrada' ? 'text-green-400' : 'text-red-400')}>
+                    {t.type === 'entrada' ? '+' : '−'}{formatCurrency(t.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: tabela */}
+            <CardContent className="hidden md:block p-0">
               <Table>
                 <TableHeader>
                   <TableRow>

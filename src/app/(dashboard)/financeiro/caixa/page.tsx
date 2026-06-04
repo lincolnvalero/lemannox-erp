@@ -35,7 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import {
-  getTransactions, getAccounts, deleteTransaction, upsertTransaction, getTransaction,
+  getTransactionsBySource, getAccounts, deleteTransaction, upsertTransaction, getTransaction,
 } from '../actions';
 import {
   ArrowDownCircle, ArrowUpCircle, FileDown, FilePenLine,
@@ -71,7 +71,7 @@ export default function ControleCaixaPage() {
   useEffect(() => {
     (async () => {
       setLoadingData(true);
-      const [tr, ac] = await Promise.all([getTransactions(), getAccounts()]);
+      const [tr, ac] = await Promise.all([getTransactionsBySource(['caixa']), getAccounts()]);
       if (tr.success) setTransactions(tr.transactions || []);
       if (ac.success) setAccounts(ac.accounts || []);
       setLoadingData(false);
@@ -79,7 +79,7 @@ export default function ControleCaixaPage() {
   }, [toast]);
 
   const refreshTransactions = async () => {
-    const tr = await getTransactions();
+    const tr = await getTransactionsBySource(['caixa']);
     if (tr.success) setTransactions(tr.transactions || []);
   };
 
@@ -385,6 +385,7 @@ function NovaTransacaoTab({
     formData.append('category', values.category);
     formData.append('transactionDate', values.transactionDate);
     formData.append('status', values.status);
+    formData.append('source', 'caixa');
     if (values.dueDate) formData.append('dueDate', values.dueDate);
 
     const result = await upsertTransaction(formData);

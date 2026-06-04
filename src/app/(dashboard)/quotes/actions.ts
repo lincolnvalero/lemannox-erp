@@ -30,17 +30,25 @@ function rowToQuote(row: Record<string, unknown>): Quote {
   };
 }
 
+// Colunas para a listagem — inclui items para coluna Produto; exclui customer_details (não necessário na lista)
+const QUOTES_LIST_COLUMNS = [
+  'id', 'quote_number', 'customer_id', 'customer_name', 'obra', 'status',
+  'subtotal', 'total', 'freight', 'discount', 'date', 'expiry_date',
+  'delivery_time', 'manufacturing_deadline', 'actual_delivery_date',
+  'os_number', 'notes', 'payment_terms', 'warranty', 'items',
+].join(', ');
+
 export async function getQuotes(): Promise<{ success: boolean; quotes?: Quote[]; error?: string }> {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('quotes')
-      .select('*')
+      .select(QUOTES_LIST_COLUMNS)
       .order('quote_number', { ascending: false });
 
     if (error) throw error;
 
-    return { success: true, quotes: (data ?? []).map(rowToQuote) };
+    return { success: true, quotes: ((data ?? []) as unknown as Record<string, unknown>[]).map(rowToQuote) };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar orçamentos';
     return { success: false, error: message };

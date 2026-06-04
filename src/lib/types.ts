@@ -153,6 +153,16 @@ export type ScheduleItem = {
   entregueEm: string | null;
 };
 
+export type FabricadoItem = {
+  quoteId: string;
+  pedido: number;
+  cliente: string;
+  categoria: string;
+  produto: string;
+  valor: number;
+  dataConclusao: string; // ISO — concluidoEm ?? entregueEm
+};
+
 export type OsItem = {
   name: string;
   material: string;
@@ -168,6 +178,7 @@ export type OrdemServico = {
   quoteNumber?: number;
   customerName?: string;
   obra?: string;
+  description?: string; // nomes dos itens a produzir (customItems > items do orçamento)
   status: 'aberta' | 'em_andamento' | 'concluida' | 'cancelada';
   notes?: string;
   customItems?: OsItem[] | null;
@@ -180,7 +191,7 @@ export type UserProfile = {
   id: string;
   email: string;
   name?: string;
-  role: 'admin' | 'user' | 'viewer';
+  role: 'admin' | 'producao';
   createdAt?: string;
 };
 

@@ -11,11 +11,13 @@ function adminClient() {
   );
 }
 
+// 'viewer' é o valor salvo no banco para o perfil de Produção
+// (constraint atual: admin | user | viewer). Mapeado para 'producao' na UI.
 export type AdminUser = {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user' | 'viewer';
+  role: 'admin' | 'viewer';
   createdAt: string;
 };
 
@@ -35,7 +37,8 @@ export async function getUsers(): Promise<{ success: boolean; users?: AdminUser[
         id: u.id as string,
         email: u.email as string,
         name: (u.name as string) || '',
-        role: (u.role as AdminUser['role']) || 'viewer',
+        // qualquer role não-admin vira 'viewer' (perfil Produção)
+      role: u.role === 'admin' ? 'admin' : 'viewer',
         createdAt: u.created_at as string,
       })),
     };
@@ -72,13 +75,15 @@ export async function createUser(data: {
       .toUpperCase();
 
     // Upsert no perfil (o trigger já cria, mas garante os dados corretos)
+    // 'viewer' é o valor aceito pelo DB para o perfil de Produção
+    const dbRole = data.role === 'admin' ? 'admin' : 'viewer';
     const { error: profileError } = await supabase
       .from('profiles')
       .upsert({
         id: userId,
         email: data.email,
         name: data.name,
-        role: data.role,
+        role: dbRole,
       });
 
     if (profileError) throw profileError;
@@ -111,7 +116,7 @@ export async function updateUser(
     const profileUpdate: Record<string, unknown> = {};
     if (data.name !== undefined) profileUpdate.name = data.name;
     if (data.email) profileUpdate.email = data.email;
-    if (data.role) profileUpdate.role = data.role;
+    if (data.role) profileUpdate.role = data.role === 'admin' ? 'admin' : 'viewer';
 
     if (Object.keys(profileUpdate).length > 0) {
       const { error: profileError } = await supabase.from('profiles').update(profileUpdate).eq('id', id);

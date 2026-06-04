@@ -342,8 +342,9 @@ export default function OrdensServicoPage() {
       </Dialog>
 
       {/* Page */}
-      <div className="space-y-6 p-4 md:p-8">
-        <div className="flex items-center gap-3">
+      <div className="space-y-4 p-3 md:space-y-6 md:p-8">
+        {/* Título — oculto em mobile (já aparece no top bar) */}
+        <div className="hidden md:flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 border border-primary/25">
             <FileText className="h-5 w-5 text-primary" />
           </div>
@@ -353,7 +354,154 @@ export default function OrdensServicoPage() {
           </div>
         </div>
 
-        <Card>
+        {/* Toolbar mobile */}
+        <div className="flex md:hidden items-center justify-between gap-2">
+          {!loading && (
+            <span className="text-sm text-muted-foreground">{filteredOrdens.length} OS{filteredOrdens.length !== 1 ? 's' : ''}</span>
+          )}
+          <div className="ml-auto">
+            <DropdownMenu open={filterMenuOpen} onOpenChange={handleFilterOpenChange}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                  <ListFilter className="h-3.5 w-3.5" />
+                  <span className="text-xs">Status</span>
+                  {statusFilter.length < OS_STATUSES.length && (
+                    <span className="rounded-full bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 leading-none">
+                      {statusFilter.length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[180px]">
+                <DropdownMenuLabel className="text-xs">Filtrar por status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {OS_STATUSES.map(s => (
+                  <DropdownMenuCheckboxItem
+                    key={s}
+                    className="text-xs"
+                    checked={tempStatusFilter.includes(s)}
+                    onSelect={e => e.preventDefault()}
+                    onCheckedChange={checked => setTempStatusFilter(prev => checked ? [...prev, s] : prev.filter(x => x !== s))}
+                  >
+                    <span className={cn('inline-block w-2 h-2 rounded-full mr-1.5',
+                      s === 'aberta' && 'bg-blue-400',
+                      s === 'em_andamento' && 'bg-yellow-400',
+                      s === 'concluida' && 'bg-green-400',
+                      s === 'cancelada' && 'bg-red-400',
+                    )} />
+                    {STATUS_LABEL[s]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <div className="flex gap-1 px-2 pb-1">
+                  <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setTempStatusFilter([...OS_STATUSES])}>Todos</Button>
+                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={applyFilter}>Aplicar</Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* ═══ MOBILE: Card list ═══ */}
+        <div className="md:hidden space-y-2">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card p-4 space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))
+          ) : filteredOrdens.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              Nenhuma OS encontrada para os filtros selecionados.
+            </div>
+          ) : filteredOrdens.map(os => (
+            <div key={os.id} className="rounded-xl border bg-card px-4 py-3">
+              {/* Cabeçalho do card */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  {/* OS # + Pedido */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono font-bold text-primary text-sm">
+                      OS #{String(os.osNumber).padStart(4, '0')}
+                    </span>
+                    {os.quoteNumber && (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        / Ped #{String(os.quoteNumber).padStart(4, '0')}
+                      </span>
+                    )}
+                  </div>
+                  {/* Cliente */}
+                  <p className="font-semibold text-sm leading-tight">{os.customerName ?? '—'}</p>
+                  {/* Obra */}
+                  {os.obra && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{os.obra}</p>
+                  )}
+                  {/* Descrição */}
+                  {os.description && (
+                    <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-1">{os.description}</p>
+                  )}
+                  {/* Status + Previsão */}
+                  <div className="flex items-center gap-3 mt-2">
+                    {/* Status inline dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className={cn(
+                          'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-colors hover:opacity-80 focus:outline-none',
+                          STATUS_COLOR[os.status]
+                        )}>
+                          {STATUS_LABEL[os.status] ?? os.status}
+                          <ChevronDown className="h-3 w-3 opacity-60" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-[160px]">
+                        {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                          <DropdownMenuItem
+                            key={value}
+                            className={cn('text-xs cursor-pointer', os.status === value && 'font-semibold')}
+                            onClick={() => handleInlineStatus(os, value as OrdemServico['status'])}
+                          >
+                            <span className={cn('inline-block w-2 h-2 rounded-full mr-2',
+                              value === 'aberta' && 'bg-blue-400',
+                              value === 'em_andamento' && 'bg-yellow-400',
+                              value === 'concluida' && 'bg-green-400',
+                              value === 'cancelada' && 'bg-red-400',
+                            )} />
+                            {label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {os.deliveryTime && (
+                      <span className="text-xs text-muted-foreground">
+                        Prev: {formatPrevisao(os.deliveryTime)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Ações mobile */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handlePrint(os)}>
+                    <Printer className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleOpenEdit(os)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => setDeletingOs(os)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ═══ DESKTOP: Card + Table ═══ */}
+        <Card className="hidden md:block">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
@@ -364,7 +512,6 @@ export default function OrdensServicoPage() {
                 {!loading && (
                   <span className="text-sm text-muted-foreground">{filteredOrdens.length} OS{filteredOrdens.length !== 1 ? 's' : ''}</span>
                 )}
-                {/* Filtro de status */}
                 <DropdownMenu open={filterMenuOpen} onOpenChange={handleFilterOpenChange}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5">
@@ -386,14 +533,9 @@ export default function OrdensServicoPage() {
                         className="text-xs"
                         checked={tempStatusFilter.includes(s)}
                         onSelect={e => e.preventDefault()}
-                        onCheckedChange={checked => {
-                          setTempStatusFilter(prev =>
-                            checked ? [...prev, s] : prev.filter(x => x !== s)
-                          );
-                        }}
+                        onCheckedChange={checked => setTempStatusFilter(prev => checked ? [...prev, s] : prev.filter(x => x !== s))}
                       >
-                        <span className={cn(
-                          'inline-block w-2 h-2 rounded-full mr-1.5',
+                        <span className={cn('inline-block w-2 h-2 rounded-full mr-1.5',
                           s === 'aberta' && 'bg-blue-400',
                           s === 'em_andamento' && 'bg-yellow-400',
                           s === 'concluida' && 'bg-green-400',
@@ -420,6 +562,7 @@ export default function OrdensServicoPage() {
                   <TableHead className="w-[80px]">Pedido</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead className="hidden md:table-cell">Obra</TableHead>
+                  <TableHead className="hidden lg:table-cell">Descrição</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden lg:table-cell w-[100px]">Previsão</TableHead>
                   <TableHead className="hidden sm:table-cell">Emissão</TableHead>
@@ -430,14 +573,14 @@ export default function OrdensServicoPage() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((__, j) => (
+                      {Array.from({ length: 9 }).map((__, j) => (
                         <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : filteredOrdens.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                       Nenhuma OS encontrada para os filtros selecionados.
                     </TableCell>
                   </TableRow>
@@ -453,15 +596,13 @@ export default function OrdensServicoPage() {
                     <TableCell className="hidden md:table-cell text-sm text-muted-foreground max-w-[140px] truncate" title={os.obra}>
                       {os.obra ?? '—'}
                     </TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-[220px] truncate" title={os.description}>
+                      {os.description ?? '—'}
+                    </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
-                            className={cn(
-                              'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-colors hover:opacity-80 focus:outline-none',
-                              STATUS_COLOR[os.status]
-                            )}
-                          >
+                          <button className={cn('inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-colors hover:opacity-80 focus:outline-none', STATUS_COLOR[os.status])}>
                             {STATUS_LABEL[os.status] ?? os.status}
                             <ChevronDown className="h-3 w-3 opacity-60" />
                           </button>
@@ -470,14 +611,10 @@ export default function OrdensServicoPage() {
                           {Object.entries(STATUS_LABEL).map(([value, label]) => (
                             <DropdownMenuItem
                               key={value}
-                              className={cn(
-                                'text-xs cursor-pointer',
-                                os.status === value && 'font-semibold'
-                              )}
+                              className={cn('text-xs cursor-pointer', os.status === value && 'font-semibold')}
                               onClick={() => handleInlineStatus(os, value as OrdemServico['status'])}
                             >
-                              <span className={cn(
-                                'inline-block w-2 h-2 rounded-full mr-2',
+                              <span className={cn('inline-block w-2 h-2 rounded-full mr-2',
                                 value === 'aberta' && 'bg-blue-400',
                                 value === 'em_andamento' && 'bg-yellow-400',
                                 value === 'concluida' && 'bg-green-400',

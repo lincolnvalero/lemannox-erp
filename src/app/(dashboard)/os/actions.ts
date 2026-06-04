@@ -8,6 +8,16 @@ function rowToOrdem(row: Record<string, unknown>): OrdemServico {
   // Suporte para dados com join de quotes (getOrdensServico) ou sem (create/update)
   const q = (row.quotes as Record<string, unknown> | null) ?? null;
   const deliveryRaw = (q?.manufacturing_deadline as string) || (q?.delivery_time as string) || undefined;
+
+  // Descrição: usa customItems da OS se existir, senão os items do orçamento vinculado
+  const customItems = (row.custom_items as Array<{ name: string }> | null) ?? null;
+  const quoteItems = (q?.items as Array<{ name: string }> | null) ?? null;
+  const itemSource = (customItems && customItems.length > 0 ? customItems : quoteItems) ?? [];
+  const description = itemSource
+    .map(i => i.name?.trim())
+    .filter(Boolean)
+    .join(', ') || undefined;
+
   return {
     id: row.id as string,
     osNumber: row.os_number as number,
@@ -15,6 +25,7 @@ function rowToOrdem(row: Record<string, unknown>): OrdemServico {
     quoteNumber: (q?.quote_number as number) || undefined,
     customerName: (q?.customer_name as string) || undefined,
     obra: (q?.obra as string) || undefined,
+    description,
     status: row.status as OrdemServico['status'],
     notes: (row.notes as string) || undefined,
     customItems: (row.custom_items as OrdemServico['customItems']) ?? null,
@@ -33,7 +44,7 @@ export async function getOrdensServico(): Promise<{
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('ordens_servico')
-      .select('*, quotes(quote_number, customer_name, obra, manufacturing_deadline, delivery_time)')
+      .select('*, quotes(quote_number, customer_name, obra, manufacturing_deadline, delivery_time, items)')
       .order('os_number', { ascending: false });
 
     if (error) throw error;

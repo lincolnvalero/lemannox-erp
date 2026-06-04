@@ -21,16 +21,17 @@ import { Users, ShieldCheck, Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw } from
 import { useToast } from '@/hooks/use-toast';
 import { getUsers, createUser, updateUser, deleteUser, type AdminUser } from './actions';
 
+// 'viewer' no banco = Produção na interface
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
-  user: 'Usuário',
-  viewer: 'Visualizador',
+  viewer: 'Produção',
+  user: 'Produção', // legado
 };
 
 const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  user: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  viewer: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  viewer: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  user: 'bg-amber-500/20 text-amber-400 border-amber-500/30', // legado
 };
 
 // ── Formulário base reutilizado em criar e editar ──────────────────────────────
@@ -79,8 +80,7 @@ function UserForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="admin">Administrador — acesso total</SelectItem>
-            <SelectItem value="user">Usuário — acesso padrão</SelectItem>
-            <SelectItem value="viewer">Visualizador — somente leitura</SelectItem>
+            <SelectItem value="viewer">Produção — acesso operacional</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -115,11 +115,11 @@ function CreateUserDialog({ open, onClose, onCreated }: { open: boolean; onClose
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState({ name: '', email: '', role: 'user', password: '' });
+  const [values, setValues] = useState({ name: '', email: '', role: 'viewer', password: '' });
 
   const set = (field: string, value: string) => setValues((v) => ({ ...v, [field]: value }));
 
-  const reset = () => { setValues({ name: '', email: '', role: 'user', password: '' }); setStep(1); };
+  const reset = () => { setValues({ name: '', email: '', role: 'viewer', password: '' }); setStep(1); };
 
   const handleClose = () => { reset(); onClose(); };
 
@@ -203,7 +203,7 @@ function CreateUserDialog({ open, onClose, onCreated }: { open: boolean; onClose
 function EditUserDialog({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState({ name: '', email: '', role: 'user', password: '' });
+  const [values, setValues] = useState({ name: '', email: '', role: 'viewer', password: '' });
 
   useEffect(() => {
     if (user) setValues({ name: user.name, email: user.email, role: user.role, password: '' });

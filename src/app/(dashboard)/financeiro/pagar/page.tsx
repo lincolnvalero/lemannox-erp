@@ -15,10 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, AlertTriangle, Clock, Plus, Save, Trash2, FilePenLine } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Plus, Save, Trash2, FilePenLine, ArrowDownCircle, History } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
-import { getPendingTransactions, markAsPaid, getAccounts, upsertTransaction, deleteTransaction } from '../actions';
+import { getPendingTransactions, markAsPaid, getAccounts, upsertTransaction, deleteTransaction, getTransactionsBySource } from '../actions';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import { format as fmtDate } from 'date-fns';
 import Link from 'next/link';
@@ -46,6 +47,7 @@ type FormVals = z.infer<typeof schema>;
 export default function ContasAPagarPage() {
   const { toast } = useToast();
   const [items, setItems] = useState<FinancialTransaction[]>([]);
+  const [historico, setHistorico] = useState<FinancialTransaction[]>([]);
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState<string | null>(null);
@@ -55,9 +57,14 @@ export default function ContasAPagarPage() {
 
   const load = async () => {
     setLoading(true);
-    const [res, acc] = await Promise.all([getPendingTransactions('saida'), getAccounts()]);
-    if (res.success) setItems(res.transactions ?? []);
-    if (acc.success) setAccounts(acc.accounts ?? []);
+    const [res, acc, hist] = await Promise.all([
+      getPendingTransactions('saida'),
+      getAccounts(),
+      getTransactionsBySource(['conta_pagar']),
+    ]);
+    if (res.success)  setItems(res.transactions ?? []);
+    if (acc.success)  setAccounts(acc.accounts ?? []);
+    if (hist.success) setHistorico(hist.transactions ?? []);
     setLoading(false);
   };
 
@@ -87,6 +94,7 @@ export default function ContasAPagarPage() {
     fd.append('transactionDate', vals.transactionDate);
     fd.append('dueDate', vals.dueDate);
     fd.append('status', 'pendente');
+    fd.append('source', 'conta_pagar');
     const result = await upsertTransaction(fd);
     if (result.success) {
       toast({ title: 'Conta a pagar registrada!' });
@@ -102,7 +110,7 @@ export default function ContasAPagarPage() {
     setPaying(t.id);
     const result = await markAsPaid(t.id);
     if (result.success) {
-      toast({ title: 'Pago!', description: `"${t.description}" lançado no caixa.` });
+      toast({ title: 'Conta baixada!', description: `"${t.description}" registrada como quitada.` });
       load();
     } else {
       toast({ variant: 'destructive', title: 'Erro', description: result.error });
@@ -121,6 +129,7 @@ export default function ContasAPagarPage() {
   const total = items.reduce((s, t) => s + t.amount, 0);
   const overdue = items.filter(t => t.dueDate && new Date(t.dueDate + 'T00:00:00') < new Date());
   const totalOverdue = overdue.reduce((s, t) => s + t.amount, 0);
+  const totalPago = historico.filter(t => t.status === 'pago').reduce((s, t) => s + t.amount, 0);
 
   return (
     <>
@@ -129,7 +138,7 @@ export default function ContasAPagarPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Nova Conta a Pagar</DialogTitle>
-            <DialogDescription>Registre uma despesa futura. Ao quitar, será lançada automaticamente no caixa.</DialogDescription>
+            <DialogDescription>Registre uma despesa futura. Ao quitar, o status será atualizado no histórico.</DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-2">
@@ -213,6 +222,7 @@ export default function ContasAPagarPage() {
           </Button>
         </div>
 
+
         {/* KPIs */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
           <Card>
@@ -241,77 +251,176 @@ export default function ContasAPagarPage() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Despesas Pendentes</CardTitle>
-            <CardDescription>Ordenadas por vencimento. Ao quitar, o valor é lançado no caixa automaticamente.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Lançamento</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
+        <Tabs defaultValue="pendentes">
+          <TabsList>
+            <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
+            <TabsTrigger value="historico">
+              <History className="mr-1.5 h-3.5 w-3.5" />
+              Histórico
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── Aba Pendentes ── */}
+          <TabsContent value="pendentes" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Despesas Pendentes</CardTitle>
+                <CardDescription>Ordenadas por vencimento. Use o Controle do Caixa para lançar manualmente após o pagamento.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Lançamento</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))
-                ) : items.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      Nenhuma conta a pagar pendente.
-                    </TableCell>
-                  </TableRow>
-                ) : items.map(t => {
-                  const al = alertInfo(t.dueDate);
-                  const isOverdue = t.dueDate && new Date(t.dueDate + 'T00:00:00') < new Date();
-                  return (
-                    <TableRow key={t.id} className={isOverdue ? 'bg-red-500/5' : ''}>
-                      <TableCell className="font-medium">{t.description}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{t.category}</Badge></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(t.transactionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
-                      </TableCell>
-                      <TableCell>
-                        <div className={cn('flex items-center gap-1.5 text-sm', al.cls)}>
-                          {al.icon}
-                          <span>{t.dueDate ? new Date(t.dueDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</span>
-                          <span className="text-xs opacity-80">({al.label})</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-semibold text-red-400">
-                        {formatCurrency(t.amount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button asChild size="sm" variant="ghost">
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
+                        </TableRow>
+                      ))
+                    ) : items.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          Nenhuma conta a pagar pendente.
+                        </TableCell>
+                      </TableRow>
+                    ) : items.map(t => {
+                      const al = alertInfo(t.dueDate);
+                      const isOverdue = t.dueDate && new Date(t.dueDate + 'T00:00:00') < new Date();
+                      return (
+                        <TableRow key={t.id} className={isOverdue ? 'bg-red-500/5' : ''}>
+                          <TableCell className="font-medium">{t.description}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{t.category}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(t.transactionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                          </TableCell>
+                          <TableCell>
+                            <div className={cn('flex items-center gap-1.5 text-sm', al.cls)}>
+                              {al.icon}
+                              <span>{t.dueDate ? new Date(t.dueDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</span>
+                              <span className="text-xs opacity-80">({al.label})</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-semibold text-red-400">
+                            {formatCurrency(t.amount)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button asChild size="sm" variant="ghost">
+                                <Link href={`/financeiro/editor/${t.id}`}><FilePenLine className="h-4 w-4" /></Link>
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting(t)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={paying === t.id} onClick={() => handlePay(t)}>
+                                <CheckCircle className="mr-1 h-4 w-4 text-green-400" />
+                                Quitar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Aba Histórico ── */}
+          <TabsContent value="historico" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Histórico de Contas a Pagar</CardTitle>
+                    <CardDescription>
+                      Todos os lançamentos vinculados a Contas a Pagar, ordenados por data.
+                    </CardDescription>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Total quitado: <span className="font-semibold text-foreground">{formatCurrency(totalPago)}</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[60px]">ID</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="w-[50px]"><span className="sr-only">Ações</span></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
+                        </TableRow>
+                      ))
+                    ) : historico.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                          Nenhum histórico de Contas a Pagar encontrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : historico.map(t => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{t.idLanc}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <ArrowDownCircle className="h-4 w-4 text-red-500 shrink-0" />
+                            <span className="font-medium">{t.description}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{t.category}</TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(t.transactionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {t.dueDate ? new Date(t.dueDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={t.status === 'pago' ? 'default' : 'outline'}
+                            className={cn(t.status === 'pago'
+                              ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                              : 'text-yellow-400 border-yellow-500/30'
+                            )}
+                          >
+                            {t.status === 'pago' ? 'Quitado' : 'Pendente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-semibold text-red-400">
+                          - {formatCurrency(t.amount)}
+                        </TableCell>
+                        <TableCell>
+                          <Button asChild variant="ghost" size="icon">
                             <Link href={`/financeiro/editor/${t.id}`}><FilePenLine className="h-4 w-4" /></Link>
                           </Button>
-                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting(t)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" disabled={paying === t.id} onClick={() => handlePay(t)}>
-                            <CheckCircle className="mr-1 h-4 w-4 text-green-400" />
-                            Quitar
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </>
   );

@@ -5,12 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { getReportData, type ReportData } from './actions';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useRole } from '@/lib/role-context';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtN = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -28,6 +29,8 @@ const statusColor: Record<string, string> = {
 
 export default function RelatoriosPage() {
   const { toast } = useToast();
+  const role = useRole();
+  const isAdmin = role === 'admin';
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState('6');
@@ -49,7 +52,9 @@ export default function RelatoriosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Relatórios Gerenciais</h1>
-          <p className="text-sm text-muted-foreground">Visão consolidada do negócio</p>
+          <p className="text-sm text-muted-foreground">
+            {isAdmin ? 'Visão consolidada do negócio' : 'Acompanhamento operacional da produção'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={months} onValueChange={(v) => { setMonths(v); load(v); }}>
@@ -68,8 +73,8 @@ export default function RelatoriosPage() {
         </div>
       </div>
 
-      {/* Resumo Financeiro */}
-      {loading ? <div className="grid gap-4 grid-cols-2 md:grid-cols-5"><SkCard /><SkCard /><SkCard /><SkCard /><SkCard /></div> : data && (
+      {/* Resumo Financeiro — somente admin */}
+      {isAdmin && (loading ? <div className="grid gap-4 grid-cols-2 md:grid-cols-5"><SkCard /><SkCard /><SkCard /><SkCard /><SkCard /></div> : data && (
         <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2"><CardDescription>Entradas (pagas)</CardDescription></CardHeader>
@@ -101,30 +106,32 @@ export default function RelatoriosPage() {
             <CardContent><p className="text-xl font-bold text-orange-400">{fmt(data.resumoFinanceiro.aPagar)}</p></CardContent>
           </Card>
         </div>
-      )}
+      ))}
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Faturamento Mensal */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Faturamento Mensal</CardTitle>
-            <CardDescription>Valor dos orçamentos aprovados por mês</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-48 w-full" /> : data && data.faturamentoMensal.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={data.faturamentoMensal}>
-                  <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Bar dataKey="total" fill="#4F8CFF" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <p className="text-center text-muted-foreground py-12 text-sm">Nenhum orçamento aprovado no período.</p>}
-          </CardContent>
-        </Card>
+        {/* Faturamento Mensal — somente admin */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Faturamento Mensal</CardTitle>
+              <CardDescription>Valor dos orçamentos aprovados por mês</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? <Skeleton className="h-48 w-full" /> : data && data.faturamentoMensal.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={data.faturamentoMensal}>
+                    <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                    <Tooltip formatter={(v: number) => fmt(v)} />
+                    <Bar dataKey="total" fill="#4F8CFF" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-center text-muted-foreground py-12 text-sm">Nenhum orçamento aprovado no período.</p>}
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Status dos Orçamentos */}
+        {/* Status dos Orçamentos — visível para todos; coluna de valor oculta para producao */}
         <Card>
           <CardHeader>
             <CardTitle>Orçamentos por Status</CardTitle>
@@ -137,7 +144,7 @@ export default function RelatoriosPage() {
                   <TableRow>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Valor Total</TableHead>
+                    {isAdmin && <TableHead className="text-right">Valor Total</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -145,11 +152,11 @@ export default function RelatoriosPage() {
                     <TableRow key={s.status}>
                       <TableCell><Badge className={statusColor[s.status] ?? ''}>{statusLabel[s.status] ?? s.status}</Badge></TableCell>
                       <TableCell className="text-center font-mono">{s.count}</TableCell>
-                      <TableCell className="text-right font-mono">{fmt(s.total)}</TableCell>
+                      {isAdmin && <TableCell className="text-right font-mono">{fmt(s.total)}</TableCell>}
                     </TableRow>
                   ))}
                   {data.statusOrcamentos.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Sem dados.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isAdmin ? 3 : 2} className="text-center text-muted-foreground">Sem dados.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -157,77 +164,81 @@ export default function RelatoriosPage() {
           </CardContent>
         </Card>
 
-        {/* Top Clientes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top 5 Clientes</CardTitle>
-            <CardDescription>Clientes com maior volume de orçamentos aprovados</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-48 w-full" /> : data && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead className="text-center">Pedidos</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.topClientes.map((c, i) => (
-                    <TableRow key={c.name}>
-                      <TableCell className="font-medium">
-                        <span className="text-muted-foreground mr-2 font-mono text-xs">#{i + 1}</span>
-                        {c.name}
-                      </TableCell>
-                      <TableCell className="text-center font-mono">{c.count}</TableCell>
-                      <TableCell className="text-right font-mono">{fmt(c.total)}</TableCell>
+        {/* Top Clientes — somente admin */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Clientes</CardTitle>
+              <CardDescription>Clientes com maior volume de orçamentos aprovados</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? <Skeleton className="h-48 w-full" /> : data && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="text-center">Pedidos</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                     </TableRow>
-                  ))}
-                  {data.topClientes.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {data.topClientes.map((c, i) => (
+                      <TableRow key={c.name}>
+                        <TableCell className="font-medium">
+                          <span className="text-muted-foreground mr-2 font-mono text-xs">#{i + 1}</span>
+                          {c.name}
+                        </TableCell>
+                        <TableCell className="text-center font-mono">{c.count}</TableCell>
+                        <TableCell className="text-right font-mono">{fmt(c.total)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {data.topClientes.length === 0 && (
+                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Top Produtos */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top 5 Produtos</CardTitle>
-            <CardDescription>Produtos mais vendidos por receita gerada</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-48 w-full" /> : data && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-center">Qtd</TableHead>
-                    <TableHead className="text-right">Receita</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.topProdutos.map((p, i) => (
-                    <TableRow key={p.name}>
-                      <TableCell className="font-medium">
-                        <span className="text-muted-foreground mr-2 font-mono text-xs">#{i + 1}</span>
-                        {p.name}
-                      </TableCell>
-                      <TableCell className="text-center font-mono">{fmtN(p.quantidade)}</TableCell>
-                      <TableCell className="text-right font-mono">{fmt(p.total)}</TableCell>
+        {/* Top Produtos — somente admin */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Produtos</CardTitle>
+              <CardDescription>Produtos mais vendidos por receita gerada</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? <Skeleton className="h-48 w-full" /> : data && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-center">Qtd</TableHead>
+                      <TableHead className="text-right">Receita</TableHead>
                     </TableRow>
-                  ))}
-                  {data.topProdutos.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {data.topProdutos.map((p, i) => (
+                      <TableRow key={p.name}>
+                        <TableCell className="font-medium">
+                          <span className="text-muted-foreground mr-2 font-mono text-xs">#{i + 1}</span>
+                          {p.name}
+                        </TableCell>
+                        <TableCell className="text-center font-mono">{fmtN(p.quantidade)}</TableCell>
+                        <TableCell className="text-right font-mono">{fmt(p.total)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {data.topProdutos.length === 0 && (
+                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Alertas de Estoque */}

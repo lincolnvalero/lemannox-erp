@@ -2,6 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import type { RawMaterial } from '@/lib/types';
+import { useRole } from '@/lib/role-context';
 import {
   Card,
   CardContent,
@@ -39,6 +40,8 @@ import { StockMovementDialog } from '@/components/dashboard/stock-movement-dialo
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function MaterialsPage() {
+  const role = useRole();
+  const isAdmin = role === 'admin';
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -106,37 +109,43 @@ export default function MaterialsPage() {
 
   return (
     <>
-      <StockMovementDialog
-        open={isMovementOpen}
-        onOpenChange={setIsMovementOpen}
-        material={movementMaterial}
-        onSuccess={fetchMaterials}
-      />
-      <AddMaterialDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        onSaveSuccess={handleSaveSuccess}
-        editingMaterial={editingMaterial}
-      />
-      <AlertDialog
-        open={!!materialToDelete}
-        onOpenChange={() => setMaterialToDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Isso irá excluir permanentemente o item &quot;{materialToDelete?.name}&quot;.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm}>
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {isAdmin && (
+        <>
+          <StockMovementDialog
+            open={isMovementOpen}
+            onOpenChange={setIsMovementOpen}
+            material={movementMaterial}
+            onSuccess={fetchMaterials}
+          />
+          <AddMaterialDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            onSaveSuccess={handleSaveSuccess}
+            editingMaterial={editingMaterial}
+          />
+        </>
+      )}
+      {isAdmin && (
+        <AlertDialog
+          open={!!materialToDelete}
+          onOpenChange={() => setMaterialToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação não pode ser desfeita. Isso irá excluir permanentemente o item &quot;{materialToDelete?.name}&quot;.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteConfirm}>
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <div className="flex items-center justify-between">
@@ -149,10 +158,12 @@ export default function MaterialsPage() {
                 </p>
               )}
             </div>
-            <Button onClick={handleAddNew}>
+            {isAdmin && (
+              <Button onClick={handleAddNew}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Novo Item
-            </Button>
+              </Button>
+            )}
         </div>
         <Card>
           <CardHeader>
@@ -170,7 +181,7 @@ export default function MaterialsPage() {
                   <TableHead>Dimensões/Especificação</TableHead>
                   <TableHead>Estoque</TableHead>
                   <TableHead className="text-right">Custo</TableHead>
-                  <TableHead><span className="sr-only">Ações</span></TableHead>
+                  {isAdmin && <TableHead><span className="sr-only">Ações</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -182,7 +193,7 @@ export default function MaterialsPage() {
                             <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                             <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                             <TableCell><Skeleton className="h-5 w-28 ml-auto" /></TableCell>
-                            <TableCell><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
+                            {isAdmin && <TableCell><Skeleton className="h-8 w-20 ml-auto" /></TableCell>}
                         </TableRow>
                     ))
                 ) : materials.length > 0 ? (
@@ -211,27 +222,29 @@ export default function MaterialsPage() {
                       <TableCell className="text-right font-code">
                         {formatCurrency(material.price)} / {material.unit}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" title="Movimentar estoque" onClick={() => { setMovementMaterial(material); setIsMovementOpen(true); }}>
-                            <ArrowDownUp className="h-4 w-4" />
-                            <span className="sr-only">Movimentar</span>
-                          </Button>
-                           <Button variant="ghost" size="icon" onClick={() => handleEdit(material)}>
-                            <FilePenLine className="h-4 w-4" />
-                            <span className="sr-only">Editar</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setMaterialToDelete(material)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Excluir</span>
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" title="Movimentar estoque" onClick={() => { setMovementMaterial(material); setIsMovementOpen(true); }}>
+                              <ArrowDownUp className="h-4 w-4" />
+                              <span className="sr-only">Movimentar</span>
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(material)}>
+                              <FilePenLine className="h-4 w-4" />
+                              <span className="sr-only">Editar</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setMaterialToDelete(material)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Excluir</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 ) : (

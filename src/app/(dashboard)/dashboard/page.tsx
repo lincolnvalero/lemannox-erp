@@ -44,7 +44,7 @@ async function getDashboardData(from: string, to: string) {
   ] = await Promise.all([
     recentQ,
     supabase.from('quotes').select('total, status, date'),
-    supabase.from('financial_transactions').select('amount, type, status'),
+    supabase.from('financial_transactions').select('amount, type, status').in('related_type', ['caixa', 'manual']),
     supabase.from('customers').select('id', { count: 'exact', head: true }),
     supabase.from('products').select('id', { count: 'exact', head: true }),
     supabase.from('ordens_servico')
@@ -163,21 +163,22 @@ export default async function DashboardPage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-10 flex h-14 items-center border-b bg-background/80 px-6 backdrop-blur-sm">
+      {/* Header — oculto em mobile (título já aparece no top bar) */}
+      <header className="hidden md:flex sticky top-0 z-10 h-14 items-center border-b bg-background/80 px-6 backdrop-blur-sm">
         <h1 className="text-lg font-semibold">Dashboard</h1>
       </header>
 
-      <main className="flex-1 space-y-6 p-4 md:p-6">
+      <main className="flex-1 space-y-4 p-3 md:space-y-6 md:p-6">
 
         {/* ── Row 1: Financeiro ────────────────────────────────────────── */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 md:gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">Saldo em Caixa</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold font-mono ${fin.saldo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <CardContent className="px-4 pb-4">
+              <div className={`text-xl md:text-2xl font-bold font-mono ${fin.saldo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {formatCurrency(fin.saldo)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -214,7 +215,7 @@ export default async function DashboardPage({
         </div>
 
         {/* ── Row 2: Operacional ───────────────────────────────────────── */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 md:gap-4">
 
           {/* Orçamentos com date range filter */}
           <Card>
@@ -271,7 +272,7 @@ export default async function DashboardPage({
         </div>
 
         {/* ── Bottom: tabelas ──────────────────────────────────────────── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 md:gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Orçamentos Recentes</CardTitle>

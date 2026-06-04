@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
-import type { QuoteItem, ScheduleItem } from '@/lib/types';
+import type { QuoteItem, ScheduleItem, FabricadoItem } from '@/lib/types';
 
 const PRODUCTION_STATUSES = ['aprovado', 'produzindo', 'entregue'];
 
@@ -55,6 +55,66 @@ export async function getProductionScheduleItems(): Promise<{
     return { success: true, items: scheduleItems };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar programação de produção';
+    return { success: false, error: message };
+  }
+}
+
+// Statuses que podem conter itens com productionStatus preenchido
+const FABRICADO_STATUSES = ['aprovado', 'produzindo', 'entregue', 'faturado'];
+
+export async function getManufacturedItems(
+  startDate?: string,
+  endDate?: string
+): Promise<{ success: boolean; items?: FabricadoItem[]; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('quotes')
+      .select('id, quote_number, customer_name, items')
+      .in('status', FABRICADO_STATUSES);
+
+    if (error) throw error;
+
+    const result: FabricadoItem[] = [];
+
+    for (const quote of (data ?? []) as Record<string, unknown>[]) {
+      const items = (quote.items ?? []) as QuoteItem[];
+      for (const item of items) {
+        const ps = item.productionStatus;
+        if (!ps) continue;
+
+        const isoData = ps.concluidoEm || ps.entregueEm;
+        if (!isoData) continue;
+
+        // Compara apenas a parte da data (YYYY-MM-DD) para ignorar fuso horário
+        const dataStr = isoData.split('T')[0];
+        if (startDate && dataStr < startDate) continue;
+        if (endDate && dataStr > endDate) continue;
+
+        result.push({
+          quoteId: quote.id as string,
+          pedido: quote.quote_number as number,
+          cliente: (quote.customer_name as string) || '—',
+          categoria: item.category?.trim() || 'Sem categoria',
+          produto: item.name,
+          valor: item.total || 0,
+          dataConclusao: isoData,
+        });
+      }
+    }
+
+    // Ordena: cliente → categoria → produto
+    result.sort((a, b) => {
+      const c = a.cliente.localeCompare(b.cliente, 'pt-BR', { sensitivity: 'base' });
+      if (c !== 0) return c;
+      const cat = a.categoria.localeCompare(b.categoria, 'pt-BR', { sensitivity: 'base' });
+      if (cat !== 0) return cat;
+      return a.produto.localeCompare(b.produto, 'pt-BR', { sensitivity: 'base' });
+    });
+
+    return { success: true, items: result };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar produtos fabricados';
     return { success: false, error: message };
   }
 }
