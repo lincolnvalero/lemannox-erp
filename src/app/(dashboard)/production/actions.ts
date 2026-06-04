@@ -59,7 +59,7 @@ export async function getProductionScheduleItems(): Promise<{
   }
 }
 
-// Statuses que podem conter itens com productionStatus preenchido
+// Statuses de orçamentos que representam produção concluída / em finalização
 const FABRICADO_STATUSES = ['aprovado', 'produzindo', 'entregue', 'faturado'];
 
 export async function getManufacturedItems(
@@ -68,35 +68,61 @@ export async function getManufacturedItems(
 ): Promise<{ success: boolean; items?: FabricadoItem[]; error?: string }> {
   try {
     const supabase = await createClient();
+
+    // Busca orçamentos com campos de data de conclusão e número de OS
     const { data, error } = await supabase
       .from('quotes')
-      .select('id, quote_number, customer_name, items')
+      .select('id, quote_number, customer_name, items, os_number, actual_delivery_date, manufacturing_deadline, date')
       .in('status', FABRICADO_STATUSES);
 
     if (error) throw error;
+
+    // Tabela de lookup: productId → categoria
+    const { data: productsData } = await supabase
+      .from('products')
+      .select('id, category');
+
+    const productCategoryMap = new Map<string, string>();
+    for (const p of (productsData ?? []) as { id: string; category: string }[]) {
+      productCategoryMap.set(p.id, p.category);
+    }
 
     const result: FabricadoItem[] = [];
 
     for (const quote of (data ?? []) as Record<string, unknown>[]) {
       const items = (quote.items ?? []) as QuoteItem[];
-      for (const item of items) {
-        const ps = item.productionStatus;
-        if (!ps) continue;
 
-        const isoData = ps.concluidoEm || ps.entregueEm;
+      // Data de conclusão no nível do orçamento (fallback quando item não tem productionStatus)
+      const quoteDate = (
+        (quote.actual_delivery_date as string) ||
+        (quote.manufacturing_deadline as string) ||
+        (quote.date as string)
+      )?.split('T')[0];
+
+      for (const item of items) {
+        // Data do item: marcação individual tem precedência; senão usa data do orçamento
+        const ps = item.productionStatus;
+        const isoData = ps?.concluidoEm || ps?.entregueEm || quoteDate;
         if (!isoData) continue;
 
-        // Compara apenas a parte da data (YYYY-MM-DD) para ignorar fuso horário
         const dataStr = isoData.split('T')[0];
         if (startDate && dataStr < startDate) continue;
         if (endDate && dataStr > endDate) continue;
 
+        // Categoria: campo no item > lookup por productId > fallback
+        const categoria =
+          item.category?.trim() ||
+          (item.productId ? productCategoryMap.get(item.productId) : undefined) ||
+          'Sem categoria';
+
         result.push({
           quoteId: quote.id as string,
+          osNumber: (quote.os_number as number) || undefined,
           pedido: quote.quote_number as number,
           cliente: (quote.customer_name as string) || '—',
-          categoria: item.category?.trim() || 'Sem categoria',
+          categoria,
           produto: item.name,
+          quantidade: item.quantity || 1,
           valor: item.total || 0,
           dataConclusao: isoData,
         });

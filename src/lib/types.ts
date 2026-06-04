@@ -46,6 +46,7 @@ export type ProductionStatus = {
 
 export type QuoteItem = {
   id: string;
+  productId?: string;   // referência ao produto cadastrado
   name: string;
   category?: string;
   material: string;
@@ -155,12 +156,14 @@ export type ScheduleItem = {
 
 export type FabricadoItem = {
   quoteId: string;
+  osNumber?: number;
   pedido: number;
   cliente: string;
   categoria: string;
   produto: string;
+  quantidade: number;
   valor: number;
-  dataConclusao: string; // ISO — concluidoEm ?? entregueEm
+  dataConclusao: string; // ISO — concluidoEm ?? entregueEm ?? data do orçamento
 };
 
 export type OsItem = {
