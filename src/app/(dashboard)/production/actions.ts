@@ -69,10 +69,10 @@ export async function getManufacturedItems(
   try {
     const supabase = await createClient();
 
-    // Busca orçamentos com campos de data de conclusão e número de OS
+    // Busca orçamentos com campos de data de conclusão, número de OS e obra
     const { data, error } = await supabase
       .from('quotes')
-      .select('id, quote_number, customer_name, items, os_number, actual_delivery_date, manufacturing_deadline, date')
+      .select('id, quote_number, customer_name, obra, items, os_number, actual_delivery_date, manufacturing_deadline, date')
       .in('status', FABRICADO_STATUSES);
 
     if (error) throw error;
@@ -119,6 +119,7 @@ export async function getManufacturedItems(
           quoteId: quote.id as string,
           osNumber: (quote.os_number as number) || undefined,
           pedido: quote.quote_number as number,
+          obra: (quote.obra as string) || undefined,
           cliente: (quote.customer_name as string) || '—',
           categoria,
           produto: item.name,
@@ -129,12 +130,13 @@ export async function getManufacturedItems(
       }
     }
 
-    // Ordena: cliente → categoria → produto
+    // Ordena: cliente → nº OS → produto
     result.sort((a, b) => {
       const c = a.cliente.localeCompare(b.cliente, 'pt-BR', { sensitivity: 'base' });
       if (c !== 0) return c;
-      const cat = a.categoria.localeCompare(b.categoria, 'pt-BR', { sensitivity: 'base' });
-      if (cat !== 0) return cat;
+      const aOs = a.osNumber ?? Infinity;
+      const bOs = b.osNumber ?? Infinity;
+      if (aOs !== bOs) return aOs - bOs;
       return a.produto.localeCompare(b.produto, 'pt-BR', { sensitivity: 'base' });
     });
 

@@ -38,13 +38,27 @@ function groupData(items: FabricadoItem[]): ClientGroup[] {
 
   return Array.from(clientMap.entries()).map(([cliente, catMap]) => {
     const categories = Array.from(catMap.entries())
-      .map(([categoria, its]) => ({
-        categoria,
-        items: its,
-        qty: its.reduce((s, i) => s + (i.quantidade || 1), 0),
-        total: its.reduce((s, i) => s + i.valor, 0),
-      }))
-      .sort((a, b) => a.categoria.localeCompare(b.categoria, 'pt-BR', { sensitivity: 'base' }));
+      .map(([categoria, its]) => {
+        // Ordena itens de cada categoria por nº OS
+        const sorted = [...its].sort((a, b) => {
+          const aOs = a.osNumber ?? Infinity;
+          const bOs = b.osNumber ?? Infinity;
+          if (aOs !== bOs) return aOs - bOs;
+          return a.pedido - b.pedido;
+        });
+        return {
+          categoria,
+          items: sorted,
+          qty: sorted.reduce((s, i) => s + (i.quantidade || 1), 0),
+          total: sorted.reduce((s, i) => s + i.valor, 0),
+        };
+      })
+      // Ordena categorias pelo menor nº OS que contém
+      .sort((a, b) => {
+        const aMin = Math.min(...a.items.map(i => i.osNumber ?? Infinity));
+        const bMin = Math.min(...b.items.map(i => i.osNumber ?? Infinity));
+        return aMin - bMin;
+      });
 
     return {
       cliente,
@@ -86,16 +100,17 @@ function generatePrintHtml(
             <tr class="item">
               <td class="mono center">${it.osNumber ? `#${it.osNumber}` : '—'}</td>
               <td class="mono center">#${it.pedido}</td>
+              <td>${it.obra || '—'}</td>
+              <td class="right mono">${it.quantidade}</td>
               <td>${it.produto}</td>
               <td class="right mono">${fmtDate(it.dataConclusao)}</td>
-              <td class="right mono">${it.quantidade}</td>
               <td class="right mono">${formatCurrency(it.valor)}</td>
             </tr>`
             )
             .join('');
           return `
           <tr class="cat-hdr">
-            <td colspan="6">${cat.categoria} — ${cat.qty} un. — ${formatCurrency(cat.total)}</td>
+            <td colspan="7">${cat.categoria} — ${cat.qty} un. — ${formatCurrency(cat.total)}</td>
           </tr>
           ${itemRows}`;
         })
@@ -103,11 +118,11 @@ function generatePrintHtml(
 
       return `
       <tr class="client-hdr">
-        <td colspan="6">${g.cliente}</td>
+        <td colspan="7">${g.cliente}</td>
       </tr>
       ${catRows}
       <tr class="subtotal">
-        <td colspan="3">${g.qty} unidade${g.qty !== 1 ? 's' : ''}</td>
+        <td colspan="4">${g.qty} unidade${g.qty !== 1 ? 's' : ''}</td>
         <td class="right">Subtotal</td>
         <td></td>
         <td class="right mono">${formatCurrency(g.total)}</td>
@@ -172,18 +187,19 @@ function generatePrintHtml(
 <table>
   <thead>
     <tr>
-      <th class="center" style="width:64px">Nº OS</th>
-      <th class="center" style="width:72px">Pedido</th>
+      <th class="center" style="width:60px">Nº OS</th>
+      <th class="center" style="width:66px">Pedido</th>
+      <th style="width:90px">Obra</th>
+      <th class="right" style="width:46px">Qtd.</th>
       <th>Produto</th>
-      <th class="right" style="width:96px">Conclusão</th>
-      <th class="right" style="width:52px">Qtd.</th>
+      <th class="right" style="width:92px">Conclusão</th>
       <th class="right" style="width:110px">Valor</th>
     </tr>
   </thead>
   <tbody>
     ${rows}
     <tr class="grand">
-      <td colspan="3">Total Geral — ${grand.qty} unidade${grand.qty !== 1 ? 's' : ''}</td>
+      <td colspan="4">Total Geral — ${grand.qty} unidade${grand.qty !== 1 ? 's' : ''}</td>
       <td class="right">Total</td>
       <td></td>
       <td class="right mono">${formatCurrency(grand.total)}</td>
@@ -261,14 +277,14 @@ export function FabricadosReport() {
       for (const g of groups) {
         body.push([{
           content: g.cliente,
-          colSpan: 6,
+          colSpan: 7,
           styles: { fillColor: [221, 231, 245], textColor: [30, 58, 95], fontStyle: 'bold', fontSize: 9 },
         }]);
 
         for (const cat of g.categories) {
           body.push([{
             content: `  ${cat.categoria} — ${cat.qty} un. — ${formatCurrency(cat.total)}`,
-            colSpan: 6,
+            colSpan: 7,
             styles: { fillColor: [240, 244, 250], textColor: [60, 90, 143], fontStyle: 'italic', fontSize: 8 },
           }]);
 
@@ -276,9 +292,10 @@ export function FabricadosReport() {
             body.push([
               it.osNumber ? `#${it.osNumber}` : '—',
               `#${it.pedido}`,
+              it.obra || '—',
+              String(it.quantidade),
               it.produto,
               fmtDate(it.dataConclusao),
-              String(it.quantidade),
               formatCurrency(it.valor),
             ]);
           }
@@ -287,7 +304,7 @@ export function FabricadosReport() {
         body.push([
           {
             content: `${g.qty} unidade${g.qty !== 1 ? 's' : ''}`,
-            colSpan: 3,
+            colSpan: 4,
             styles: { fillColor: [240, 240, 240], fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] },
           },
           {
@@ -305,7 +322,7 @@ export function FabricadosReport() {
       body.push([
         {
           content: `Total Geral — ${grand.qty} unidade${grand.qty !== 1 ? 's' : ''}`,
-          colSpan: 3,
+          colSpan: 4,
           styles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
         },
         {
@@ -321,16 +338,17 @@ export function FabricadosReport() {
 
       autoTable(doc, {
         startY: 28,
-        head: [['Nº OS', 'Pedido', 'Produto', 'Conclusão', 'Qtd.', 'Valor']],
+        head: [['Nº OS', 'Pedido', 'Obra', 'Qtd.', 'Produto', 'Conclusão', 'Valor']],
         body,
         styles: { fontSize: 8, cellPadding: 3 },
         headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
         columnStyles: {
           0: { cellWidth: 18, halign: 'center', font: 'courier' },
           1: { cellWidth: 20, halign: 'center', font: 'courier' },
-          3: { cellWidth: 24, halign: 'right' },
-          4: { cellWidth: 16, halign: 'right', font: 'courier' },
-          5: { cellWidth: 32, halign: 'right', font: 'courier' },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 14, halign: 'right', font: 'courier' },
+          5: { cellWidth: 24, halign: 'right' },
+          6: { cellWidth: 32, halign: 'right', font: 'courier' },
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.row.index % 2 === 0) {
@@ -435,9 +453,10 @@ export function FabricadosReport() {
                   <tr className="border-b bg-muted/50 text-muted-foreground">
                     <th className="py-3 px-3 text-center font-medium w-[72px]">Nº OS</th>
                     <th className="py-3 px-3 text-center font-medium w-[80px]">Pedido</th>
+                    <th className="py-3 px-3 text-left font-medium w-[100px]">Obra</th>
+                    <th className="py-3 px-3 text-center font-medium w-[60px]">Qtd.</th>
                     <th className="py-3 px-3 text-left font-medium">Produto</th>
                     <th className="py-3 px-3 text-left font-medium w-[110px]">Conclusão</th>
-                    <th className="py-3 px-3 text-center font-medium w-[60px]">Qtd.</th>
                     <th className="py-3 px-3 text-right font-medium w-[120px]">Valor</th>
                   </tr>
                 </thead>
@@ -455,12 +474,13 @@ export function FabricadosReport() {
                         <React.Fragment key={`${g.cliente}-${cat.categoria}`}>
                           {/* Sub-cabeçalho da categoria */}
                           <tr className="bg-muted/20 border-b border-border/30">
-                            <td colSpan={4} className="py-1.5 px-3 pl-6 text-xs font-medium text-muted-foreground italic">
+                            <td colSpan={3} className="py-1.5 px-3 pl-6 text-xs font-medium text-muted-foreground italic">
                               {cat.categoria}
                             </td>
                             <td className="py-1.5 px-3 text-xs text-center font-semibold text-muted-foreground">
                               {cat.qty}
                             </td>
+                            <td colSpan={2} className="py-1.5 px-3 text-xs text-muted-foreground italic"></td>
                             <td className="py-1.5 px-3 text-xs text-right font-semibold text-muted-foreground font-mono">
                               {formatCurrency(cat.total)}
                             </td>
@@ -478,12 +498,15 @@ export function FabricadosReport() {
                               <td className="py-2 px-3 font-mono text-xs text-muted-foreground text-center">
                                 #{it.pedido}
                               </td>
-                              <td className="py-2 px-3 leading-snug">{it.produto}</td>
                               <td className="py-2 px-3 text-xs text-muted-foreground">
-                                {fmtDate(it.dataConclusao)}
+                                {it.obra || '—'}
                               </td>
                               <td className="py-2 px-3 text-center font-mono text-sm font-medium">
                                 {it.quantidade}
+                              </td>
+                              <td className="py-2 px-3 leading-snug">{it.produto}</td>
+                              <td className="py-2 px-3 text-xs text-muted-foreground">
+                                {fmtDate(it.dataConclusao)}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-sm">
                                 {formatCurrency(it.valor)}
@@ -495,7 +518,7 @@ export function FabricadosReport() {
 
                       {/* Subtotal do cliente */}
                       <tr className="bg-muted/30 border-b-2 border-border/60">
-                        <td colSpan={3} className="py-2 px-3 text-xs text-muted-foreground italic">
+                        <td colSpan={4} className="py-2 px-3 text-xs text-muted-foreground italic">
                           {g.qty} unidade{g.qty !== 1 ? 's' : ''}
                         </td>
                         <td className="py-2 px-3 text-xs text-right text-muted-foreground font-medium">
@@ -511,7 +534,7 @@ export function FabricadosReport() {
 
                   {/* Total geral */}
                   <tr className="bg-primary/10 border-t-2 border-primary/30">
-                    <td colSpan={3} className="py-3 px-3 font-bold text-sm">
+                    <td colSpan={4} className="py-3 px-3 font-bold text-sm">
                       Total Geral — {grand.qty} unidade{grand.qty !== 1 ? 's' : ''}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-sm">Total</td>

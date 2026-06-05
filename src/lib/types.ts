@@ -158,6 +158,7 @@ export type FabricadoItem = {
   quoteId: string;
   osNumber?: number;
   pedido: number;
+  obra?: string;
   cliente: string;
   categoria: string;
   produto: string;
