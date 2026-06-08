@@ -98,6 +98,7 @@ export default function QuoteEditorPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
+  const [osNumber, setOsNumber] = useState<number | null>(null);
 
   const [addItemGroup, setAddItemGroup] = useState('');
   const [addItemCategory, setAddItemCategory] = useState('');
@@ -143,7 +144,7 @@ export default function QuoteEditorPage() {
     [customers, watchedCustomerId]
   );
   
-  const fullQuoteDataForOs = isEditMode ? { ...allWatchedData, id: quoteId, quoteNumber: quoteNumber!, customerId: watchedCustomerId, subtotal: 0, total: 0 } as unknown as Quote : null;
+  const fullQuoteDataForOs = isEditMode ? { ...allWatchedData, id: quoteId, quoteNumber: quoteNumber!, osNumber: osNumber ?? undefined, customerId: watchedCustomerId, subtotal: 0, total: 0 } as unknown as Quote : null;
 
 
   useEffect(() => {
@@ -243,6 +244,7 @@ export default function QuoteEditorPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const row = quoteRow as any;
           setQuoteNumber(row.quote_number);
+          setOsNumber(row.os_number ?? null);
           const customerDetails = row.customer_details as { cnpj?: string } | null;
           form.reset({
             customerId: row.customer_id ?? '',
