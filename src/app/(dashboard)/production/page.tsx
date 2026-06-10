@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileDown, RefreshCw } from 'lucide-react';
+import { FileDown, RefreshCw, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
@@ -29,6 +29,29 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
 
+// Parseia string "YYYY-MM-DD" diretamente — sem conversão de fuso UTC
+function fmtPrevisao(s: string, short = false): string {
+  if (!s) return '—';
+  const [y, m, d] = s.split('T')[0].split('-');
+  return short ? `${d}/${m}/${y.slice(2)}` : `${d}/${m}/${y}`;
+}
+
+// Converte ISO timestamp para data local (evita UTC shift nos campos Concluído/Entregue)
+function formatDateForInput(isoDate: string | null): string {
+  if (!isoDate) return '';
+  try {
+    if (!isoDate.includes('T')) return isoDate.split('T')[0];
+    const d = new Date(isoDate);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  } catch {
+    return '';
+  }
+}
+
+const isGrill = (item: ScheduleItem) =>
+  item.categoria?.toLowerCase().includes('grill');
+
 export default function ProductionSchedulePage() {
   const { toast } = useToast();
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
@@ -36,6 +59,7 @@ export default function ProductionSchedulePage() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState<{[key: string]: boolean}>({});
   const [hideDelivered, setHideDelivered] = useState(true);
+  const [clienteFilter, setClienteFilter] = useState('');
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
@@ -60,14 +84,18 @@ export default function ProductionSchedulePage() {
   }, []);
 
   const filteredSchedule = useMemo(() => {
-    const items = hideDelivered ? schedule.filter(item => !item.entregueEm) : schedule;
+    let items = hideDelivered ? schedule.filter(item => !item.entregueEm) : schedule;
+    if (clienteFilter.trim()) {
+      const q = clienteFilter.trim().toLowerCase();
+      items = items.filter(item => item.cliente.toLowerCase().includes(q));
+    }
     return [...items].sort((a, b) => {
       if (!a.previsao && !b.previsao) return 0;
       if (!a.previsao) return 1;
       if (!b.previsao) return -1;
-      return new Date(a.previsao).getTime() - new Date(b.previsao).getTime();
+      return a.previsao.localeCompare(b.previsao);
     });
-  }, [schedule, hideDelivered]);
+  }, [schedule, hideDelivered, clienteFilter]);
 
   const handleDateChange = async (
     item: ScheduleItem,
@@ -76,7 +104,7 @@ export default function ProductionSchedulePage() {
   ) => {
     const key = `${item.quoteId}-${item.itemIndex}-${status}`;
 
-    const originalDate = item[status] ? new Date(item[status]!).toISOString().split('T')[0] : '';
+    const originalDate = formatDateForInput(item[status]);
     if (date === originalDate) return;
 
     setSavingStatus(prev => ({...prev, [key]: true}));
@@ -84,7 +112,7 @@ export default function ProductionSchedulePage() {
     setSchedule((currentSchedule) =>
       currentSchedule.map((s) =>
         s.quoteId === item.quoteId && s.itemIndex === item.itemIndex
-          ? { ...s, [status]: date ? new Date(date).toISOString() : null }
+          ? { ...s, [status]: date ? new Date(date + 'T12:00:00').toISOString() : null }
           : s
       )
     );
@@ -93,7 +121,7 @@ export default function ProductionSchedulePage() {
       item.quoteId,
       item.itemIndex,
       status,
-      date ? new Date(date).toISOString() : null
+      date ? new Date(date + 'T12:00:00').toISOString() : null
     );
 
     setSavingStatus(prev => ({...prev, [key]: false}));
@@ -122,15 +150,6 @@ export default function ProductionSchedulePage() {
       toast({ variant: 'destructive', title: 'Erro ao carregar orçamento', description: result.error });
     }
     setLoadingPreview(false);
-  };
-
-  const formatDateForInput = (isoDate: string | null) => {
-    if (!isoDate) return '';
-    try {
-      return new Date(isoDate).toISOString().split('T')[0];
-    } catch {
-      return '';
-    }
   };
 
   return (
@@ -169,7 +188,9 @@ export default function ProductionSchedulePage() {
                     </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 pt-3 border-t mt-3">
+
+                {/* Filtros */}
+                <div className="flex flex-wrap items-center gap-4 pt-3 border-t mt-3">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="hide-delivered"
@@ -180,6 +201,18 @@ export default function ProductionSchedulePage() {
                       Ocultar itens entregues
                     </Label>
                   </div>
+
+                  {/* Filtro por cliente */}
+                  <div className="relative flex-1 min-w-[180px] max-w-xs">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Filtrar por cliente..."
+                      value={clienteFilter}
+                      onChange={(e) => setClienteFilter(e.target.value)}
+                      className="h-8 pl-8 text-sm"
+                    />
+                  </div>
+
                   {!loading && (
                     <span className="text-xs text-muted-foreground ml-auto">
                       {filteredSchedule.length} item{filteredSchedule.length !== 1 ? 's' : ''}
@@ -215,11 +248,15 @@ export default function ProductionSchedulePage() {
                     const entregueKey = `${item.quoteId}-${item.itemIndex}-entregueEm`;
                     const isSaving = savingStatus[concluidoKey] || savingStatus[entregueKey];
                     const isDelivered = !!item.entregueEm;
+                    const grill = isGrill(item);
 
                     return (
                       <div
                         key={`${item.quoteId}-${item.itemIndex}`}
-                        className={`rounded-xl border bg-card px-4 py-3 transition-opacity ${isSaving ? 'opacity-40' : ''} ${isDelivered ? 'opacity-60' : ''}`}
+                        className={`rounded-xl border px-4 py-3 transition-opacity
+                          ${grill ? 'bg-amber-500/10 border-amber-500/30' : 'bg-card'}
+                          ${isSaving ? 'opacity-40' : ''}
+                          ${isDelivered ? 'opacity-60' : ''}`}
                       >
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="min-w-0">
@@ -233,11 +270,12 @@ export default function ProductionSchedulePage() {
                             <p className="font-semibold text-sm mt-0.5">{item.cliente}</p>
                             {item.obra && <p className="text-xs text-muted-foreground">{item.obra}</p>}
                             <p className="text-xs mt-1 leading-snug">{item.produto}</p>
+                            {item.material && <p className="text-xs text-muted-foreground">{item.material}</p>}
                           </div>
                           {item.previsao && (
                             <div className="text-right shrink-0">
                               <p className="text-[10px] text-muted-foreground">Previsão</p>
-                              <p className="text-xs font-semibold">{format(new Date(item.previsao), 'dd/MM/yy')}</p>
+                              <p className="text-xs font-semibold">{fmtPrevisao(item.previsao, true)}</p>
                             </div>
                           )}
                         </div>
@@ -278,8 +316,9 @@ export default function ProductionSchedulePage() {
                         <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[88px]">Data</th>
                         <th className="py-3 px-2 text-left font-medium min-w-[140px]">Cliente</th>
                         <th className="py-3 px-2 text-left font-medium min-w-[80px] max-w-[120px]">Obra</th>
-                        <th className="py-3 px-2 text-left font-medium min-w-[180px]">Produto</th>
-                        <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[80px]">Previsão</th>
+                        <th className="py-3 px-2 text-left font-medium min-w-[160px]">Produto</th>
+                        <th className="py-3 px-2 text-left font-medium min-w-[100px]">Material</th>
+                        <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[88px]">Previsão</th>
                         <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Concluído em</th>
                         <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Entregue em</th>
                       </tr>
@@ -294,6 +333,7 @@ export default function ProductionSchedulePage() {
                             <td className="py-3 px-2"><Skeleton className="h-4 w-36" /></td>
                             <td className="py-3 px-2"><Skeleton className="h-4 w-20" /></td>
                             <td className="py-3 px-2"><Skeleton className="h-4 w-44" /></td>
+                            <td className="py-3 px-2"><Skeleton className="h-4 w-24" /></td>
                             <td className="py-3 px-2"><Skeleton className="h-4 w-16" /></td>
                             <td className="py-3 px-2"><Skeleton className="h-8 w-[100px] mx-auto" /></td>
                             <td className="py-3 px-2"><Skeleton className="h-8 w-[100px] mx-auto" /></td>
@@ -306,11 +346,15 @@ export default function ProductionSchedulePage() {
                           const isSavingConcluido = savingStatus[concluidoKey];
                           const isSavingEntregue = savingStatus[entregueKey];
                           const isDelivered = !!item.entregueEm;
+                          const grill = isGrill(item);
 
                           return (
                             <tr
                               key={`${item.quoteId}-${item.itemIndex}`}
-                              className={`border-b border-border/50 transition-opacity hover:bg-muted/30 ${isSavingConcluido || isSavingEntregue ? 'opacity-40' : ''} ${isDelivered ? 'opacity-60' : ''}`}
+                              className={`border-b border-border/50 transition-opacity
+                                ${grill ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-muted/30'}
+                                ${isSavingConcluido || isSavingEntregue ? 'opacity-40' : ''}
+                                ${isDelivered ? 'opacity-60' : ''}`}
                             >
                               <td className="py-2.5 px-2 font-mono text-xs font-medium text-muted-foreground whitespace-nowrap">
                                 <button onClick={() => handleOpenPreview(item.quoteId)} disabled={loadingPreview} className="hover:text-primary hover:underline disabled:opacity-50">#{item.pedido}</button>
@@ -322,8 +366,9 @@ export default function ProductionSchedulePage() {
                               <td className="py-2.5 px-2 text-sm font-medium leading-tight">{item.cliente}</td>
                               <td className="py-2.5 px-2 text-xs text-muted-foreground max-w-[120px] truncate" title={item.obra}>{item.obra || <span>—</span>}</td>
                               <td className="py-2.5 px-2 text-sm leading-tight">{item.produto}</td>
+                              <td className="py-2.5 px-2 text-xs text-muted-foreground">{item.material || <span>—</span>}</td>
                               <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">
-                                {item.previsao ? format(new Date(item.previsao), 'dd/MM/yyyy') : <span>—</span>}
+                                {item.previsao ? fmtPrevisao(item.previsao) : <span>—</span>}
                               </td>
                               <td className="py-2.5 px-2">
                                 <Input type="date" className="h-7 text-xs px-2 w-[100px] mx-auto"
@@ -344,7 +389,7 @@ export default function ProductionSchedulePage() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={9} className="h-24 text-center text-muted-foreground">
+                          <td colSpan={10} className="h-24 text-center text-muted-foreground">
                             {schedule.length > 0 ? 'Nenhum item corresponde aos filtros.' : 'Nenhum item na programação de produção.'}
                           </td>
                         </tr>

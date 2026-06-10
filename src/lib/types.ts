@@ -149,6 +149,8 @@ export type ScheduleItem = {
   cliente: string;
   obra: string;
   produto: string;
+  material: string;
+  categoria: string;
   previsao: string;
   concluidoEm: string | null;
   entregueEm: string | null;

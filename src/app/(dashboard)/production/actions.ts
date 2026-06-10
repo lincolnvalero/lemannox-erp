@@ -21,6 +21,8 @@ function quoteToScheduleItems(quote: Record<string, unknown>): ScheduleItem[] {
     cliente: (quote.trade_name as string) || (quote.customer_name as string),
     obra: (quote.obra as string) || '',
     produto: item.name,
+    material: item.material || '',
+    categoria: item.category || '',
     previsao: (quote.manufacturing_deadline as string) || (quote.delivery_time as string) || '',
     concluidoEm: item.productionStatus?.concluidoEm ?? null,
     entregueEm: item.productionStatus?.entregueEm ?? null,
