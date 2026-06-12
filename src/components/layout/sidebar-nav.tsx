@@ -158,14 +158,19 @@ export function SidebarNav({ footer, role = 'admin' }: { footer?: React.ReactNod
     }
   }, [mobileOpen, pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Itens folha (submenu): match exato — evita que /quotes/editor ative /quotes
   const isActive = useCallback(
-    (href: string) => pathname === href || pathname.startsWith(href + '/'),
+    (href: string) => pathname === href,
     [pathname]
   );
 
+  // Ícone do grupo no rail: usa startsWith para grupos de nível único (sem items)
   const isGroupActive = useCallback(
-    (g: NavGroup) => g.href ? isActive(g.href) : (g.items?.some(i => isActive(i.href)) ?? false),
-    [isActive]
+    (g: NavGroup) => {
+      if (g.href) return pathname === g.href || pathname.startsWith(g.href + '/');
+      return g.items?.some(i => pathname === i.href || pathname.startsWith(i.href + '/')) ?? false;
+    },
+    [pathname]
   );
 
   const clearLeave = () => {
