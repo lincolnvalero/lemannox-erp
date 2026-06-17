@@ -94,17 +94,10 @@ export async function getManufacturedItems(
     for (const quote of (data ?? []) as Record<string, unknown>[]) {
       const items = (quote.items ?? []) as QuoteItem[];
 
-      // Data de conclusão no nível do orçamento (fallback quando item não tem productionStatus)
-      const quoteDate = (
-        (quote.actual_delivery_date as string) ||
-        (quote.manufacturing_deadline as string) ||
-        (quote.date as string)
-      )?.split('T')[0];
-
       for (const item of items) {
-        // Data do item: marcação individual tem precedência; senão usa data do orçamento
+        // Só inclui itens com data de conclusão individual marcada na programação
         const ps = item.productionStatus;
-        const isoData = ps?.concluidoEm || ps?.entregueEm || quoteDate;
+        const isoData = ps?.concluidoEm || ps?.entregueEm;
         if (!isoData) continue;
 
         const dataStr = isoData.split('T')[0];
