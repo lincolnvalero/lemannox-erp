@@ -88,11 +88,13 @@ const quoteStatusVariant = (status: Quote['status']) => {
       return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
     case 'entregue':
       return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+    case 'aguardando':
+      return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
     default:
       return 'secondary';
   }
 };
-const quoteStatuses: Quote['status'][] = ['rascunho', 'enviado', 'aprovado', 'rejeitado', 'faturado', 'produzindo', 'entregue'];
+const quoteStatuses: Quote['status'][] = ['rascunho', 'enviado', 'aprovado', 'rejeitado', 'faturado', 'produzindo', 'entregue', 'aguardando'];
 
 export default function QuotesPage() {
   const router = useRouter();
@@ -201,7 +203,7 @@ export default function QuotesPage() {
 
   const STATUS_LABEL_BR: Record<string, string> = {
     rascunho: 'Rascunho', enviado: 'Enviado', aprovado: 'Aprovado',
-    rejeitado: 'Rejeitado', faturado: 'Faturado', produzindo: 'Em Prod.', entregue: 'Entregue',
+    rejeitado: 'Rejeitado', faturado: 'Faturado', produzindo: 'Em Prod.', entregue: 'Entregue', aguardando: 'Aguardando',
   };
 
   return (

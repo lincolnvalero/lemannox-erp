@@ -10,6 +10,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileDown, RefreshCw, Search } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
@@ -60,6 +67,7 @@ export default function ProductionSchedulePage() {
   const [savingStatus, setSavingStatus] = useState<{[key: string]: boolean}>({});
   const [hideDelivered, setHideDelivered] = useState(true);
   const [clienteFilter, setClienteFilter] = useState('');
+  const [categoriaFilter, setCategoriaFilter] = useState('todos');
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
@@ -83,11 +91,19 @@ export default function ProductionSchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const availableCategories = useMemo(() => {
+    const cats = new Set(schedule.map(i => i.categoria).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [schedule]);
+
   const filteredSchedule = useMemo(() => {
     let items = hideDelivered ? schedule.filter(item => !item.entregueEm) : schedule;
     if (clienteFilter.trim()) {
       const q = clienteFilter.trim().toLowerCase();
       items = items.filter(item => item.cliente.toLowerCase().includes(q));
+    }
+    if (categoriaFilter !== 'todos') {
+      items = items.filter(item => item.categoria === categoriaFilter);
     }
     return [...items].sort((a, b) => {
       if (!a.previsao && !b.previsao) return 0;
@@ -203,7 +219,7 @@ export default function ProductionSchedulePage() {
                   </div>
 
                   {/* Filtro por cliente */}
-                  <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <div className="relative min-w-[180px] max-w-xs">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                     <Input
                       placeholder="Filtrar por cliente..."
@@ -212,6 +228,19 @@ export default function ProductionSchedulePage() {
                       className="h-8 pl-8 text-sm"
                     />
                   </div>
+
+                  {/* Filtro por categoria */}
+                  <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
+                    <SelectTrigger className="h-8 w-[200px] text-sm">
+                      <SelectValue placeholder="Todas as categorias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todas as categorias</SelectItem>
+                      {availableCategories.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   {!loading && (
                     <span className="text-xs text-muted-foreground ml-auto">

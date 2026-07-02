@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,7 +42,7 @@ import {
 } from '@/components/ui/table';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Trash2, X, PlusCircle, Printer } from 'lucide-react';
+import { Save, Trash2, X, PlusCircle, Printer, RotateCcw, Check, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -73,7 +73,7 @@ const quoteSchema = z.object({
   customerId: z.string().min(1, 'O cliente é obrigatório.'),
   date: z.string().min(1, 'A data é obrigatória.'),
   expiryDate: z.string().optional(),
-  status: z.enum(['rascunho', 'enviado', 'aprovado', 'rejeitado', 'faturado', 'produzindo', 'entregue']),
+  status: z.enum(['rascunho', 'enviado', 'aprovado', 'rejeitado', 'faturado', 'produzindo', 'entregue', 'aguardando']),
   items: z.array(quoteItemSchema).min(1, 'Adicione pelo menos um item.'),
   notes: z.string().optional(),
   discount: z.preprocess(v => (v === '' || v === null || v === undefined ? 0 : Number(v)), z.number().min(0)).optional().default(0),
@@ -99,6 +99,8 @@ export default function QuoteEditorPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
   const [osNumber, setOsNumber] = useState<number | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'pending' | 'saving' | 'saved'>('idle');
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [addItemGroup, setAddItemGroup] = useState('');
   const [addItemCategory, setAddItemCategory] = useState('');
@@ -171,21 +173,44 @@ export default function QuoteEditorPage() {
     return () => subscription.unsubscribe();
   }, [watch, setValue, getValues]);
 
+  // Auto-save em modo de edição (debounce 3s)
+  const doAutoSave = useCallback(async () => {
+    if (!isEditMode || !quoteId) return;
+    setAutoSaveState('saving');
+    try {
+      const data = form.getValues();
+      await upsertQuote(data, quoteId);
+      setAutoSaveState('saved');
+      setTimeout(() => setAutoSaveState('idle'), 3000);
+    } catch {
+      setAutoSaveState('idle');
+    }
+  }, [isEditMode, quoteId, form]);
+
+  useEffect(() => {
+    if (!isEditMode || !quoteId) return;
+    const subscription = watch(() => {
+      setAutoSaveState('pending');
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = setTimeout(doAutoSave, 3000);
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [isEditMode, quoteId, watch, doAutoSave]);
 
   const totals = useMemo(() => {
     const itemsSubtotal = watchedItems.reduce(
-      (acc, item) => acc + (item.total || 0),
+      (acc, item) => acc + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
       0
     );
-    const taxTotal = watchedItems.reduce(
-      (acc, item) => acc + (Number(item.tax) || 0),
-      0
-    );
+    const taxTotal = itemsSubtotal * 0.045;
     const grandTotal =
       itemsSubtotal +
       taxTotal +
-      (watchedFreight || 0) -
-      (watchedDiscount || 0);
+      (Number(watchedFreight) || 0) -
+      (Number(watchedDiscount) || 0);
 
     return {
       itemsSubtotal,
@@ -306,32 +331,40 @@ export default function QuoteEditorPage() {
   };
 
   async function onSubmit(data: QuoteFormValues) {
+    // Cancela auto-save pendente para evitar conflito
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setAutoSaveState('idle');
     setIsSaving(true);
-    const result = await upsertQuote(data, quoteId);
+    try {
+      const result = await upsertQuote(data, quoteId);
 
-    if (result.success && result.quote) {
-      toast({
-        title: `Orçamento ${isEditMode ? 'Atualizado' : 'Criado'}!`,
-        description: `O orçamento foi salvo com sucesso.`,
-      });
-      if (isEditMode) {
-        router.push('/quotes');
-        router.refresh();
+      if (result.success && result.quote) {
+        toast({
+          title: `Orçamento ${isEditMode ? 'Atualizado' : 'Criado'}!`,
+          description: `O orçamento foi salvo com sucesso.`,
+        });
+        if (isEditMode) {
+          router.push('/quotes');
+          router.refresh();
+        } else {
+          router.replace(`/quotes/editor?id=${result.quote.id}`);
+          router.refresh();
+        }
       } else {
-        // Redireciona para o editor com o ID do novo orçamento,
-        // evitando que saves subsequentes criem novos orçamentos
-        router.replace(`/quotes/editor?id=${result.quote.id}`);
-        router.refresh();
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Salvar',
+          description: result.error,
+        });
+        window.scrollTo(0, 0);
       }
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao Salvar',
-        description: result.error,
-      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro inesperado ao salvar.';
+      toast({ variant: 'destructive', title: 'Erro ao Salvar', description: msg });
       window.scrollTo(0, 0);
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   }
 
   // Add Product Logic
@@ -633,6 +666,7 @@ export default function QuoteEditorPage() {
                                     <SelectItem value="faturado">Faturado</SelectItem>
                                     <SelectItem value="produzindo">Produzindo</SelectItem>
                                     <SelectItem value="entregue">Entregue</SelectItem>
+                                    <SelectItem value="aguardando">Aguardando</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -983,20 +1017,47 @@ export default function QuoteEditorPage() {
                                 </FormItem>
                             )}
                             />
-                          <div className="flex flex-col sm:flex-row justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full sm:w-auto"
-                              onClick={() => router.push('/quotes')}
-                            >
-                              <X className="mr-2 h-4 w-4" />
-                              Cancelar
-                            </Button>
-                            <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
-                              <Save className="mr-2 h-4 w-4" />
-                              {isSaving ? 'Salvando...' : 'Salvar Orçamento'}
-                            </Button>
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+                            {/* Indicador de auto-save (edit mode) */}
+                            {isEditMode && autoSaveState !== 'idle' && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                {autoSaveState === 'saving' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                {autoSaveState === 'saved' && <Check className="h-3 w-3 text-green-500" />}
+                                {autoSaveState === 'saving' ? 'Salvando...' : autoSaveState === 'saved' ? 'Salvo automaticamente' : 'Alterações pendentes'}
+                              </span>
+                            )}
+                            <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
+                              {!isEditMode && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full sm:w-auto"
+                                  onClick={() => form.reset({
+                                    status: 'rascunho', items: [], discount: 0, freight: 0,
+                                    cpf: '', obra: '', date: format(new Date(), 'yyyy-MM-dd'),
+                                    paymentTerms: '50% no pedido, 50% na entrega',
+                                    deliveryTime: '', expiryDate: '', manufacturingDeadline: '',
+                                    actualDeliveryDate: '', notes: '', customerName: '',
+                                  })}
+                                >
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  Limpar
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full sm:w-auto"
+                                onClick={() => router.push('/quotes')}
+                              >
+                                <X className="mr-2 h-4 w-4" />
+                                Cancelar
+                              </Button>
+                              <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+                                <Save className="mr-2 h-4 w-4" />
+                                {isSaving ? 'Salvando...' : 'Salvar Orçamento'}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </CardContent>

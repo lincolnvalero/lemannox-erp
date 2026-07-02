@@ -71,7 +71,7 @@ export type Quote = {
     email?: string;
   };
   obra?: string;
-  status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'faturado' | 'produzindo' | 'entregue';
+  status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'faturado' | 'produzindo' | 'entregue' | 'aguardando';
   items: QuoteItem[];
   subtotal: number;
   total: number;
