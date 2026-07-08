@@ -298,8 +298,11 @@ export default function ProductionSchedulePage() {
                             </div>
                             <p className="font-semibold text-sm mt-0.5">{item.cliente}</p>
                             {item.obra && <p className="text-xs text-muted-foreground">{item.obra}</p>}
-                            <p className="text-xs mt-1 leading-snug">{item.produto}</p>
-                            {item.material && <p className="text-xs text-muted-foreground">{item.material}</p>}
+                            <p className="text-xs mt-1 leading-snug">
+                              {item.produto}
+                              {item.material && <span className="text-muted-foreground"> — {item.material}</span>}
+                            </p>
+                            {item.categoria && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{item.categoria}</p>}
                           </div>
                           {item.previsao && (
                             <div className="text-right shrink-0">
@@ -346,7 +349,7 @@ export default function ProductionSchedulePage() {
                         <th className="py-3 px-2 text-left font-medium min-w-[140px]">Cliente</th>
                         <th className="py-3 px-2 text-left font-medium min-w-[80px] max-w-[120px]">Obra</th>
                         <th className="py-3 px-2 text-left font-medium min-w-[160px]">Produto</th>
-                        <th className="py-3 px-2 text-left font-medium min-w-[100px]">Material</th>
+                        <th className="py-3 px-2 text-left font-medium min-w-[100px]">Categoria</th>
                         <th className="py-3 px-2 text-left font-medium whitespace-nowrap w-[88px]">Previsão</th>
                         <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Concluído em</th>
                         <th className="py-3 px-2 text-center font-medium whitespace-nowrap w-[116px]">Entregue em</th>
@@ -394,8 +397,11 @@ export default function ProductionSchedulePage() {
                               <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">{format(new Date(item.data), 'dd/MM/yy')}</td>
                               <td className="py-2.5 px-2 text-sm font-medium leading-tight">{item.cliente}</td>
                               <td className="py-2.5 px-2 text-xs text-muted-foreground max-w-[120px] truncate" title={item.obra}>{item.obra || <span>—</span>}</td>
-                              <td className="py-2.5 px-2 text-sm leading-tight">{item.produto}</td>
-                              <td className="py-2.5 px-2 text-xs text-muted-foreground">{item.material || <span>—</span>}</td>
+                              <td className="py-2.5 px-2 text-sm leading-tight">
+                                {item.produto}
+                                {item.material && <span className="text-xs text-muted-foreground"> — {item.material}</span>}
+                              </td>
+                              <td className="py-2.5 px-2 text-xs text-muted-foreground">{item.categoria || <span>—</span>}</td>
                               <td className="py-2.5 px-2 text-xs text-muted-foreground whitespace-nowrap">
                                 {item.previsao ? fmtPrevisao(item.previsao) : <span>—</span>}
                               </td>

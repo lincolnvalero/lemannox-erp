@@ -6,9 +6,11 @@ import type { QuoteItem, ScheduleItem, FabricadoItem } from '@/lib/types';
 
 const PRODUCTION_STATUSES = ['aprovado', 'produzindo', 'entregue'];
 
-function quoteToScheduleItems(quote: Record<string, unknown>): ScheduleItem[] {
+function quoteToScheduleItems(
+  quote: Record<string, unknown>,
+  productCategoryMap: Map<string, string>
+): ScheduleItem[] {
   const items = (quote.items ?? []) as QuoteItem[];
-  // Pega o os_number da tabela ordens_servico via join (mais confiável que quotes.os_number)
   const osRows = (quote.ordens_servico as { os_number: number }[] | null) ?? [];
   const osNumber = osRows.length > 0 ? osRows[0].os_number : ((quote.os_number as number) || undefined);
 
@@ -22,7 +24,8 @@ function quoteToScheduleItems(quote: Record<string, unknown>): ScheduleItem[] {
     obra: (quote.obra as string) || '',
     produto: item.name,
     material: item.material || '',
-    categoria: item.category || '',
+    // Categoria: campo no item > lookup via productId > vazio
+    categoria: item.category?.trim() || (item.productId ? productCategoryMap.get(item.productId) : undefined) || '',
     previsao: (quote.manufacturing_deadline as string) || (quote.delivery_time as string) || '',
     concluidoEm: item.productionStatus?.concluidoEm ?? null,
     entregueEm: item.productionStatus?.entregueEm ?? null,
@@ -36,6 +39,14 @@ export async function getProductionScheduleItems(): Promise<{
 }> {
   try {
     const supabase = await createClient();
+
+    // Lookup productId → categoria (igual ao getManufacturedItems)
+    const { data: productsData } = await supabase.from('products').select('id, category');
+    const productCategoryMap = new Map<string, string>();
+    for (const p of (productsData ?? []) as { id: string; category: string }[]) {
+      productCategoryMap.set(p.id, p.category);
+    }
+
     const { data, error } = await supabase
       .from('quotes')
       .select('id, quote_number, os_number, customer_name, obra, date, manufacturing_deadline, delivery_time, items, status, ordens_servico(os_number)')
@@ -43,7 +54,7 @@ export async function getProductionScheduleItems(): Promise<{
 
     if (error) throw error;
 
-    const scheduleItems: ScheduleItem[] = (data ?? []).flatMap(quoteToScheduleItems);
+    const scheduleItems: ScheduleItem[] = (data ?? []).flatMap(q => quoteToScheduleItems(q, productCategoryMap));
 
     // Ordena por previsão ascendente — mais antigas (mais urgentes) primeiro
     // Itens sem previsão ficam no final
@@ -178,14 +189,22 @@ export async function updateProductionItemDate(
       };
     });
 
+    const quoteUpdate: Record<string, unknown> = { items: updatedItems };
+
+    // Quando "Entregue em" é preenchido, atualiza status do orçamento para 'entregue'
+    if (status === 'entregueEm' && date) {
+      quoteUpdate.status = 'entregue';
+    }
+
     const { error: updateError } = await supabase
       .from('quotes')
-      .update({ items: updatedItems })
+      .update(quoteUpdate)
       .eq('id', quoteId);
 
     if (updateError) throw updateError;
 
     revalidatePath('/production');
+    revalidatePath('/quotes');
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar data de produção';

@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS public.quotes (
   customer_name TEXT NOT NULL,
   customer_details JSONB DEFAULT '{}'::jsonb,
   obra TEXT,
-  status TEXT DEFAULT 'rascunho' CHECK (status IN ('rascunho','enviado','aprovado','rejeitado','faturado','produzindo','entregue')),
+  status TEXT DEFAULT 'rascunho' CHECK (status IN ('rascunho','enviado','aprovado','rejeitado','faturado','produzindo','entregue','aguardando')),
   items JSONB NOT NULL DEFAULT '[]'::jsonb,
   subtotal NUMERIC(14,2) DEFAULT 0,
   total NUMERIC(14,2) DEFAULT 0,
