@@ -9,14 +9,12 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileDown, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, FileDown, RefreshCw, Search } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
@@ -67,7 +65,9 @@ export default function ProductionSchedulePage() {
   const [savingStatus, setSavingStatus] = useState<{[key: string]: boolean}>({});
   const [hideDelivered, setHideDelivered] = useState(true);
   const [clienteFilter, setClienteFilter] = useState('');
-  const [categoriaFilter, setCategoriaFilter] = useState('todos');
+  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
+  const [pendingCategorias, setPendingCategorias] = useState<string[]>([]);
+  const [categoriaPopoverOpen, setCategoriaPopoverOpen] = useState(false);
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
@@ -102,8 +102,8 @@ export default function ProductionSchedulePage() {
       const q = clienteFilter.trim().toLowerCase();
       items = items.filter(item => item.cliente.toLowerCase().includes(q));
     }
-    if (categoriaFilter !== 'todos') {
-      items = items.filter(item => item.categoria === categoriaFilter);
+    if (categoriaFilter.length > 0) {
+      items = items.filter(item => !!item.categoria && categoriaFilter.includes(item.categoria));
     }
     return [...items].sort((a, b) => {
       if (!a.previsao && !b.previsao) return 0;
@@ -111,7 +111,7 @@ export default function ProductionSchedulePage() {
       if (!b.previsao) return -1;
       return a.previsao.localeCompare(b.previsao);
     });
-  }, [schedule, hideDelivered, clienteFilter]);
+  }, [schedule, hideDelivered, clienteFilter, categoriaFilter]);
 
   const handleDateChange = async (
     item: ScheduleItem,
@@ -229,18 +229,75 @@ export default function ProductionSchedulePage() {
                     />
                   </div>
 
-                  {/* Filtro por categoria */}
-                  <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
-                    <SelectTrigger className="h-8 w-[200px] text-sm">
-                      <SelectValue placeholder="Todas as categorias" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todas as categorias</SelectItem>
-                      {availableCategories.map(cat => (
-                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Filtro por categoria (múltipla escolha) */}
+                  <Popover
+                    open={categoriaPopoverOpen}
+                    onOpenChange={(open) => {
+                      setCategoriaPopoverOpen(open);
+                      if (open) setPendingCategorias(categoriaFilter);
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-[200px] justify-between text-sm font-normal"
+                      >
+                        <span className="truncate">
+                          {categoriaFilter.length === 0
+                            ? 'Todas as categorias'
+                            : categoriaFilter.length === 1
+                              ? categoriaFilter[0]
+                              : `${categoriaFilter.length} categorias`}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0 ml-2" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[240px] p-3" align="start">
+                      <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                        {availableCategories.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Nenhuma categoria disponível.</p>
+                        ) : availableCategories.map(cat => (
+                          <div key={cat} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`cat-filter-${cat}`}
+                              checked={pendingCategorias.includes(cat!)}
+                              onCheckedChange={(checked) => {
+                                setPendingCategorias(prev =>
+                                  checked === true
+                                    ? [...prev, cat!]
+                                    : prev.filter(c => c !== cat)
+                                );
+                              }}
+                            />
+                            <Label htmlFor={`cat-filter-${cat}`} className="text-sm font-normal cursor-pointer">
+                              {cat}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setPendingCategorias([])}
+                        >
+                          Limpar
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-xs"
+                          onClick={() => {
+                            setCategoriaFilter(pendingCategorias);
+                            setCategoriaPopoverOpen(false);
+                          }}
+                        >
+                          Aplicar
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
 
                   {!loading && (
                     <span className="text-xs text-muted-foreground ml-auto">

@@ -1,7 +1,7 @@
 -- ============================================================
 -- LEMANNOX ERP — Supabase Schema
 -- Execute este SQL no SQL Editor do Supabase Dashboard
--- URL: https://supabase.com/dashboard/project/wlxemvvynvzfscebkpeh/sql
+-- URL: https://supabase.com/dashboard/project/stwsvwkiufupjzigmkwl/sql
 -- ============================================================
 
 -- Enable UUID extension
