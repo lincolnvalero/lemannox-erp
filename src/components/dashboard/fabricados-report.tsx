@@ -26,6 +26,25 @@ type ClientGroup = {
   total: number;
 };
 
+type CategorySummary = {
+  categoria: string;
+  qty: number;
+  total: number;
+};
+
+// Resumo geral por categoria, somando todos os clientes do período — maior valor primeiro.
+function summarizeByCategory(items: FabricadoItem[]): CategorySummary[] {
+  const map = new Map<string, CategorySummary>();
+  for (const it of items) {
+    const key = it.categoria || 'Sem categoria';
+    const cur = map.get(key) ?? { categoria: key, qty: 0, total: 0 };
+    cur.qty += Number(it.quantidade) || 1;
+    cur.total += it.valor;
+    map.set(key, cur);
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+}
+
 function groupData(items: FabricadoItem[]): ClientGroup[] {
   const clientMap = new Map<string, Map<string, FabricadoItem[]>>();
 
@@ -86,6 +105,7 @@ function fmtDateBR(ymd: string): string {
 // ─── HTML de impressão ─────────────────────────────────────────
 function generatePrintHtml(
   groups: ClientGroup[],
+  categorySummary: CategorySummary[],
   grand: { qty: number; total: number },
   startDate: string,
   endDate: string
@@ -128,6 +148,18 @@ function generatePrintHtml(
         <td class="right mono">${formatCurrency(g.total)}</td>
       </tr>`;
     })
+    .join('');
+
+  const summaryRows = categorySummary
+    .map(
+      (c) => `
+    <tr class="subtotal">
+      <td colspan="4">${c.categoria} — ${c.qty} unidade${c.qty !== 1 ? 's' : ''}</td>
+      <td class="right">Total</td>
+      <td></td>
+      <td class="right mono">${formatCurrency(c.total)}</td>
+    </tr>`
+    )
     .join('');
 
   return `<!DOCTYPE html>
@@ -206,6 +238,21 @@ function generatePrintHtml(
     </tr>
   </tbody>
 </table>
+
+<div style="margin-top:10mm">
+  <div style="font-size:11pt;font-weight:700;color:#1e3a5f;margin-bottom:2mm;">Resumo Geral por Categoria</div>
+  <table>
+    <tbody>
+      ${summaryRows}
+      <tr class="grand">
+        <td colspan="4">Total Geral — ${grand.qty} unidade${grand.qty !== 1 ? 's' : ''}</td>
+        <td class="right">Total</td>
+        <td></td>
+        <td class="right mono">${formatCurrency(grand.total)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 </body>
 </html>`;
 }
@@ -228,6 +275,7 @@ export function FabricadosReport() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const groups = useMemo(() => groupData(items), [items]);
+  const categorySummary = useMemo(() => summarizeByCategory(items), [items]);
   const grand = useMemo(
     () => ({
       qty: items.reduce((s, i) => s + (Number(i.quantidade) || 1), 0),
@@ -355,6 +403,61 @@ export function FabricadosReport() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const s = data.cell.styles as any;
             if (!s.fillColor) s.fillColor = [250, 250, 250];
+          }
+        },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mainTableEndY = (doc as any).lastAutoTable.finalY as number;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let summaryY = mainTableEndY + 12;
+      if (summaryY > pageHeight - 40) {
+        doc.addPage();
+        summaryY = 20;
+      }
+
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Resumo Geral por Categoria', 14, summaryY);
+
+      const summaryBody: AutoRow[] = categorySummary.map((c) => [
+        { content: `${c.categoria} — ${c.qty} unidade${c.qty !== 1 ? 's' : ''}`, colSpan: 4 },
+        { content: 'Total', styles: { halign: 'right' } },
+        { content: '' },
+        { content: formatCurrency(c.total), styles: { halign: 'right' } },
+      ]);
+      summaryBody.push([
+        {
+          content: `Total Geral — ${grand.qty} unidade${grand.qty !== 1 ? 's' : ''}`,
+          colSpan: 4,
+          styles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        },
+        {
+          content: 'Total',
+          styles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, halign: 'right' },
+        },
+        { content: '', styles: { fillColor: [30, 58, 95] } },
+        {
+          content: formatCurrency(grand.total),
+          styles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, halign: 'right' },
+        },
+      ]);
+
+      autoTable(doc, {
+        startY: summaryY + 4,
+        body: summaryBody,
+        styles: { fontSize: 8, cellPadding: 3 },
+        columnStyles: { 3: { cellWidth: 32, font: 'courier' } },
+        didParseCell: (data) => {
+          if (data.row.index % 2 === 0 && data.row.index !== categorySummary.length) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const s = data.cell.styles as any;
+            if (!s.fillColor) s.fillColor = [250, 250, 250];
+          } else if (data.row.index !== categorySummary.length) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const s = data.cell.styles as any;
+            if (!s.fillColor) s.fillColor = [240, 240, 240];
           }
         },
       });
@@ -539,6 +642,40 @@ export function FabricadosReport() {
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-sm">Total</td>
                     <td></td>
+                    <td className="py-3 px-3 text-right font-bold font-mono text-base">
+                      {formatCurrency(grand.total)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Resumo geral por categoria */}
+          <div className="rounded-lg border overflow-hidden">
+            <div className="px-4 py-3 border-b bg-muted/30">
+              <h3 className="font-semibold text-sm">Resumo Geral por Categoria</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50 text-muted-foreground">
+                    <th className="py-2.5 px-3 text-left font-medium">Categoria</th>
+                    <th className="py-2.5 px-3 text-center font-medium w-[100px]">Qtd.</th>
+                    <th className="py-2.5 px-3 text-right font-medium w-[140px]">Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categorySummary.map((c) => (
+                    <tr key={c.categoria} className="border-b border-border/30">
+                      <td className="py-2 px-3">{c.categoria}</td>
+                      <td className="py-2 px-3 text-center font-mono">{c.qty}</td>
+                      <td className="py-2 px-3 text-right font-mono">{formatCurrency(c.total)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-primary/10 border-t-2 border-primary/30">
+                    <td className="py-3 px-3 font-bold text-sm">Total Geral</td>
+                    <td className="py-3 px-3 text-center font-bold font-mono text-sm">{grand.qty}</td>
                     <td className="py-3 px-3 text-right font-bold font-mono text-base">
                       {formatCurrency(grand.total)}
                     </td>
