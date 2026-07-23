@@ -49,7 +49,7 @@ function groupData(items: FabricadoItem[]): ClientGroup[] {
         return {
           categoria,
           items: sorted,
-          qty: sorted.reduce((s, i) => s + (i.quantidade || 1), 0),
+          qty: sorted.reduce((s, i) => s + (Number(i.quantidade) || 1), 0),
           total: sorted.reduce((s, i) => s + i.valor, 0),
         };
       })
@@ -230,7 +230,7 @@ export function FabricadosReport() {
   const groups = useMemo(() => groupData(items), [items]);
   const grand = useMemo(
     () => ({
-      qty: items.reduce((s, i) => s + (i.quantidade || 1), 0),
+      qty: items.reduce((s, i) => s + (Number(i.quantidade) || 1), 0),
       total: items.reduce((s, i) => s + i.valor, 0),
     }),
     [items]

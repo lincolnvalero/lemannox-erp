@@ -48,6 +48,7 @@ import {
 import { ExportProductsPdfDialog } from '@/components/dashboard/export-products-pdf-dialog';
 import { getProducts, deleteProduct, bulkUpdatePrices, updateProductPrice } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PRODUCT_GROUPS, resolveProductGroup } from '@/lib/product-groups';
 
 const materialColumns = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 
@@ -385,21 +386,10 @@ export default function ProductsPage() {
 
   const currentCategories = useMemo(() => {
     if (productGroup === 'all') return allCategories;
-    const coifaCats = ['Coifa de Cozinha', 'Coifa de Churrasqueira'];
-    const grillCats: string[] = ['Grill'];
-    const grelhaCats: string[] = ['Grelha'];
-    const caixaCats: string[] = ['Caixa Refratária'];
-    const outrosCats: string[] = ['Outros'];
-    const complementCats = allCategories.filter(c => !coifaCats.includes(c) && !grillCats.includes(c) && !grelhaCats.includes(c) && !caixaCats.includes(c) && !outrosCats.includes(c));
-    
-    if (productGroup === 'coifas') return coifaCats.filter(c => allCategories.includes(c));
-    if (productGroup === 'grills') return grillCats.filter(c => allCategories.includes(c));
-    if (productGroup === 'grelhas') return grelhaCats.filter(c => allCategories.includes(c));
-    if (productGroup === 'caixas') return caixaCats.filter(c => allCategories.includes(c));
-    if (productGroup === 'complementos') return complementCats;
-    if (productGroup === 'outros') return outrosCats.filter(c => allCategories.includes(c));
-    return [];
-  }, [productGroup, allCategories]);
+    return Array.from(new Set(
+      products.filter(p => resolveProductGroup(p) === productGroup).map(p => p.category)
+    )).sort();
+  }, [productGroup, allCategories, products]);
 
   const currentModels = useMemo(() => {
       if (categoryFilter === 'all') return [];
@@ -408,34 +398,12 @@ export default function ProductsPage() {
   
   const filteredProducts = useMemo(() => {
       return searchedProducts.filter(p => {
-          let groupMatch = true;
-          if (productGroup !== 'all') {
-              const coifaCats = ['Coifa de Cozinha', 'Coifa de Churrasqueira'];
-              const grillCats: string[] = ['Grill'];
-              const grelhaCats: string[] = ['Grelha'];
-              const caixaCats: string[] = ['Caixa Refratária'];
-              const outrosCats: string[] = ['Outros'];
-              
-              if (productGroup === 'coifas') {
-                  groupMatch = coifaCats.includes(p.category);
-              } else if (productGroup === 'grills') {
-                  groupMatch = grillCats.includes(p.category);
-              } else if (productGroup === 'grelhas') {
-                  groupMatch = grelhaCats.includes(p.category);
-              } else if (productGroup === 'caixas') {
-                  groupMatch = caixaCats.includes(p.category);
-              } else if (productGroup === 'outros') {
-                  groupMatch = outrosCats.includes(p.category);
-              } else if (productGroup === 'complementos') {
-                  groupMatch = !coifaCats.includes(p.category) && !grillCats.includes(p.category) && !grelhaCats.includes(p.category) && !caixaCats.includes(p.category) && !outrosCats.includes(p.category);
-              }
-          }
-          
+          const groupMatch = productGroup === 'all' || resolveProductGroup(p) === productGroup;
           if (!groupMatch) return false;
-          
+
           const categoryMatch = categoryFilter === 'all' || p.category === categoryFilter;
           const modelMatch = modelFilter === 'all' || p.model === modelFilter;
-          
+
           return categoryMatch && modelMatch;
       });
   }, [searchedProducts, productGroup, categoryFilter, modelFilter]);
@@ -555,12 +523,9 @@ export default function ProductsPage() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Todos os Grupos</SelectItem>
-                            <SelectItem value="coifas">Coifas</SelectItem>
-                            <SelectItem value="grills">Grills</SelectItem>
-                            <SelectItem value="grelhas">Grelhas</SelectItem>
-                            <SelectItem value="caixas">Caixas Refratárias</SelectItem>
-                            <SelectItem value="complementos">Complementos</SelectItem>
-                            <SelectItem value="outros">Outros</SelectItem>
+                            {PRODUCT_GROUPS.map((g) => (
+                              <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     {productGroup !== 'all' && (

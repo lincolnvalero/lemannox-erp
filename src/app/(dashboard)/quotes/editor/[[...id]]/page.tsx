@@ -56,6 +56,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
 import { OsEditor } from '@/components/dashboard/os-editor';
+import { PRODUCT_GROUPS, resolveProductGroup } from '@/lib/product-groups';
 
 
 const quoteItemSchema = z.object({
@@ -179,7 +180,17 @@ export default function QuoteEditorPage() {
     setAutoSaveState('saving');
     try {
       const data = form.getValues();
-      await upsertQuote(data, quoteId);
+      // Os inputs de quantidade/preço não coagem para número via register() —
+      // sem isso, o autosave grava strings no JSONB (diferente do submit manual, que passa pelo zod).
+      const normalizedData = {
+        ...data,
+        items: data.items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+        })),
+      };
+      await upsertQuote(normalizedData, quoteId);
       setAutoSaveState('saved');
       setTimeout(() => setAutoSaveState('idle'), 3000);
     } catch {
@@ -368,29 +379,12 @@ export default function QuoteEditorPage() {
   }
 
   // Add Product Logic
-  const productGroups = [
-    { value: 'coifas', label: 'Coifas' },
-    { value: 'grills', label: 'Grills' },
-    { value: 'grelhas', label: 'Grelha' },
-    { value: 'caixas', label: 'Caixa Refratária' },
-    { value: 'complementos', label: 'Complemento' },
-    { value: 'outros', label: 'Outros' }
-  ];
-
-  const groupToCategoryMap: Record<string, Product['category'][]> = {
-    coifas: ['Coifa de Cozinha', 'Coifa de Churrasqueira'],
-    grills: ['Grill'],
-    grelhas: ['Grelha'],
-    caixas: ['Caixa Refratária'],
-    complementos: ['Complemento'],
-    outros: ['Outros'],
-  };
+  const productGroups = PRODUCT_GROUPS;
 
   const availableCategories = useMemo(() => {
     if (!addItemGroup) return [];
-    const categoriesForGroup = groupToCategoryMap[addItemGroup] || [];
     return Array.from(new Set(products
-        .filter(p => categoriesForGroup.includes(p.category))
+        .filter(p => resolveProductGroup(p) === addItemGroup)
         .map(p => p.category)
     )).sort();
   }, [addItemGroup, products]);

@@ -6,6 +6,7 @@ export type ProductVariation = {
 
 export type Product = {
   id: string;
+  group?: string;
   category: string;
   model: string;
   measurement: string;

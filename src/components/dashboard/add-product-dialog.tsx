@@ -30,11 +30,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Product } from "@/lib/types";
 import { upsertProduct } from "@/app/(dashboard)/products/actions";
+import { PRODUCT_GROUPS, resolveProductGroup } from "@/lib/product-groups";
 
 const MATERIALS = ["Inox 430", "Inox 304", "Aço Carbono"] as const;
 const NEW_CATEGORY_VALUE = "__nova__";
 
 const schema = z.object({
+  group: z.string().min(1, "Grupo obrigatório"),
   category: z.string().min(1, "Categoria obrigatória"),
   newCategory: z.string().optional(),
   model: z.string().min(1, "Modelo obrigatório"),
@@ -67,6 +69,7 @@ export function AddProductDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      group: "",
       category: "",
       newCategory: "",
       model: "",
@@ -92,6 +95,7 @@ export function AddProductDialog({
         editingProduct.variations.find((v) => v.material === material)?.price;
 
       form.reset({
+        group: resolveProductGroup(editingProduct),
         category: editingProduct.category,
         newCategory: "",
         model: editingProduct.model,
@@ -103,6 +107,7 @@ export function AddProductDialog({
       });
     } else {
       form.reset({
+        group: "",
         category: "",
         newCategory: "",
         model: "",
@@ -138,6 +143,7 @@ export function AddProductDialog({
 
     const fd = new FormData();
     if (editingProduct?.id) fd.append("id", editingProduct.id);
+    fd.append("group", values.group);
     fd.append("category", finalCategory);
     fd.append("model", values.model);
     fd.append("measurement", values.measurement);
@@ -162,6 +168,31 @@ export function AddProductDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="group"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Grupo</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                        <SelectValue placeholder="Selecione um grupo" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="bg-zinc-800 border-zinc-700">
+                      {PRODUCT_GROUPS.map((g) => (
+                        <SelectItem key={g.value} value={g.value}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="category"

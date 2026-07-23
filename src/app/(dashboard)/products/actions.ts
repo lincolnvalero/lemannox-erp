@@ -7,6 +7,7 @@ import type { Product, ProductVariation } from '@/lib/types';
 function rowToProduct(row: Record<string, unknown>): Product {
   return {
     id: row.id as string,
+    group: (row.product_group as string) || undefined,
     category: row.category as string,
     model: row.model as string,
     measurement: row.measurement as string,
@@ -46,6 +47,7 @@ export async function upsertProduct(
       model: formData.get('model') as string,
       measurement: formData.get('measurement') as string,
       category: formData.get('category') as string,
+      product_group: (formData.get('group') as string) || null,
       variations,
     };
     if (id) payload.id = id;

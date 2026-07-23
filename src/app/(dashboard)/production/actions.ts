@@ -129,7 +129,7 @@ export async function getManufacturedItems(
           cliente: (quote.customer_name as string) || '—',
           categoria,
           produto: item.name,
-          quantidade: item.quantity || 1,
+          quantidade: Number(item.quantity) || 1,
           valor: item.total || 0,
           dataConclusao: isoData,
         });
