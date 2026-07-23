@@ -34,9 +34,11 @@ import { PRODUCT_GROUPS, resolveProductGroup } from "@/lib/product-groups";
 
 const MATERIALS = ["Inox 430", "Inox 304", "Aço Carbono"] as const;
 const NEW_CATEGORY_VALUE = "__nova__";
+const NEW_GROUP_VALUE = "__novo_grupo__";
 
 const schema = z.object({
   group: z.string().min(1, "Grupo obrigatório"),
+  newGroup: z.string().optional(),
   category: z.string().min(1, "Categoria obrigatória"),
   newCategory: z.string().optional(),
   model: z.string().min(1, "Modelo obrigatório"),
@@ -54,6 +56,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   editingProduct: Product | null;
   categories: string[];
+  customGroups: string[];
   onSaveSuccess: () => void;
 }
 
@@ -62,6 +65,7 @@ export function AddProductDialog({
   onOpenChange,
   editingProduct,
   categories,
+  customGroups,
   onSaveSuccess,
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -70,6 +74,7 @@ export function AddProductDialog({
     resolver: zodResolver(schema),
     defaultValues: {
       group: "",
+      newGroup: "",
       category: "",
       newCategory: "",
       model: "",
@@ -81,6 +86,7 @@ export function AddProductDialog({
     },
   });
 
+  const watchedGroup = form.watch("group");
   const watchedCategory = form.watch("category");
   const watchedNewCategory = form.watch("newCategory");
   const isOthers =
@@ -96,6 +102,7 @@ export function AddProductDialog({
 
       form.reset({
         group: resolveProductGroup(editingProduct),
+        newGroup: "",
         category: editingProduct.category,
         newCategory: "",
         model: editingProduct.model,
@@ -108,6 +115,7 @@ export function AddProductDialog({
     } else {
       form.reset({
         group: "",
+        newGroup: "",
         category: "",
         newCategory: "",
         model: "",
@@ -122,6 +130,9 @@ export function AddProductDialog({
 
   async function onSubmit(values: FormValues) {
     setLoading(true);
+
+    const finalGroup =
+      values.group === NEW_GROUP_VALUE ? (values.newGroup ?? "") : values.group;
 
     const finalCategory =
       values.category === NEW_CATEGORY_VALUE
@@ -143,7 +154,7 @@ export function AddProductDialog({
 
     const fd = new FormData();
     if (editingProduct?.id) fd.append("id", editingProduct.id);
-    fd.append("group", values.group);
+    fd.append("group", finalGroup);
     fd.append("category", finalCategory);
     fd.append("model", values.model);
     fd.append("measurement", values.measurement);
@@ -186,12 +197,38 @@ export function AddProductDialog({
                           {g.label}
                         </SelectItem>
                       ))}
+                      {customGroups.map((g) => (
+                        <SelectItem key={g} value={g}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={NEW_GROUP_VALUE}>+ Novo grupo</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {watchedGroup === NEW_GROUP_VALUE && (
+              <FormField
+                control={form.control}
+                name="newGroup"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do novo grupo</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-800 border-zinc-700"
+                        placeholder="Ex: Persianas"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

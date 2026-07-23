@@ -48,7 +48,7 @@ import {
 import { ExportProductsPdfDialog } from '@/components/dashboard/export-products-pdf-dialog';
 import { getProducts, deleteProduct, bulkUpdatePrices, updateProductPrice } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PRODUCT_GROUPS, resolveProductGroup } from '@/lib/product-groups';
+import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
 
 const materialColumns = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 
@@ -378,6 +378,7 @@ export default function ProductsPage() {
   };
   
   const allCategories = useMemo(() => Array.from(new Set(products.map((p) => p.category as string))).filter(Boolean).sort(), [products]);
+  const customGroups = useMemo(() => collectCustomGroups(products), [products]);
   const allModels = useMemo(() => Array.from(new Set(products.map((p) => p.model as string))).filter(Boolean).sort(), [products]);
 
   const searchedProducts = useMemo(() => products.filter((product) =>
@@ -416,6 +417,7 @@ export default function ProductsPage() {
         onOpenChange={setIsDialogOpen}
         editingProduct={editingProduct}
         categories={allCategories}
+        customGroups={customGroups}
         onSaveSuccess={handleSaveSuccess}
       />
       <AlertDialog
@@ -525,6 +527,9 @@ export default function ProductsPage() {
                             <SelectItem value="all">Todos os Grupos</SelectItem>
                             {PRODUCT_GROUPS.map((g) => (
                               <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                            ))}
+                            {customGroups.map((g) => (
+                              <SelectItem key={g} value={g}>{g}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>

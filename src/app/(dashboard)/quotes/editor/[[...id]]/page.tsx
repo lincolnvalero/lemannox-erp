@@ -56,7 +56,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
 import { OsEditor } from '@/components/dashboard/os-editor';
-import { PRODUCT_GROUPS, resolveProductGroup } from '@/lib/product-groups';
+import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
 
 
 const quoteItemSchema = z.object({
@@ -379,7 +379,13 @@ export default function QuoteEditorPage() {
   }
 
   // Add Product Logic
-  const productGroups = PRODUCT_GROUPS;
+  const productGroups = useMemo(
+    () => [
+      ...PRODUCT_GROUPS,
+      ...collectCustomGroups(products).map((g) => ({ value: g, label: g })),
+    ],
+    [products]
+  );
 
   const availableCategories = useMemo(() => {
     if (!addItemGroup) return [];
