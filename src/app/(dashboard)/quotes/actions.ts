@@ -120,7 +120,7 @@ export async function upsertQuote(
       total,
       freight: freight || null,
       discount: discount || null,
-      date: new Date().toISOString().split('T')[0], // sempre a data de emissão/reemissão
+      date: (data.date as string) || new Date().toISOString().split('T')[0],
       expiry_date: (data.expiryDate as string) || null,
       delivery_time: (data.deliveryTime as string) || null,
       manufacturing_deadline: (data.manufacturingDeadline as string) || null,
