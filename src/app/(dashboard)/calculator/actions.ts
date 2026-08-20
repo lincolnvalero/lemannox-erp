@@ -100,8 +100,12 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
 
         for (const material of MATERIAIS) {
           try {
+            // Profundidade/altura padrão (não a mesma medida da largura — uma
+            // coifa de 3000mm de largura não tem 3000mm de profundidade; usar
+            // o mesmo valor nas três dimensões estourava a chapa nas medidas
+            // maiores, somado à folga de solda).
             const result = calculateCoifa({
-              width: medida, depth: medida, height: medida,
+              width: medida, depth: 700, height: 600,
               modelo: linha.modelo,
               materialFrenteLaterais: material, materialCostas: material, materialTeto: material,
               tipoAplicacao: 'Cozinha', tipoInstalacao: linha.instalacao,
