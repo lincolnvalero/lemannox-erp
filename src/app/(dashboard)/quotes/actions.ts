@@ -3,6 +3,42 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
 import type { Quote, QuoteItem } from '@/lib/types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// Cria o lançamento em Contas a Receber na primeira vez que um orçamento é
+// aprovado. Idempotente por related_id — se já existir um lançamento para
+// este orçamento, não cria outro (mesmo que o status seja revertido e
+// aprovado de novo depois). O valor e a data ficam travados no momento da
+// aprovação: mudanças posteriores no orçamento não tocam este lançamento.
+async function ensureReceivableForApprovedQuote(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  quote: { id: string; quote_number: number; total: number; trade_name?: string; customer_name?: string; status: string }
+) {
+  if (quote.status !== 'aprovado') return;
+
+  const { data: existing } = await supabase
+    .from('financial_transactions')
+    .select('id')
+    .eq('related_type', 'conta_receber')
+    .eq('related_id', quote.id)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const customerLabel = quote.trade_name || quote.customer_name || 'Cliente';
+
+  await supabase.from('financial_transactions').insert({
+    description: `Venda a ${customerLabel} ref. Pedido ${quote.quote_number}`,
+    amount: quote.total,
+    type: 'entrada',
+    category: 'Contas a Receber',
+    transaction_date: new Date().toISOString().split('T')[0],
+    status: 'pendente',
+    related_type: 'conta_receber',
+    related_id: quote.id,
+  });
+}
 
 function rowToQuote(row: Record<string, unknown>): Quote {
   return {
@@ -170,8 +206,17 @@ export async function upsertQuote(
       }
     }
 
+    await ensureReceivableForApprovedQuote(supabase, {
+      id: saved.id as string,
+      quote_number: saved.quote_number as number,
+      total: saved.total as number,
+      trade_name: resolvedCustomerName,
+      status: saved.status as string,
+    });
+
     revalidatePath('/quotes');
     revalidatePath('/production');
+    revalidatePath('/financeiro', 'layout');
     return { success: true, quote: rowToQuote(saved) };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao salvar orçamento';
@@ -224,8 +269,17 @@ export async function updateQuoteStatus(
       }
     }
 
+    await ensureReceivableForApprovedQuote(supabase, {
+      id: data.id,
+      quote_number: data.quote_number,
+      total: data.total,
+      trade_name: data.customer_name,
+      status: data.status,
+    });
+
     revalidatePath('/quotes');
     revalidatePath('/production');
+    revalidatePath('/financeiro', 'layout');
     return { success: true, quote: rowToQuote(data) };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar status';

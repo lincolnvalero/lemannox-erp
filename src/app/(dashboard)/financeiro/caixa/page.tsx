@@ -36,6 +36,7 @@ import { formatCurrency, cn } from '@/lib/utils';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import {
   getTransactionsBySource, getAccounts, deleteTransaction, upsertTransaction, getTransaction,
+  findReceivableByQuoteNumber, receiveAgainstQuote,
 } from '../actions';
 import {
   ArrowDownCircle, ArrowUpCircle, FileDown, FilePenLine,
@@ -54,6 +55,7 @@ const formSchema = z.object({
   transactionDate: z.string().min(1, 'A data da transação é obrigatória.'),
   status: z.enum(['pago', 'pendente']),
   dueDate: z.string().optional(),
+  pedidoNumber: z.string().optional(),
 });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -350,6 +352,12 @@ function NovaTransacaoTab({
 }) {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [receivable, setReceivable] = useState<{
+    transactionId: string;
+    customerLabel: string;
+    pendingAmount: number;
+  } | null>(null);
+  const [lookingUpPedido, setLookingUpPedido] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -361,11 +369,13 @@ function NovaTransacaoTab({
       transactionDate: formatDate(new Date(), 'yyyy-MM-dd'),
       status: 'pago',
       dueDate: '',
+      pedidoNumber: '',
     },
   });
 
   const watchedType = form.watch('type');
   const watchedStatus = form.watch('status');
+  const watchedPedido = form.watch('pedidoNumber');
 
   const categories = useMemo(() =>
     accounts.filter(a => a.type === watchedType).map(a => a.name).sort(),
@@ -376,8 +386,59 @@ function NovaTransacaoTab({
     form.setValue('category', '');
   }, [watchedType, form]);
 
+  useEffect(() => {
+    if (watchedType !== 'entrada') setReceivable(null);
+  }, [watchedType]);
+
+  const handlePedidoLookup = async () => {
+    const n = Number(watchedPedido);
+    if (!watchedPedido || Number.isNaN(n)) {
+      setReceivable(null);
+      return;
+    }
+    setLookingUpPedido(true);
+    const result = await findReceivableByQuoteNumber(n);
+    setLookingUpPedido(false);
+    if (result.success && result.receivable) {
+      setReceivable(result.receivable);
+      form.setValue('description', `Recebido de ${result.receivable.customerLabel} ref. Pedido ${n}`);
+      form.setValue('amount', result.receivable.pendingAmount);
+      form.setValue('status', 'pago');
+      if (accounts.some(a => a.type === 'entrada' && a.name === 'Contas a Receber')) {
+        form.setValue('category', 'Contas a Receber');
+      }
+    } else {
+      setReceivable(null);
+      toast({ variant: 'destructive', title: 'Pedido não localizado', description: result.error });
+    }
+  };
+
   async function onSubmit(values: FormValues) {
     setIsSaving(true);
+
+    if (values.type === 'entrada' && receivable) {
+      const result = await receiveAgainstQuote({
+        transactionId: receivable.transactionId,
+        amount: values.amount,
+        description: values.description,
+        category: values.category,
+        transactionDate: values.transactionDate,
+      });
+      if (result.success) {
+        toast({ title: 'Recebimento registrado e Contas a Receber atualizado!' });
+        form.reset({
+          description: '', amount: 0, type: 'saida', category: '',
+          transactionDate: formatDate(new Date(), 'yyyy-MM-dd'), status: 'pago', dueDate: '', pedidoNumber: '',
+        });
+        setReceivable(null);
+        onSuccess();
+      } else {
+        toast({ variant: 'destructive', title: 'Erro ao Salvar', description: result.error });
+      }
+      setIsSaving(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('description', values.description);
     formData.append('amount', String(values.amount));
@@ -393,8 +454,9 @@ function NovaTransacaoTab({
       toast({ title: 'Lançamento adicionado com sucesso!' });
       form.reset({
         description: '', amount: 0, type: 'saida', category: '',
-        transactionDate: formatDate(new Date(), 'yyyy-MM-dd'), status: 'pago', dueDate: '',
+        transactionDate: formatDate(new Date(), 'yyyy-MM-dd'), status: 'pago', dueDate: '', pedidoNumber: '',
       });
+      setReceivable(null);
       onSuccess();
     } else {
       toast({ variant: 'destructive', title: 'Erro ao Salvar', description: result.error });
@@ -411,6 +473,34 @@ function NovaTransacaoTab({
             <CardDescription>Preencha os detalhes para registrar um novo lançamento no caixa.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {watchedType === 'entrada' && (
+              <div className="space-y-2 rounded-md border p-4 bg-muted/30">
+                <FormField control={form.control} name="pedidoNumber" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nº do Pedido (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Ex: 1753"
+                        {...field}
+                        onBlur={(e) => { field.onBlur(); handlePedidoLookup(); void e; }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {lookingUpPedido && (
+                  <p className="text-xs text-muted-foreground">Procurando pedido...</p>
+                )}
+                {receivable && (
+                  <p className="text-xs text-green-500">
+                    {receivable.customerLabel} — saldo pendente: {formatCurrency(receivable.pendingAmount)}.
+                    Descrição e valor preenchidos automaticamente; ajuste o valor se o recebimento for parcial.
+                  </p>
+                )}
+              </div>
+            )}
+
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
                 <FormLabel>Descrição</FormLabel>

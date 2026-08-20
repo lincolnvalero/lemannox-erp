@@ -256,6 +256,120 @@ export async function upsertAccount(formData: FormData): Promise<{
   }
 }
 
+// ── Baixa de Contas a Receber via Controle do Caixa ─────────────────────────
+
+// Busca o lançamento pendente de Contas a Receber vinculado a um número de
+// Pedido (orçamento), para o Caixa oferecer a baixa automática.
+export async function findReceivableByQuoteNumber(quoteNumber: number): Promise<{
+  success: boolean;
+  receivable?: {
+    transactionId: string;
+    quoteId: string;
+    customerLabel: string;
+    pendingAmount: number;
+  };
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+
+    const { data: quote, error: quoteError } = await supabase
+      .from('quotes')
+      .select('id, trade_name, customer_name')
+      .eq('quote_number', quoteNumber)
+      .maybeSingle();
+
+    if (quoteError) throw quoteError;
+    if (!quote) return { success: false, error: `Pedido #${quoteNumber} não encontrado.` };
+
+    const { data: tx, error: txError } = await supabase
+      .from('financial_transactions')
+      .select('id, amount')
+      .eq('related_type', 'conta_receber')
+      .eq('related_id', quote.id)
+      .eq('status', 'pendente')
+      .maybeSingle();
+
+    if (txError) throw txError;
+    if (!tx) return { success: false, error: `Pedido #${quoteNumber} não tem Contas a Receber pendente.` };
+
+    return {
+      success: true,
+      receivable: {
+        transactionId: tx.id,
+        quoteId: quote.id,
+        customerLabel: (quote as { trade_name?: string; customer_name?: string }).trade_name
+          || (quote as { customer_name?: string }).customer_name
+          || 'Cliente',
+        pendingAmount: tx.amount,
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar Contas a Receber do pedido';
+    return { success: false, error: message };
+  }
+}
+
+// Lança o recebimento no Caixa e dá baixa (total ou parcial) no Contas a
+// Receber vinculado. Se o valor recebido zerar o saldo, o status vira "pago"
+// (Quitado); se sobrar saldo, o lançamento original é atualizado com o valor
+// restante e continua "pendente".
+export async function receiveAgainstQuote(input: {
+  transactionId: string;
+  amount: number;
+  description: string;
+  category: string;
+  transactionDate: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    const { data: receivable, error: fetchError } = await supabase
+      .from('financial_transactions')
+      .select('id, amount, related_id')
+      .eq('id', input.transactionId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const remaining = Math.round((receivable.amount - input.amount) * 100) / 100;
+
+    // Lançamento de entrada no Caixa (é este que compõe o saldo do Caixa).
+    const { error: insertError } = await supabase.from('financial_transactions').insert({
+      description: input.description,
+      amount: input.amount,
+      type: 'entrada',
+      category: input.category,
+      transaction_date: input.transactionDate,
+      status: 'pago',
+      related_type: 'caixa',
+      related_id: receivable.related_id,
+    });
+    if (insertError) throw insertError;
+
+    // Baixa no Contas a Receber original.
+    if (remaining <= 0.01) {
+      const { error: updateError } = await supabase
+        .from('financial_transactions')
+        .update({ status: 'pago', amount: 0 })
+        .eq('id', receivable.id);
+      if (updateError) throw updateError;
+    } else {
+      const { error: updateError } = await supabase
+        .from('financial_transactions')
+        .update({ amount: remaining })
+        .eq('id', receivable.id);
+      if (updateError) throw updateError;
+    }
+
+    revalidatePath('/financeiro', 'layout');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao registrar recebimento';
+    return { success: false, error: message };
+  }
+}
+
 export async function deleteAccount(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();

@@ -15,11 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, AlertTriangle, Clock, Plus, Save, Trash2, FilePenLine, ArrowUpCircle, History } from 'lucide-react';
+import { AlertTriangle, Clock, Plus, Save, Trash2, FilePenLine, ArrowUpCircle, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
-import { getPendingTransactions, markAsPaid, getAccounts, upsertTransaction, deleteTransaction, getTransactionsBySource } from '../actions';
+import { getPendingTransactions, getAccounts, upsertTransaction, deleteTransaction, getTransactionsBySource } from '../actions';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import { format as fmtDate } from 'date-fns';
 import Link from 'next/link';
@@ -50,7 +50,6 @@ export default function ContasAReceberPage() {
   const [historico, setHistorico] = useState<FinancialTransaction[]>([]);
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [receiving, setReceiving] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<FinancialTransaction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,18 +103,6 @@ export default function ContasAReceberPage() {
       toast({ variant: 'destructive', title: 'Erro', description: result.error });
     }
     setSaving(false);
-  };
-
-  const handleReceive = async (t: FinancialTransaction) => {
-    setReceiving(t.id);
-    const result = await markAsPaid(t.id);
-    if (result.success) {
-      toast({ title: 'Recebimento confirmado!', description: `"${t.description}" registrado como recebido.` });
-      load();
-    } else {
-      toast({ variant: 'destructive', title: 'Erro', description: result.error });
-    }
-    setReceiving(null);
   };
 
   const handleDelete = async () => {
@@ -264,7 +251,7 @@ export default function ContasAReceberPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Recebimentos Pendentes</CardTitle>
-                <CardDescription>Ordenados por vencimento. Use o Controle do Caixa para lançar manualmente após o recebimento.</CardDescription>
+                <CardDescription>Ordenados por vencimento. A baixa é automática: lance o recebimento no Controle do Caixa informando o Nº do Pedido.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -275,19 +262,18 @@ export default function ContasAReceberPage() {
                       <TableHead>Lançamento</TableHead>
                       <TableHead>Previsão</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       Array.from({ length: 5 }).map((_, i) => (
                         <TableRow key={i}>
-                          {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
+                          {Array.from({ length: 5 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
                         </TableRow>
                       ))
                     ) : items.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                           Nenhum recebimento pendente.
                         </TableCell>
                       </TableRow>
@@ -310,20 +296,6 @@ export default function ContasAReceberPage() {
                           </TableCell>
                           <TableCell className="text-right font-mono font-semibold text-green-400">
                             {formatCurrency(t.amount)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button asChild size="sm" variant="ghost">
-                                <Link href={`/financeiro/editor/${t.id}`}><FilePenLine className="h-4 w-4" /></Link>
-                              </Button>
-                              <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting(t)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="outline" disabled={receiving === t.id} onClick={() => handleReceive(t)}>
-                                <CheckCircle className="mr-1 h-4 w-4 text-green-400" />
-                                Recebido
-                              </Button>
-                            </div>
                           </TableCell>
                         </TableRow>
                       );

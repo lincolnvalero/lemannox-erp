@@ -290,3 +290,41 @@ export type NotaFiscal = {
   createdAt: string;
   updatedAt: string;
 };
+
+// ── Motor de cálculo de coifas (calculadora) ────────────────────────────────
+
+export type ChapaMaterial = {
+  id: string;
+  material: string;
+  bitola: number;
+  larguraPadrao: number;
+  valorChapa: number;
+};
+
+export type IluminacaoRow = {
+  id: string;
+  tipoCoifa: 'Churrasqueira' | 'Cozinha';
+  tipoInstalacao: 'Parede' | 'Ilha';
+  medida: number;
+  qtdLampadas: number;
+  qtdFonte: number;
+  qtdBotoeira: number;
+  qtdBotao: number;
+  qtdChicote: number;
+};
+
+export type MaoDeObraRow = {
+  id: string;
+  medida: number;
+  modelo: 'Box' | 'Piramidal' | 'Linea' | 'Tube' | 'Ilha';
+  valor: number;
+};
+
+export type ParametrosGlobais = Record<string, number>;
+
+export type CalculatorReferenceData = {
+  materiaisChapas: ChapaMaterial[];
+  tabelaIluminacao: IluminacaoRow[];
+  maoDeObra: MaoDeObraRow[];
+  parametros: ParametrosGlobais;
+};

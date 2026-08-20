@@ -82,6 +82,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Usuários', href: '/admin/users' },
       { title: 'Empresa / NF-e', href: '/admin/empresa' },
+      { title: 'Parâmetros da Calculadora', href: '/admin/parametros-calculadora' },
     ],
   },
 ];
