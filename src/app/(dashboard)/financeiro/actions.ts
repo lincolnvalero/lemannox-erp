@@ -322,15 +322,26 @@ export async function receiveAgainstQuote(input: {
   transactionDate: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!(input.amount > 0)) {
+      return { success: false, error: 'O valor recebido deve ser maior que zero.' };
+    }
+
     const supabase = await createClient();
 
     const { data: receivable, error: fetchError } = await supabase
       .from('financial_transactions')
-      .select('id, amount, related_id')
+      .select('id, amount, related_id, related_type, status')
       .eq('id', input.transactionId)
       .single();
 
     if (fetchError) throw fetchError;
+
+    // Nunca opera sobre um lançamento que não seja um Contas a Receber
+    // pendente — evita que um ID incorreto (bug de cliente ou chamada
+    // manual da action) altere um lançamento de outra natureza.
+    if (receivable.related_type !== 'conta_receber' || receivable.status !== 'pendente') {
+      return { success: false, error: 'Este lançamento não é um Contas a Receber pendente.' };
+    }
 
     const remaining = Math.round((receivable.amount - input.amount) * 100) / 100;
 

@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+import { createClient as createServerClient } from '@/lib/supabase-server';
 
 function adminClient() {
   return createClient(
@@ -9,6 +10,26 @@ function adminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+}
+
+// Estas actions usam a service role key, que ignora RLS por completo — sem
+// esta checagem, qualquer usuário autenticado (mesmo perfil Produção)
+// conseguiria criar, editar ou excluir usuários (inclusive virar admin)
+// chamando a action diretamente, já que a página só esconde o menu, não
+// bloqueia a action no servidor.
+async function requireAdmin(): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 'Não autenticado.';
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.role !== 'admin') return 'Apenas administradores podem gerenciar usuários.';
+  return null;
 }
 
 // 'viewer' é o valor salvo no banco para o perfil de Produção
@@ -23,6 +44,9 @@ export type AdminUser = {
 
 export async function getUsers(): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
   try {
+    const denied = await requireAdmin();
+    if (denied) return { success: false, error: denied };
+
     const supabase = adminClient();
     const { data, error } = await supabase
       .from('profiles')
@@ -54,6 +78,9 @@ export async function createUser(data: {
   role: AdminUser['role'];
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    const denied = await requireAdmin();
+    if (denied) return { success: false, error: denied };
+
     const supabase = adminClient();
 
     // Cria o usuário no Supabase Auth
@@ -100,6 +127,9 @@ export async function updateUser(
   data: { name?: string; email?: string; role?: AdminUser['role']; password?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const denied = await requireAdmin();
+    if (denied) return { success: false, error: denied };
+
     const supabase = adminClient();
 
     // Atualiza Auth (email e/ou senha)
@@ -132,6 +162,9 @@ export async function updateUser(
 
 export async function deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const denied = await requireAdmin();
+    if (denied) return { success: false, error: denied };
+
     const supabase = adminClient();
     const { error } = await supabase.auth.admin.deleteUser(id);
     if (error) throw error;

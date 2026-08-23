@@ -15,11 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Clock, Plus, Save, Trash2, FilePenLine, ArrowUpCircle, History } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, Save, Trash2, FilePenLine, ArrowUpCircle, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
-import { getPendingTransactions, getAccounts, upsertTransaction, deleteTransaction, getTransactionsBySource } from '../actions';
+import { getPendingTransactions, getAccounts, upsertTransaction, deleteTransaction, getTransactionsBySource, markAsPaid } from '../actions';
 import type { FinancialTransaction, ChartOfAccount } from '@/lib/types';
 import { format as fmtDate } from 'date-fns';
 import Link from 'next/link';
@@ -51,6 +51,7 @@ export default function ContasAReceberPage() {
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<FinancialTransaction | null>(null);
+  const [receiving, setReceiving] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -111,6 +112,21 @@ export default function ContasAReceberPage() {
     if (result.success) { toast({ title: 'Removido.' }); load(); }
     else toast({ variant: 'destructive', title: 'Erro', description: result.error });
     setDeleting(null);
+  };
+
+  // Recebimentos vinculados a um Pedido são baixados pelo Caixa (automático).
+  // Este botão só existe para contas lançadas manualmente (sem Pedido vinculado),
+  // que não têm outra forma de baixa.
+  const handleReceiveManual = async (t: FinancialTransaction) => {
+    setReceiving(t.id);
+    const result = await markAsPaid(t.id);
+    if (result.success) {
+      toast({ title: 'Recebimento confirmado!', description: `"${t.description}" registrado como recebido.` });
+      load();
+    } else {
+      toast({ variant: 'destructive', title: 'Erro', description: result.error });
+    }
+    setReceiving(null);
   };
 
   const total = items.reduce((s, t) => s + t.amount, 0);
@@ -262,24 +278,29 @@ export default function ContasAReceberPage() {
                       <TableHead>Lançamento</TableHead>
                       <TableHead>Previsão</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       Array.from({ length: 5 }).map((_, i) => (
                         <TableRow key={i}>
-                          {Array.from({ length: 5 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
+                          {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
                         </TableRow>
                       ))
                     ) : items.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                           Nenhum recebimento pendente.
                         </TableCell>
                       </TableRow>
                     ) : items.map(t => {
                       const al = alertInfo(t.dueDate);
                       const isOverdue = t.dueDate && new Date(t.dueDate + 'T00:00:00') < new Date();
+                      // Vinculado a um Pedido: a baixa é automática pelo Caixa.
+                      // Sem vínculo (lançado manualmente aqui): só pode ser
+                      // quitado por este botão.
+                      const isManual = !t.relatedId;
                       return (
                         <TableRow key={t.id} className={isOverdue ? 'bg-red-500/5' : ''}>
                           <TableCell className="font-medium">{t.description}</TableCell>
@@ -296,6 +317,16 @@ export default function ContasAReceberPage() {
                           </TableCell>
                           <TableCell className="text-right font-mono font-semibold text-green-400">
                             {formatCurrency(t.amount)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isManual ? (
+                              <Button size="sm" variant="outline" disabled={receiving === t.id} onClick={() => handleReceiveManual(t)}>
+                                <CheckCircle className="mr-1 h-4 w-4 text-green-400" />
+                                Recebido
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">via Caixa</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
