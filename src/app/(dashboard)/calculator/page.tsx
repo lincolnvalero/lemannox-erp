@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { getCalculatorReferenceData, generatePriceTableCoifasCozinha } from './actions';
 import { calculateCoifa, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { useToast } from '@/hooks/use-toast';
@@ -49,15 +48,14 @@ const formSchema = z.object({
   width: numField.pipe(z.number().min(1, 'Largura é obrigatória')),
   depth: numField.pipe(z.number().min(1, 'Profundidade é obrigatória')),
   height: numField.pipe(z.number().min(1, 'Altura é obrigatória')),
-  modelo: z.enum(['Box', 'Piramidal', 'Linea', 'Tube', 'Ilha']),
+  modelo: z.enum(['Box', 'Piramidal', 'Linea', 'Tube']),
   tetoWidth: numField.optional(),
   tetoDepth: numField.optional(),
   carenagemWidth: numField.optional(),
   carenagemDepth: numField.optional(),
   carenagemHeight: numField.optional(),
-  materialFrenteLaterais: z.string().min(1, 'Selecione o material'),
-  materialCostas: z.string().min(1, 'Selecione o material'),
-  materialTeto: z.string().min(1, 'Selecione o material'),
+  material: z.string().min(1, 'Selecione o material'),
+  larguraPadrao: z.coerce.number().min(1, 'Selecione a chapa padrão'),
   tipoAplicacao: z.enum(['Cozinha', 'Churrasqueira']),
   tipoInstalacao: z.enum(['Parede', 'Ilha']),
   filtro: z.enum(['nenhum', 'aluminio', 'inercial_430', 'inercial_304']),
@@ -77,7 +75,7 @@ const defaultValues: FormValues = {
   modelo: 'Box',
   tetoWidth: 0, tetoDepth: 0,
   carenagemWidth: 0, carenagemDepth: 0, carenagemHeight: 0,
-  materialFrenteLaterais: '', materialCostas: '', materialTeto: '',
+  material: '', larguraPadrao: 0,
   tipoAplicacao: 'Cozinha', tipoInstalacao: 'Parede',
   filtro: 'nenhum', coletor: 'nenhum',
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
@@ -131,20 +129,35 @@ export default function CostCalculatorPage() {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  // Nome da "família" do material a partir do nome cadastrado no Estoque
+  // (ex: "Chapa Inox 430 #20 (1,00mm) 2000" -> "Inox 430").
+  const familiaMaterial = (nome: string) => nome.replace(/^Chapa\s+/i, '').split('#')[0].trim();
+
   const materiaisDisponiveis = useMemo(
-    () => Array.from(new Set((ref?.materiaisChapas ?? []).map(m => m.material))).sort(),
+    () => Array.from(new Set((ref?.materiaisEstoque ?? []).map(m => familiaMaterial(m.name)))).sort(),
     [ref]
   );
 
   const { watch } = form;
   const watchedModelo = watch('modelo');
   const watchedFiltro = watch('filtro');
+  const watchedMaterial = watch('material');
   const watchedWidth = watch('width');
   const watchedDepth = watch('depth');
   const watchedHeight = watch('height');
 
+  const larguraPadraoDisponivel = useMemo(() => {
+    if (!watchedMaterial) return [];
+    return Array.from(new Set(
+      (ref?.materiaisEstoque ?? [])
+        .filter(m => familiaMaterial(m.name) === watchedMaterial && m.width)
+        .map(m => m.width as number)
+    )).sort((a, b) => a - b);
+  }, [ref, watchedMaterial]);
+
   const isPiramidal = watchedModelo === 'Piramidal';
   const isLinea = watchedModelo === 'Linea';
+  const isTube = watchedModelo === 'Tube';
   const showColetor = watchedFiltro === 'inercial_430' || watchedFiltro === 'inercial_304';
 
   function onSubmit(values: FormValues) {
@@ -157,9 +170,8 @@ export default function CostCalculatorPage() {
         modelo: values.modelo,
         tetoWidth: values.tetoWidth, tetoDepth: values.tetoDepth,
         carenagemWidth: values.carenagemWidth, carenagemDepth: values.carenagemDepth, carenagemHeight: values.carenagemHeight,
-        materialFrenteLaterais: values.materialFrenteLaterais,
-        materialCostas: values.materialCostas,
-        materialTeto: values.materialTeto,
+        material: values.material,
+        larguraPadrao: values.larguraPadrao,
         tipoAplicacao: values.tipoAplicacao,
         tipoInstalacao: values.tipoInstalacao,
         filtro: values.filtro,
@@ -227,7 +239,6 @@ export default function CostCalculatorPage() {
                           <SelectItem value="Piramidal">Piramidal</SelectItem>
                           <SelectItem value="Linea">Línea</SelectItem>
                           <SelectItem value="Tube">Tube</SelectItem>
-                          <SelectItem value="Ilha">Ilha</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -253,16 +264,39 @@ export default function CostCalculatorPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 gap-4">
-                    <FormField control={form.control} name="materialFrenteLaterais" render={({ field }) => ( <FormItem><FormLabel>Material — Frente e Laterais</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{materiaisDisponiveis.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem> )} />
-                    <FormField control={form.control} name="materialCostas" render={({ field }) => ( <FormItem><FormLabel>Material — Costas</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{materiaisDisponiveis.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select><FormDescription>Pode repetir o material da Frente, se for o caso.</FormDescription><FormMessage /></FormItem> )} />
-                    <FormField control={form.control} name="materialTeto" render={({ field }) => ( <FormItem><FormLabel>Material — Teto</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{materiaisDisponiveis.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem> )} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="material" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Material</FormLabel>
+                        <Select onValueChange={(v) => { field.onChange(v); form.setValue('larguraPadrao', 0); }} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                          <SelectContent>{materiaisDisponiveis.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Uma coifa nunca mistura materiais — só o filtro inercial pode ser 430 ou 304 independente disso.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="larguraPadrao" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Chapa Padrão</FormLabel>
+                        <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value ? String(field.value) : ''} disabled={!watchedMaterial}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                          <SelectContent>{larguraPadraoDisponivel.map(l => <SelectItem key={l} value={String(l)}>{l}mm</SelectItem>)}</SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
-                    <FormField control={form.control} name="tipoInstalacao" render={({ field }) => ( <FormItem><FormLabel>Instalação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Parede">Parede</SelectItem><SelectItem value="Ilha">Ilha</SelectItem></SelectContent></Select></FormItem> )} />
+                    <FormField control={form.control} name="tipoInstalacao" render={({ field }) => ( <FormItem><FormLabel>Instalação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Parede">Parede</SelectItem><SelectItem value="Ilha">Ilha</SelectItem></SelectContent></Select><FormDescription className="text-xs">Ilha soma o acréscimo de mão de obra da tabela — não é mais um modelo à parte.</FormDescription></FormItem> )} />
                   </div>
+                  {isTube && (
+                    <p className="text-xs text-muted-foreground rounded-md border p-2 bg-muted/30">
+                      Coifa Tube sempre usa 2 lâmpadas + 1 botoeira + 1 chicote, fixo — não varia por medida ou instalação.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -396,11 +430,6 @@ export default function CostCalculatorPage() {
                           <span className="font-medium font-code text-right">{item.value}</span>
                         </div>
                       ))}
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Chapa padrão selecionada</span>
-                        <span className="font-medium font-code">{results.larguraPadrao}mm</span>
-                      </div>
                     </div>
                   </div>
 

@@ -15,6 +15,9 @@ function rowToMaterial(row: Record<string, unknown>): Material {
     unitCost: row.unit_cost as number,
     supplierId: (row.supplier_id as string) || undefined,
     supplierName: (row.supplier_name as string) || undefined,
+    width: (row.width as number) || undefined,
+    height: (row.height as number) || undefined,
+    bitola: (row.bitola as number) || undefined,
   };
 }
 
@@ -52,6 +55,9 @@ export async function upsertMaterial(
       unit_cost: parseFloat(formData.get('unitCost') as string) || 0,
       supplier_id: (formData.get('supplierId') as string) || null,
       supplier_name: (formData.get('supplierName') as string) || null,
+      width: formData.get('width') ? parseFloat(formData.get('width') as string) : null,
+      height: formData.get('height') ? parseFloat(formData.get('height') as string) : null,
+      bitola: formData.get('bitola') ? parseFloat(formData.get('bitola') as string) : null,
     };
 
     if (id) payload.id = id;

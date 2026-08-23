@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
-import type { CalculatorReferenceData, ChapaMaterial, IluminacaoRow, MaoDeObraRow, ParametrosGlobais } from '@/lib/types';
+import type { CalculatorReferenceData, IluminacaoRow, MaoDeObraRow, ParametrosGlobais, RawMaterial } from '@/lib/types';
+import { getMaterials } from '@/app/(dashboard)/materials/actions';
 
 export async function getCalculatorReferenceData(): Promise<{
   success: boolean;
@@ -12,21 +13,23 @@ export async function getCalculatorReferenceData(): Promise<{
   try {
     const supabase = await createClient();
 
-    const [chapasRes, iluminacaoRes, maoDeObraRes, parametrosRes] = await Promise.all([
-      supabase.from('materiais_chapas').select('*'),
+    const [materiaisRes, iluminacaoRes, maoDeObraRes, parametrosRes] = await Promise.all([
+      getMaterials(),
       supabase.from('tabela_iluminacao').select('*'),
       supabase.from('mao_de_obra').select('*'),
       supabase.from('parametros_globais').select('*'),
     ]);
 
-    if (chapasRes.error) throw chapasRes.error;
+    if (!materiaisRes.success) throw new Error(materiaisRes.error);
     if (iluminacaoRes.error) throw iluminacaoRes.error;
     if (maoDeObraRes.error) throw maoDeObraRes.error;
     if (parametrosRes.error) throw parametrosRes.error;
 
-    const materiaisChapas: ChapaMaterial[] = (chapasRes.data ?? []).map(r => ({
-      id: r.id, material: r.material, bitola: r.bitola, larguraPadrao: r.largura_padrao, valorChapa: r.valor_chapa,
-    }));
+    // Preços de chapa vêm do Estoque (materials, categoria "Chapa") — a
+    // mesma tela onde os preços são reajustados quando o fornecedor muda.
+    const materiaisEstoque: RawMaterial[] = (materiaisRes.materials ?? [])
+      .filter(m => m.category === 'Chapa')
+      .map(m => ({ ...m, price: m.unitCost }));
 
     const tabelaIluminacao: IluminacaoRow[] = (iluminacaoRes.data ?? []).map(r => ({
       id: r.id, tipoCoifa: r.tipo_coifa, tipoInstalacao: r.tipo_instalacao, medida: r.medida,
@@ -42,7 +45,7 @@ export async function getCalculatorReferenceData(): Promise<{
       parametros[row.chave] = row.valor;
     }
 
-    return { success: true, data: { materiaisChapas, tabelaIluminacao, maoDeObra, parametros } };
+    return { success: true, data: { materiaisEstoque, tabelaIluminacao, maoDeObra, parametros } };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar dados de referência da calculadora';
     return { success: false, error: message };
@@ -57,7 +60,7 @@ export async function getCalculatorReferenceData(): Promise<{
 // produtos existentes.
 
 const MEDIDAS = Array.from({ length: 21 }, (_, i) => 1000 + i * 100); // 1000..3000
-const MATERIAIS: string[] = ['430', '304', 'Carbono'];
+const MATERIAIS: string[] = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 
 type LinhaTabela = { modelo: 'Box' | 'Piramidal' | 'Linea' | 'Tube'; instalacao: 'Parede' | 'Ilha'; modelLabel: string };
 
@@ -70,6 +73,12 @@ const LINHAS: LinhaTabela[] = [
   { modelo: 'Linea', instalacao: 'Parede', modelLabel: 'Línea' },
   { modelo: 'Tube', instalacao: 'Parede', modelLabel: 'Tube' },
 ];
+
+// Só usada para a emissão em lote (a calculadora interativa agora deixa a
+// escolha da chapa padrão para o usuário, por pedido explícito).
+function chapaPadraoParaLote(width: number): number {
+  return width <= 1900 ? 2000 : 3000;
+}
 
 export async function generatePriceTableCoifasCozinha(): Promise<{
   success: boolean;
@@ -101,13 +110,12 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
         for (const material of MATERIAIS) {
           try {
             // Profundidade/altura padrão (não a mesma medida da largura — uma
-            // coifa de 3000mm de largura não tem 3000mm de profundidade; usar
-            // o mesmo valor nas três dimensões estourava a chapa nas medidas
-            // maiores, somado à folga de solda).
+            // coifa de 3000mm de largura não tem 3000mm de profundidade).
             const result = calculateCoifa({
               width: medida, depth: 700, height: 600,
               modelo: linha.modelo,
-              materialFrenteLaterais: material, materialCostas: material, materialTeto: material,
+              material,
+              larguraPadrao: chapaPadraoParaLote(medida),
               tipoAplicacao: 'Cozinha', tipoInstalacao: linha.instalacao,
               filtro: 'nenhum', coletor: 'nenhum',
               frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,

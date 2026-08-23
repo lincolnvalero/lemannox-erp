@@ -1,13 +1,15 @@
 // Motor de cálculo de coifas — regras extraídas de "Planilha_de_Cálculos.pdf"
-// (Levi) e da especificação técnica que o Gemini escreveu a partir dela.
-// Módulo puro: recebe os dados de referência já carregados do banco
-// (materiais_chapas, tabela_iluminacao, mao_de_obra, parametros_globais) e
-// devolve o detalhamento de custo. É usado tanto pela calculadora
-// interativa quanto pela geração em lote da Tabela de Preços (Fase 3).
+// (Levi), da especificação técnica que o Gemini escreveu a partir dela, e
+// das correções enviadas depois (materiais únicos por coifa, Ilha como
+// acréscimo de mão de obra, fórmulas específicas de Tube/Línea). Módulo
+// puro: recebe os dados de referência já carregados do banco (materiais de
+// chapa do Estoque, tabela_iluminacao, mao_de_obra, parametros_globais) e
+// devolve o detalhamento de custo. Usado pela calculadora interativa e pela
+// geração em lote da Tabela de Preços.
 
-import type { CalculatorReferenceData, ChapaMaterial } from './types';
+import type { CalculatorReferenceData, RawMaterial } from './types';
 
-export type ModeloCoifa = 'Box' | 'Piramidal' | 'Linea' | 'Tube' | 'Ilha';
+export type ModeloCoifa = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
 export type TipoAplicacao = 'Cozinha' | 'Churrasqueira';
 export type TipoInstalacaoCoifa = 'Parede' | 'Ilha';
 export type FiltroTipo = 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
@@ -18,19 +20,18 @@ export interface CoifaCalculatorInput {
   depth: number;  // profundidade (mm)
   height: number; // altura (mm)
   modelo: ModeloCoifa;
-  // Piramidal — medida do teto
+  // Piramidal — medida do teto (abertura/duto, menor que a base da coifa)
   tetoWidth?: number;
   tetoDepth?: number;
   // Línea — medidas da carenagem
   carenagemWidth?: number;
   carenagemDepth?: number;
   carenagemHeight?: number;
-  materialFrenteLaterais: string; // '430' | '304' | 'Carbono'
-  materialCostas: string;
-  materialTeto: string;
+  material: string;       // '430' | '304' | 'Carbono' — uma única entrada para toda a coifa
+  larguraPadrao: number;  // 2000 | 3000 — escolhido pelo usuário
   tipoAplicacao: TipoAplicacao;
-  tipoInstalacao: TipoInstalacaoCoifa;
-  filtro: FiltroTipo;
+  tipoInstalacao: TipoInstalacaoCoifa; // Ilha soma o acréscimo de mão de obra da coluna "Ilha"
+  filtro: FiltroTipo;      // pode ser 304 ou 430 independente do material da coifa
   coletor: ColetorTipo;
   frisoFrente: boolean;
   frisoLD: boolean;
@@ -52,18 +53,30 @@ export type CoifaCalculationResult = {
   paintingCost: number;
   totalCost: number;
   finalPrice: number;
-  larguraPadrao: number;
   details: CalculationDetail[];
   warnings: string[];
   descricaoAuto: string;
 };
 
-const WELD_ALLOWANCE = 20; // mm, folga de solda usada na planilha original
+// Tabela específica de Tube/Línea: "frente equivalente" por largura (E3 na
+// planilha), usada como única metragem de chapa desses dois modelos — não
+// têm frente/laterais/costas separadas. Transcrita tal como enviada; a
+// queda entre 1600→2000 (2900) e 2000→2100 (3600) já é assim na origem —
+// vale confirmar essa célula específica na planilha antes de fechar preço.
+const TUBE_LINEA_FRENTE_EQUIVALENTE: { ate: number; valor: number }[] = [
+  { ate: 1000, valor: 1700 }, { ate: 1100, valor: 1900 }, { ate: 1200, valor: 2100 },
+  { ate: 1300, valor: 2300 }, { ate: 1400, valor: 2500 }, { ate: 1500, valor: 2700 },
+  { ate: 1600, valor: 2900 }, { ate: 2000, valor: 4100 }, { ate: 2100, valor: 3600 },
+  { ate: 2200, valor: 3800 }, { ate: 2300, valor: 4000 }, { ate: 2400, valor: 4200 },
+  { ate: 2500, valor: 4400 }, { ate: 2600, valor: 4600 }, { ate: 2700, valor: 4800 },
+  { ate: 2800, valor: 5000 }, { ate: 2900, valor: 5200 }, { ate: 3000, valor: 5400 },
+];
 
-// Chapa padrão automática: comprimento <= 1900mm usa chapa de 2000mm,
-// senão usa chapa de 3000mm (regra do documento técnico, item A).
-export function chapaPadraoAutomatica(width: number): number {
-  return width <= 1900 ? 2000 : 3000;
+function frenteEquivalenteTubeLinea(width: number): number {
+  for (const row of TUBE_LINEA_FRENTE_EQUIVALENTE) {
+    if (width <= row.ate) return row.valor;
+  }
+  return TUBE_LINEA_FRENTE_EQUIVALENTE[TUBE_LINEA_FRENTE_EQUIVALENTE.length - 1].valor;
 }
 
 // Encontra a linha da tabela cuja "medida" é a maior menor-ou-igual à
@@ -80,90 +93,60 @@ function findByMedidaFaixa<T extends { medida: number }>(rows: T[], medida: numb
   return match;
 }
 
-function findChapa(chapas: ChapaMaterial[], material: string, bitola: number, larguraPadrao: number): ChapaMaterial | undefined {
-  return chapas.find(c => c.material === material && c.bitola === bitola && c.larguraPadrao === larguraPadrao);
+function findChapaEstoque(materiais: RawMaterial[], material: string, bitola: number, larguraPadrao: number): RawMaterial | undefined {
+  return materiais.find(m =>
+    m.category === 'Chapa' &&
+    m.bitola === bitola &&
+    m.width === larguraPadrao &&
+    m.name.toLowerCase().includes(material.toLowerCase())
+  );
 }
 
-// Encaixe simples (bin-packing) de peças na largura da chapa — mesma lógica
-// já usada na calculadora anterior, mantida por já ser testada e mais
-// precisa que uma contagem fixa de chapas.
-function runBinPacking(pieceWidths: number[], sheetWidth: number, sheetPrice: number): { cost: number; sheets: number } {
-  const pieces = [...pieceWidths].sort((a, b) => b - a);
-  const bins: number[] = [];
-  for (const p of pieces) {
-    if (p > sheetWidth) throw new Error(`Peça de ${p}mm é maior que a largura da chapa (${sheetWidth}mm).`);
-    let placed = false;
-    for (let i = 0; i < bins.length; i++) {
-      if (p <= bins[i]) { bins[i] -= p; placed = true; break; }
-    }
-    if (!placed) bins.push(sheetWidth - p);
-  }
-  if (bins.length === 0) return { cost: 0, sheets: 0 };
-
-  let cost = 0;
-  bins.forEach(remaining => {
-    const usedWidth = sheetWidth - remaining;
-    cost += remaining >= 500 ? (usedWidth / sheetWidth) * sheetPrice : sheetPrice;
-  });
-
-  const fullSheets = bins.length - 1;
-  const lastUsage = (sheetWidth - bins[bins.length - 1]) / sheetWidth;
-  const lastFraction = lastUsage <= 0.5 ? 0.5 : 1;
-  const sheets = fullSheets + lastFraction;
-
-  return { cost, sheets };
+// Custo de um grupo de chapa: soma linear das medidas das peças (mm) ÷
+// largura da chapa × preço unitário. Sem encaixe/otimização — é a mesma
+// conta que a planilha original faz (confirmada com o exemplo do PDF:
+// 1400+1000+1000=3400mm ÷ 2000mm = 1,70 chapas × R$165 = R$280,50).
+function custoGrupoChapa(metragemMm: number, larguraPadrao: number, chapa: RawMaterial | undefined): { cost: number; chapas: number } {
+  if (!chapa || metragemMm <= 0) return { cost: 0, chapas: 0 };
+  const chapas = metragemMm / larguraPadrao;
+  return { cost: chapas * chapa.unitCost, chapas };
 }
 
 export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorReferenceData): CoifaCalculationResult {
   const details: CalculationDetail[] = [];
   const warnings: string[] = [];
   const p = ref.parametros;
-  const { width, depth, height } = input;
+  const { width, depth, height, larguraPadrao } = input;
+  const materiaisEstoque = ref.materiaisEstoque ?? [];
 
-  // ── 1. Chapas (frente/laterais/costas/teto) ────────────────────────────
-  const larguraPadrao = chapaPadraoAutomatica(width);
-  if (height > larguraPadrao) {
-    warnings.push(`A altura da coifa (${height}mm) é maior que a chapa selecionada (${larguraPadrao}mm) — confira as medidas.`);
-  }
+  // ── 1. Chapas ────────────────────────────────────────────────────────────
+  let sheetCost = 0;
 
-  const chapaFrente = findChapa(ref.materiaisChapas, input.materialFrenteLaterais, 22, larguraPadrao);
-  if (!chapaFrente) warnings.push(`Chapa ${input.materialFrenteLaterais} bitola 22 / ${larguraPadrao}mm não cadastrada — custo considerado R$0.`);
-
-  const sidePiece = depth + WELD_ALLOWANCE;
-  const { cost: costFrenteLaterais, sheets: sheetsFrenteLaterais } = chapaFrente
-    ? runBinPacking([width, sidePiece, sidePiece], larguraPadrao, chapaFrente.valorChapa)
-    : { cost: 0, sheets: 0 };
-  details.push({ label: 'Chapas (Frente/Laterais)', value: `${sheetsFrenteLaterais.toFixed(1)} un. de ${input.materialFrenteLaterais} — ${brl(costFrenteLaterais)}` });
-
-  const chapaCostas = findChapa(ref.materiaisChapas, input.materialCostas, 24, larguraPadrao);
-  const chapaTeto = findChapa(ref.materiaisChapas, input.materialTeto, 24, larguraPadrao);
-  if (!chapaCostas) warnings.push(`Chapa ${input.materialCostas} bitola 24 / ${larguraPadrao}mm não cadastrada — custo considerado R$0.`);
-  if (!chapaTeto) warnings.push(`Chapa ${input.materialTeto} bitola 24 / ${larguraPadrao}mm não cadastrada — custo considerado R$0.`);
-
-  let costCostasTeto = 0;
-  let sheetsCostasTeto = 0;
-  if (input.materialCostas === input.materialTeto && chapaCostas) {
-    // Mesmo material — encaixa costas e teto juntos na mesma chapa.
-    const { cost, sheets } = runBinPacking([width, width], larguraPadrao, chapaCostas.valorChapa);
-    costCostasTeto = cost;
-    sheetsCostasTeto = sheets;
+  if (input.modelo === 'Tube' || input.modelo === 'Linea') {
+    const frenteEq = frenteEquivalenteTubeLinea(width);
+    const chapa = findChapaEstoque(materiaisEstoque, input.material, 22, larguraPadrao);
+    if (!chapa) warnings.push(`Chapa ${input.material} bitola 22 / ${larguraPadrao}mm não encontrada no Estoque.`);
+    const { cost, chapas } = custoGrupoChapa(frenteEq, larguraPadrao, chapa);
+    sheetCost = cost;
+    details.push({ label: `Chapa (${input.modelo} — frente equiv. ${frenteEq}mm)`, value: `${chapas.toFixed(2)} un. — ${brl(cost)}` });
   } else {
-    if (chapaCostas) {
-      const { cost, sheets } = runBinPacking([width], larguraPadrao, chapaCostas.valorChapa);
-      costCostasTeto += cost;
-      sheetsCostasTeto += sheets;
-    }
-    if (chapaTeto) {
-      const { cost, sheets } = runBinPacking([width], larguraPadrao, chapaTeto.valorChapa);
-      costCostasTeto += cost;
-      sheetsCostasTeto += sheets;
-    }
+    const chapaFrente = findChapaEstoque(materiaisEstoque, input.material, 22, larguraPadrao);
+    if (!chapaFrente) warnings.push(`Chapa ${input.material} bitola 22 / ${larguraPadrao}mm não encontrada no Estoque.`);
+    const metragemFrenteLaterais = width + depth + depth;
+    const { cost: costFrente, chapas: chapasFrente } = custoGrupoChapa(metragemFrenteLaterais, larguraPadrao, chapaFrente);
+    details.push({ label: 'Chapa (Frente/Laterais)', value: `${chapasFrente.toFixed(2)} un. — ${brl(costFrente)}` });
+
+    const chapaCostasTeto = findChapaEstoque(materiaisEstoque, input.material, 24, larguraPadrao);
+    if (!chapaCostasTeto) warnings.push(`Chapa ${input.material} bitola 24 / ${larguraPadrao}mm não encontrada no Estoque.`);
+    const tetoContribuicao = input.modelo === 'Piramidal' ? (input.tetoWidth || 0) : width;
+    const metragemCostasTeto = width + tetoContribuicao;
+    const { cost: costCostasTeto, chapas: chapasCostasTeto } = custoGrupoChapa(metragemCostasTeto, larguraPadrao, chapaCostasTeto);
+    details.push({ label: 'Chapa (Costas/Teto)', value: `${chapasCostasTeto.toFixed(2)} un. — ${brl(costCostasTeto)}` });
+
+    sheetCost = costFrente + costCostasTeto;
   }
-  details.push({ label: 'Chapas (Costas/Teto)', value: `${sheetsCostasTeto.toFixed(1)} un. — ${brl(costCostasTeto)}` });
 
-  const sheetCost = costFrenteLaterais + costCostasTeto;
-
-  // ── 2. Filtro inercial ──────────────────────────────────────────────────
+  // ── 2. Filtro inercial (material do filtro é independente do da coifa) ──
   let filtroCost = 0;
   if (input.filtro !== 'nenhum') {
     const constKey = input.filtro === 'inercial_430' ? 'filtro_constante_430'
@@ -192,31 +175,53 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   }
 
   // ── 4. Iluminação ────────────────────────────────────────────────────────
-  const iluminacaoRow = findByMedidaFaixa(
-    ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
-    width
-  );
   let iluminacaoCost = 0;
-  if (iluminacaoRow) {
+  let lampadasDescricao = 0;
+  let botaoOuBotoeiraDescricao = 0;
+
+  if (input.modelo === 'Tube') {
+    // Fórmula fixa, independente de medida/instalação: 2 lâmpadas + 1
+    // botoeira + 1 chicote — sempre, conforme instrução específica.
     const precoLampada = input.tipoAplicacao === 'Cozinha' ? p['preco_lampada_cozinha'] : p['preco_lampada_churrasqueira'];
-    iluminacaoCost += iluminacaoRow.qtdLampadas * (precoLampada ?? 0);
-    iluminacaoCost += iluminacaoRow.qtdFonte * (p['preco_fonte'] ?? 0);
-    iluminacaoCost += iluminacaoRow.qtdBotoeira * (p['preco_botoeira'] ?? 0);
-    iluminacaoCost += iluminacaoRow.qtdBotao * (p['preco_botao'] ?? 0);
-    iluminacaoCost += iluminacaoRow.qtdChicote * (p['preco_chicote'] ?? 0);
-    details.push({
-      label: 'Kit Iluminação',
-      value: `${iluminacaoRow.qtdLampadas} lâmp., ${iluminacaoRow.qtdBotoeira || iluminacaoRow.qtdBotao} bot., ${iluminacaoRow.qtdChicote} chicote — ${brl(iluminacaoCost)}`,
-    });
+    iluminacaoCost = 2 * (precoLampada ?? 0) + 1 * (p['preco_botoeira'] ?? 0) + 1 * (p['preco_chicote'] ?? 0);
+    lampadasDescricao = 2;
+    botaoOuBotoeiraDescricao = 1;
+    details.push({ label: 'Kit Iluminação (Tube — fixo)', value: `2 lâmp., 1 botoeira, 1 chicote — ${brl(iluminacaoCost)}` });
   } else {
-    warnings.push('Nenhuma faixa de iluminação encontrada para essa medida/aplicação/instalação.');
+    const iluminacaoRow = findByMedidaFaixa(
+      ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
+      width
+    );
+    if (iluminacaoRow) {
+      const precoLampada = input.tipoAplicacao === 'Cozinha' ? p['preco_lampada_cozinha'] : p['preco_lampada_churrasqueira'];
+      iluminacaoCost += iluminacaoRow.qtdLampadas * (precoLampada ?? 0);
+      iluminacaoCost += iluminacaoRow.qtdFonte * (p['preco_fonte'] ?? 0);
+      iluminacaoCost += iluminacaoRow.qtdBotoeira * (p['preco_botoeira'] ?? 0);
+      iluminacaoCost += iluminacaoRow.qtdBotao * (p['preco_botao'] ?? 0);
+      iluminacaoCost += iluminacaoRow.qtdChicote * (p['preco_chicote'] ?? 0);
+      lampadasDescricao = iluminacaoRow.qtdLampadas;
+      botaoOuBotoeiraDescricao = iluminacaoRow.qtdBotoeira || iluminacaoRow.qtdBotao;
+      details.push({
+        label: 'Kit Iluminação',
+        value: `${iluminacaoRow.qtdLampadas} lâmp., ${botaoOuBotoeiraDescricao} bot., ${iluminacaoRow.qtdChicote} chicote — ${brl(iluminacaoCost)}`,
+      });
+    } else {
+      warnings.push('Nenhuma faixa de iluminação encontrada para essa medida/aplicação/instalação.');
+    }
   }
 
-  // ── 5. Mão de obra ───────────────────────────────────────────────────────
+  // ── 5. Mão de obra (+ acréscimo de Ilha, quando for o caso) ─────────────
   const maoDeObraRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === input.modelo), width);
-  const laborCost = maoDeObraRow?.valor ?? 0;
+  let laborCost = maoDeObraRow?.valor ?? 0;
   if (!maoDeObraRow) warnings.push(`Mão de obra não encontrada para o modelo ${input.modelo} nessa medida.`);
   details.push({ label: `Mão de obra (${input.modelo})`, value: brl(laborCost) });
+
+  if (input.tipoInstalacao === 'Ilha') {
+    const ilhaRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === 'Ilha'), width);
+    const acrescimoIlha = ilhaRow?.valor ?? 0;
+    laborCost += acrescimoIlha;
+    details.push({ label: 'Acréscimo mão de obra (Instalação Ilha)', value: brl(acrescimoIlha) });
+  }
 
   // ── 6. Outros + Pintura ──────────────────────────────────────────────────
   if (input.outros > 0) details.push({ label: 'Outros', value: brl(input.outros) });
@@ -226,26 +231,22 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   const margem = p['margem_lucro_padrao'] ?? 0;
   const finalPrice = totalCost * (1 + margem / 100);
 
-  const descricaoAuto = buildDescricaoAuto(input, iluminacaoRow);
+  const descricaoAuto = buildDescricaoAuto(input, lampadasDescricao, botaoOuBotoeiraDescricao);
 
   return {
     sheetCost, filtroCost, frisoCost, iluminacaoCost, laborCost,
     outrosCost: input.outros, paintingCost: input.paintingCost,
-    totalCost, finalPrice, larguraPadrao, details, warnings, descricaoAuto,
+    totalCost, finalPrice, details, warnings, descricaoAuto,
   };
 }
 
-function buildDescricaoAuto(
-  input: CoifaCalculatorInput,
-  iluminacao: { qtdLampadas: number; qtdBotoeira: number; qtdBotao: number } | undefined
-): string {
+function buildDescricaoAuto(input: CoifaCalculatorInput, qtdLampadas: number, qtdBotaoOuBotoeira: number): string {
   const parts: string[] = [`Coifa ${input.modelo} ${input.tipoAplicacao}`];
-  if (iluminacao) {
-    parts.push(`${iluminacao.qtdLampadas} lâmpadas`);
-    if (input.tipoAplicacao === 'Cozinha' && iluminacao.qtdBotoeira > 0) {
-      parts.push(`${iluminacao.qtdBotoeira} botoeira${iluminacao.qtdBotoeira > 1 ? 's' : ''}`);
-    } else if (iluminacao.qtdBotao > 0) {
-      parts.push(iluminacao.qtdBotao > 1 ? `${iluminacao.qtdBotao} botões` : '1 botão');
+  if (qtdLampadas > 0) {
+    parts.push(`${qtdLampadas} lâmpada${qtdLampadas !== 1 ? 's' : ''}`);
+    if (qtdBotaoOuBotoeira > 0) {
+      const nome = input.tipoAplicacao === 'Cozinha' ? 'botoeira' : 'botão';
+      parts.push(`${qtdBotaoOuBotoeira} ${nome}${qtdBotaoOuBotoeira !== 1 ? (nome === 'botão' ? 'es' : 's') : ''}`);
     }
   }
   if (input.filtro !== 'nenhum') {
@@ -256,6 +257,7 @@ function buildDescricaoAuto(
   } else {
     parts.push('Sem filtros');
   }
+  parts.push(`${input.width}x${input.depth}x${input.height}mm`);
   return parts.join(', ');
 }
 

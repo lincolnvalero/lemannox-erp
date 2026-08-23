@@ -211,7 +211,12 @@ export default function MaterialsPage() {
                         <Badge variant="outline">{material.category}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {material.category === 'Chapa' ? `${material.width}x${material.height}mm` : '-'}
+                        {material.category === 'Chapa'
+                          ? [
+                              material.bitola ? `#${material.bitola}` : null,
+                              material.width && material.height ? `${material.width}x${material.height}mm` : null,
+                            ].filter(Boolean).join(' — ') || '—'
+                          : '-'}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">

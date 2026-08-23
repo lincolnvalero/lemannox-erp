@@ -139,6 +139,10 @@ export type Material = {
   supplierId?: string;
   supplierName?: string;
   category?: string;
+  // Dimensões/Especificação — usados por materiais da categoria "Chapa".
+  width?: number;
+  height?: number;
+  bitola?: number;
 };
 
 export type ScheduleItem = {
@@ -293,14 +297,6 @@ export type NotaFiscal = {
 
 // ── Motor de cálculo de coifas (calculadora) ────────────────────────────────
 
-export type ChapaMaterial = {
-  id: string;
-  material: string;
-  bitola: number;
-  larguraPadrao: number;
-  valorChapa: number;
-};
-
 export type IluminacaoRow = {
   id: string;
   tipoCoifa: 'Churrasqueira' | 'Cozinha';
@@ -323,7 +319,10 @@ export type MaoDeObraRow = {
 export type ParametrosGlobais = Record<string, number>;
 
 export type CalculatorReferenceData = {
-  materiaisChapas: ChapaMaterial[];
+  // Materiais de chapa vêm do Estoque (materials, categoria "Chapa") — não
+  // de uma tabela separada, para que o preço fique sempre sincronizado com
+  // o que é realmente comprado/atualizado no Estoque.
+  materiaisEstoque: RawMaterial[];
   tabelaIluminacao: IluminacaoRow[];
   maoDeObra: MaoDeObraRow[];
   parametros: ParametrosGlobais;

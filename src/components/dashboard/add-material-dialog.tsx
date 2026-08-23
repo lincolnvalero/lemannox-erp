@@ -39,6 +39,9 @@ const schema = z.object({
   minQuantity: z.coerce.number().min(0, "Quantidade mínima não pode ser negativa"),
   unitCost: z.coerce.number().min(0, "Custo não pode ser negativo"),
   supplierId: z.string().optional(),
+  width: z.coerce.number().min(0).optional(),
+  height: z.coerce.number().min(0).optional(),
+  bitola: z.coerce.number().min(0).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -70,8 +73,14 @@ export function AddMaterialDialog({
       minQuantity: 0,
       unitCost: 0,
       supplierId: "",
+      width: undefined,
+      height: undefined,
+      bitola: undefined,
     },
   });
+
+  const watchedCategory = form.watch("category");
+  const isChapa = (watchedCategory ?? "").trim().toLowerCase() === "chapa";
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +94,9 @@ export function AddMaterialDialog({
         minQuantity: editingMaterial.minQuantity,
         unitCost: editingMaterial.unitCost,
         supplierId: editingMaterial.supplierId ?? "",
+        width: editingMaterial.width,
+        height: editingMaterial.height,
+        bitola: editingMaterial.bitola,
       });
     } else {
       form.reset({
@@ -95,6 +107,9 @@ export function AddMaterialDialog({
         minQuantity: 0,
         unitCost: 0,
         supplierId: "",
+        width: undefined,
+        height: undefined,
+        bitola: undefined,
       });
     }
   }, [open, editingMaterial, form]);
@@ -114,6 +129,9 @@ export function AddMaterialDialog({
     fd.append("unitCost", String(values.unitCost));
     fd.append("supplierId", values.supplierId ?? "");
     fd.append("supplierName", selectedSupplier?.name ?? "");
+    if (values.width !== undefined) fd.append("width", String(values.width));
+    if (values.height !== undefined) fd.append("height", String(values.height));
+    if (values.bitola !== undefined) fd.append("bitola", String(values.bitola));
 
     const result = await upsertMaterial(fd);
 
@@ -261,6 +279,50 @@ export function AddMaterialDialog({
                 )}
               />
             </div>
+
+            {isChapa && (
+              <div className="grid grid-cols-3 gap-3 rounded-md border border-zinc-700 p-3">
+                <FormField
+                  control={form.control}
+                  name="bitola"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Bitola</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value ?? ""} type="number" className="bg-zinc-800 border-zinc-700" placeholder="Ex: 22" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="width"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Largura (mm)</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value ?? ""} type="number" className="bg-zinc-800 border-zinc-700" placeholder="Ex: 2000" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="height"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Altura (mm)</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value ?? ""} type="number" className="bg-zinc-800 border-zinc-700" placeholder="Ex: 1250" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             <FormField
               control={form.control}
