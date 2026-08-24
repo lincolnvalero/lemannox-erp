@@ -323,6 +323,10 @@ export type CalculatorReferenceData = {
   // de uma tabela separada, para que o preço fique sempre sincronizado com
   // o que é realmente comprado/atualizado no Estoque.
   materiaisEstoque: RawMaterial[];
+  // Componentes elétricos (lâmpada, fonte, botoeira, botão, chicote) também
+  // vêm do Estoque (categoria "Elétrico Coifa"), no lugar dos preços fixos
+  // que ficavam em parametros_globais.
+  eletricosEstoque: RawMaterial[];
   tabelaIluminacao: IluminacaoRow[];
   maoDeObra: MaoDeObraRow[];
   parametros: ParametrosGlobais;

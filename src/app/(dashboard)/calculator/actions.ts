@@ -31,6 +31,13 @@ export async function getCalculatorReferenceData(): Promise<{
       .filter(m => m.category === 'Chapa')
       .map(m => ({ ...m, price: m.unitCost }));
 
+    // Idem para os componentes elétricos (lâmpada, fonte, botoeira, botão,
+    // chicote) — antes viviam em parametros_globais, agora ficam no Estoque
+    // como qualquer outro insumo.
+    const eletricosEstoque: RawMaterial[] = (materiaisRes.materials ?? [])
+      .filter(m => m.category === 'Elétrico Coifa')
+      .map(m => ({ ...m, price: m.unitCost }));
+
     const tabelaIluminacao: IluminacaoRow[] = (iluminacaoRes.data ?? []).map(r => ({
       id: r.id, tipoCoifa: r.tipo_coifa, tipoInstalacao: r.tipo_instalacao, medida: r.medida,
       qtdLampadas: r.qtd_lampadas, qtdFonte: r.qtd_fonte, qtdBotoeira: r.qtd_botoeira, qtdBotao: r.qtd_botao, qtdChicote: r.qtd_chicote,
@@ -45,7 +52,7 @@ export async function getCalculatorReferenceData(): Promise<{
       parametros[row.chave] = row.valor;
     }
 
-    return { success: true, data: { materiaisEstoque, tabelaIluminacao, maoDeObra, parametros } };
+    return { success: true, data: { materiaisEstoque, eletricosEstoque, tabelaIluminacao, maoDeObra, parametros } };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar dados de referência da calculadora';
     return { success: false, error: message };
@@ -110,12 +117,17 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
         for (const material of MATERIAIS) {
           try {
             // Profundidade/altura padrão (não a mesma medida da largura — uma
-            // coifa de 3000mm de largura não tem 3000mm de profundidade).
+            // coifa de 3000mm de largura não tem 3000mm de profundidade). Para
+            // a Línea, usa a mesma altura padrão também como altura da
+            // carenagem, para o preço em lote já incluir esse custo.
+            const chapaPadrao = chapaPadraoParaLote(medida);
             const result = calculateCoifa({
               width: medida, depth: 700, height: 600,
               modelo: linha.modelo,
+              carenagemHeight: linha.modelo === 'Linea' ? 600 : undefined,
               material,
-              larguraPadrao: chapaPadraoParaLote(medida),
+              larguraPadrao: chapaPadrao,
+              larguraPadraoCarenagem: chapaPadrao,
               tipoAplicacao: 'Cozinha', tipoInstalacao: linha.instalacao,
               filtro: 'nenhum', coletor: 'nenhum',
               frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
@@ -172,6 +184,39 @@ export async function updateParametroGlobal(chave: string, valor: number): Promi
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar parâmetro';
+    return { success: false, error: message };
+  }
+}
+
+// ── Tabela de Mão de Obra — edição ─────────────────────────────────────────
+
+export async function getMaoDeObra(): Promise<{ success: boolean; rows?: MaoDeObraRow[]; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('mao_de_obra')
+      .select('*')
+      .order('modelo', { ascending: true })
+      .order('medida', { ascending: true });
+    if (error) throw error;
+    const rows: MaoDeObraRow[] = (data ?? []).map(r => ({ id: r.id, medida: r.medida, modelo: r.modelo, valor: r.valor }));
+    return { success: true, rows };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar mão de obra';
+    return { success: false, error: message };
+  }
+}
+
+export async function updateMaoDeObraValor(id: string, valor: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from('mao_de_obra').update({ valor }).eq('id', id);
+    if (error) throw error;
+    revalidatePath('/admin/mao-de-obra');
+    revalidatePath('/calculator');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao atualizar mão de obra';
     return { success: false, error: message };
   }
 }

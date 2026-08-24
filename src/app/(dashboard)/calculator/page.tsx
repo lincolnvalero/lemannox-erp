@@ -56,6 +56,7 @@ const formSchema = z.object({
   carenagemHeight: numField.optional(),
   material: z.string().min(1, 'Selecione o material'),
   larguraPadrao: z.coerce.number().min(1, 'Selecione a chapa padrão'),
+  larguraPadraoCarenagem: z.coerce.number().optional(),
   tipoAplicacao: z.enum(['Cozinha', 'Churrasqueira']),
   tipoInstalacao: z.enum(['Parede', 'Ilha']),
   filtro: z.enum(['nenhum', 'aluminio', 'inercial_430', 'inercial_304']),
@@ -63,7 +64,7 @@ const formSchema = z.object({
   frisoFrente: z.boolean(),
   frisoLD: z.boolean(),
   frisoLE: z.boolean(),
-  frisoLinhas: z.coerce.number().min(1).max(2),
+  frisoLinhas: z.coerce.number().min(1).max(3),
   outros: numField,
   paintingCost: numField,
 });
@@ -75,7 +76,7 @@ const defaultValues: FormValues = {
   modelo: 'Box',
   tetoWidth: 0, tetoDepth: 0,
   carenagemWidth: 0, carenagemDepth: 0, carenagemHeight: 0,
-  material: '', larguraPadrao: 0,
+  material: '', larguraPadrao: 0, larguraPadraoCarenagem: 0,
   tipoAplicacao: 'Cozinha', tipoInstalacao: 'Parede',
   filtro: 'nenhum', coletor: 'nenhum',
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
@@ -172,12 +173,13 @@ export default function CostCalculatorPage() {
         carenagemWidth: values.carenagemWidth, carenagemDepth: values.carenagemDepth, carenagemHeight: values.carenagemHeight,
         material: values.material,
         larguraPadrao: values.larguraPadrao,
+        larguraPadraoCarenagem: values.larguraPadraoCarenagem || undefined,
         tipoAplicacao: values.tipoAplicacao,
         tipoInstalacao: values.tipoInstalacao,
         filtro: values.filtro,
         coletor: values.filtro === 'nenhum' ? 'nenhum' : values.coletor,
         frisoFrente: values.frisoFrente, frisoLD: values.frisoLD, frisoLE: values.frisoLE,
-        frisoLinhas: values.frisoLinhas as 1 | 2,
+        frisoLinhas: values.frisoLinhas as 1 | 2 | 3,
         outros: values.outros,
         paintingCost: values.paintingCost,
       };
@@ -257,10 +259,22 @@ export default function CostCalculatorPage() {
                     </div>
                   )}
                   {isLinea && (
-                    <div className="grid grid-cols-3 gap-4 rounded-md border p-3 bg-muted/30">
-                      <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
-                      <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
-                      <FormField control={form.control} name="carenagemHeight" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                    <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                        <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                        <FormField control={form.control} name="carenagemHeight" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                      </div>
+                      <FormField control={form.control} name="larguraPadraoCarenagem" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Chapa Padrão — Carenagem (bitola 24)</FormLabel>
+                          <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value ? String(field.value) : ''} disabled={!watchedMaterial}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Mesma da chapa acima" /></SelectTrigger></FormControl>
+                            <SelectContent>{larguraPadraoDisponivel.map(l => <SelectItem key={l} value={String(l)}>{l}mm</SelectItem>)}</SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">Só preencha se a carenagem usar chapa de tamanho diferente do corpo.</FormDescription>
+                        </FormItem>
+                      )} />
                     </div>
                   )}
 
@@ -348,7 +362,7 @@ export default function CostCalculatorPage() {
                         <FormLabel className="text-xs">Quantidade de linhas de friso</FormLabel>
                         <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value)}>
                           <FormControl><SelectTrigger className="w-40"><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent><SelectItem value="1">1 linha</SelectItem><SelectItem value="2">2 linhas</SelectItem></SelectContent>
+                          <SelectContent><SelectItem value="1">1 linha</SelectItem><SelectItem value="2">2 linhas</SelectItem><SelectItem value="3">3 linhas</SelectItem></SelectContent>
                         </Select>
                       </FormItem>
                     )} />

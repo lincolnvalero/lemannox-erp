@@ -11,9 +11,11 @@ import { useToast } from '@/hooks/use-toast';
 import { getCalculatorReferenceData, updateParametroGlobal } from '@/app/(dashboard)/calculator/actions';
 
 // Agrupamento apenas para organizar a tela — a chave real é o que é salvo.
+// Os preços de iluminação (lâmpada, fonte, botoeira, botão, chicote) saíram
+// daqui — agora vêm do Estoque (materials, categoria "Elétrico Coifa"),
+// para ficar no mesmo lugar onde as chapas já são reajustadas.
 const GRUPOS: { titulo: string; chaves: string[] }[] = [
   { titulo: 'Margem e Pintura', chaves: ['margem_lucro_padrao', 'pintura_padrao'] },
-  { titulo: 'Iluminação — preços unitários', chaves: ['preco_lampada_cozinha', 'preco_lampada_churrasqueira', 'preco_fonte', 'preco_botoeira', 'preco_botao', 'preco_chicote'] },
   { titulo: 'Friso decorativo', chaves: ['preco_friso_por_cm'] },
   { titulo: 'Filtro inercial (fórmula: constante ÷ 0,7 × L×P ÷ 1.000.000)', chaves: ['filtro_constante_430', 'filtro_constante_304', 'filtro_constante_aluminio', 'filtro_coletor_gordura_por_cm'] },
 ];
@@ -21,12 +23,6 @@ const GRUPOS: { titulo: string; chaves: string[] }[] = [
 const LABELS: Record<string, string> = {
   margem_lucro_padrao: 'Margem de lucro padrão (%)',
   pintura_padrao: 'Pintura — valor padrão sugerido (R$)',
-  preco_lampada_cozinha: 'Lâmpada — Cozinha (R$)',
-  preco_lampada_churrasqueira: 'Lâmpada — Churrasqueira (R$)',
-  preco_fonte: 'Fonte de alimentação (R$)',
-  preco_botoeira: 'Botoeira (R$)',
-  preco_botao: 'Botão (R$)',
-  preco_chicote: 'Chicote elétrico (R$)',
   preco_friso_por_cm: 'Friso — preço por cm (R$)',
   filtro_constante_430: 'Constante — Filtro Inercial 430',
   filtro_constante_304: 'Constante — Filtro Inercial 304',
@@ -74,6 +70,10 @@ export default function ParametrosCalculadoraPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Alterar aqui atualiza o cálculo em todo o sistema — sem precisar mexer em código.
           Os valores marcados como &quot;a confirmar&quot; vieram da especificação técnica e ainda não foram validados pelo Levi.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Os preços de lâmpada, fonte, botoeira, botão e chicote agora ficam no{' '}
+          <a href="/materials" className="underline">Estoque</a> (categoria &quot;Elétrico Coifa&quot;), junto com o preço das chapas.
         </p>
       </div>
 
