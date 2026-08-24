@@ -1,9 +1,11 @@
 // Motor de cálculo de coifas — regras extraídas de "Planilha_de_Cálculos.pdf"
 // (Levi), da especificação técnica que o Gemini escreveu a partir dela, e
 // das correções enviadas depois (materiais únicos por coifa, Ilha como
-// acréscimo de mão de obra, fórmulas específicas de Tube/Línea, e a divisão
-// corpo/carenagem da Línea explicada em 24/8/26). Módulo puro: recebe os
-// dados de referência já carregados do banco (materiais de chapa e elétricos
+// acréscimo de mão de obra, fórmulas específicas de Tube/Línea, a divisão
+// corpo/carenagem da Línea explicada em 24/8/26, e a correção do
+// friso/mão-de-obra da Tube — diâmetro fixo em 500mm, mão de obra pela
+// altura, friso com fórmula própria de 50% do valor da chapa). Módulo puro:
+// recebe os dados de referência já carregados do banco (materiais de chapa e elétricos
 // do Estoque, tabela_iluminacao, mao_de_obra, parametros_globais) e devolve
 // o detalhamento de custo. Usado pela calculadora interativa e pela geração
 // em lote da Tabela de Preços.
@@ -17,9 +19,9 @@ export type FiltroTipo = 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304'
 export type ColetorTipo = 'nenhum' | 'simples' | 'duplo';
 
 export interface CoifaCalculatorInput {
-  width: number;  // largura (mm) — para Tube, é o diâmetro
-  depth: number;  // profundidade (mm)
-  height: number; // altura (mm) — para Tube, alimenta o corpo cilíndrico (bitola 24)
+  width: number;  // largura (mm) — ignorado para Tube: o diâmetro é sempre fixo em 500mm
+  depth: number;  // profundidade (mm) — não usado para Tube (cilíndrica, sem profundidade)
+  height: number; // altura (mm) — para Tube, alimenta o corpo cilíndrico (bitola 24) e a mão de obra
   modelo: ModeloCoifa;
   // Piramidal — medida do teto (abertura/duto, menor que a base da coifa)
   tetoWidth?: number;
@@ -150,7 +152,11 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   const details: CalculationDetail[] = [];
   const warnings: string[] = [];
   const p = ref.parametros;
-  const { width, depth, height, larguraPadrao } = input;
+  const { depth, height, larguraPadrao } = input;
+  // O diâmetro da Tube é sempre 500mm (fixo) — qualquer valor de largura
+  // recebido é ignorado para esse modelo, conforme instrução explícita
+  // ("O diâmetro será sempre considerado 500mm").
+  const width = input.modelo === 'Tube' ? 500 : input.width;
   const materiaisEstoque = ref.materiaisEstoque ?? [];
   const eletricos = ref.eletricosEstoque ?? [];
 
@@ -235,12 +241,27 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   }
 
   // ── 3. Frisos ────────────────────────────────────────────────────────────
+  // A Tube usa uma fórmula própria, sem relação com a extensão em cm: cada
+  // linha de friso é feita de 2 tampas de chapa bitola 22, custando 25% do
+  // valor da chapa em matéria-prima + 25% do valor da chapa em mão de obra
+  // (50% ao todo), multiplicado pela quantidade de linhas. Corrigido após
+  // o Levi apontar que a primeira versão não seguia essa fórmula.
   let frisoCost = 0;
-  const extensaoMm = (input.frisoFrente ? width : 0) + (input.frisoLD ? depth : 0) + (input.frisoLE ? depth : 0);
-  if (extensaoMm > 0) {
-    const extensaoCm = extensaoMm / 10;
-    frisoCost = extensaoCm * (p['preco_friso_por_cm'] ?? 0) * input.frisoLinhas;
-    details.push({ label: `Frisos (${extensaoCm.toFixed(0)}cm × ${input.frisoLinhas})`, value: brl(frisoCost) });
+  if (input.modelo === 'Tube') {
+    if (input.frisoFrente || input.frisoLD || input.frisoLE) {
+      const chapaFriso = findChapaEstoque(materiaisEstoque, input.material, 22, larguraPadrao);
+      if (!chapaFriso) warnings.push(`Chapa ${input.material} bitola 22 / ${larguraPadrao}mm não encontrada no Estoque (friso da Tube).`);
+      const precoChapa = chapaFriso?.unitCost ?? 0;
+      frisoCost = input.frisoLinhas * (0.25 * precoChapa + 0.25 * precoChapa);
+      details.push({ label: `Friso Tube (${input.frisoLinhas} linha(s) — 25% chapa + 25% mão de obra)`, value: brl(frisoCost) });
+    }
+  } else {
+    const extensaoMm = (input.frisoFrente ? width : 0) + (input.frisoLD ? depth : 0) + (input.frisoLE ? depth : 0);
+    if (extensaoMm > 0) {
+      const extensaoCm = extensaoMm / 10;
+      frisoCost = extensaoCm * (p['preco_friso_por_cm'] ?? 0) * input.frisoLinhas;
+      details.push({ label: `Frisos (${extensaoCm.toFixed(0)}cm × ${input.frisoLinhas})`, value: brl(frisoCost) });
+    }
   }
 
   // ── 4. Iluminação (preços vêm do Estoque, não mais de parâmetros fixos) ──
@@ -286,13 +307,18 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   }
 
   // ── 5. Mão de obra (+ acréscimo de Ilha, quando for o caso) ─────────────
-  const maoDeObraRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === input.modelo), width);
+  // Para a Tube, o diâmetro é fixo (500mm) — usar a largura como medida
+  // deixaria a mão de obra igual para qualquer altura, o que é o próprio
+  // erro que o Levi apontou. A medida usada é a ALTURA (mesmo princípio da
+  // carenagem da Línea).
+  const medidaMaoDeObra = input.modelo === 'Tube' ? height : width;
+  const maoDeObraRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === input.modelo), medidaMaoDeObra);
   let laborCost = maoDeObraRow?.valor ?? 0;
   if (!maoDeObraRow) warnings.push(`Mão de obra não encontrada para o modelo ${input.modelo} nessa medida.`);
   details.push({ label: `Mão de obra (${input.modelo})`, value: brl(laborCost) });
 
   if (input.tipoInstalacao === 'Ilha') {
-    const ilhaRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === 'Ilha'), width);
+    const ilhaRow = findByMedidaFaixa(ref.maoDeObra.filter(r => r.modelo === 'Ilha'), medidaMaoDeObra);
     const acrescimoIlha = ilhaRow?.valor ?? 0;
     laborCost += acrescimoIlha;
     details.push({ label: 'Acréscimo mão de obra (Instalação Ilha)', value: brl(acrescimoIlha) });
@@ -306,7 +332,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   const margem = p['margem_lucro_padrao'] ?? 0;
   const finalPrice = totalCost * (1 + margem / 100);
 
-  const descricaoAuto = buildDescricaoAuto(input, lampadasDescricao, botaoOuBotoeiraDescricao);
+  const descricaoAuto = buildDescricaoAuto({ ...input, width }, lampadasDescricao, botaoOuBotoeiraDescricao);
 
   return {
     sheetCost, filtroCost, frisoCost, iluminacaoCost, laborCost,

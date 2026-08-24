@@ -161,6 +161,16 @@ export default function CostCalculatorPage() {
   const isTube = watchedModelo === 'Tube';
   const showColetor = watchedFiltro === 'inercial_430' || watchedFiltro === 'inercial_304';
 
+  // A Tube não tem Largura/Profundidade — é cilíndrica, com diâmetro sempre
+  // fixo em 500mm (conforme instrução do Levi). Só a Altura é digitada.
+  useEffect(() => {
+    if (isTube) {
+      form.setValue('width', 500);
+      form.setValue('depth', 500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTube]);
+
   function onSubmit(values: FormValues) {
     if (!ref) return;
     setIsLoading(true);
@@ -246,11 +256,21 @@ export default function CostCalculatorPage() {
                     </FormItem>
                   )} />
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <FormField control={form.control} name="width" render={({ field }) => ( <FormItem><FormLabel>Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
-                    <FormField control={form.control} name="depth" render={({ field }) => ( <FormItem><FormLabel>Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
-                    <FormField control={form.control} name="height" render={({ field }) => ( <FormItem><FormLabel>Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
-                  </div>
+                  {isTube ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormItem>
+                        <FormLabel>Diâmetro</FormLabel>
+                        <FormControl><Input value="Ø 500mm (fixo)" disabled /></FormControl>
+                      </FormItem>
+                      <FormField control={form.control} name="height" render={({ field }) => ( <FormItem><FormLabel>Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-4">
+                      <FormField control={form.control} name="width" render={({ field }) => ( <FormItem><FormLabel>Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
+                      <FormField control={form.control} name="depth" render={({ field }) => ( <FormItem><FormLabel>Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
+                      <FormField control={form.control} name="height" render={({ field }) => ( <FormItem><FormLabel>Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem> )} />
+                    </div>
+                  )}
 
                   {isPiramidal && (
                     <div className="grid grid-cols-2 gap-4 rounded-md border p-3 bg-muted/30">
@@ -309,6 +329,8 @@ export default function CostCalculatorPage() {
                   {isTube && (
                     <p className="text-xs text-muted-foreground rounded-md border p-2 bg-muted/30">
                       Coifa Tube sempre usa 2 lâmpadas + 1 botoeira + 1 chicote, fixo — não varia por medida ou instalação.
+                      Diâmetro sempre 500mm; mão de obra calculada pela altura. Se marcar friso, o custo usa a fórmula
+                      própria da Tube (25% do valor da chapa em matéria-prima + 25% em mão de obra por linha), não a extensão em cm.
                     </p>
                   )}
                 </CardContent>

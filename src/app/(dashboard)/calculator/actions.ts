@@ -119,10 +119,12 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
             // Profundidade/altura padrão (não a mesma medida da largura — uma
             // coifa de 3000mm de largura não tem 3000mm de profundidade). Para
             // a Línea, usa a mesma altura padrão também como altura da
-            // carenagem, para o preço em lote já incluir esse custo.
+            // carenagem, para o preço em lote já incluir esse custo. Para a
+            // Tube, o diâmetro é sempre fixo (500mm) — "medida" aqui vira a
+            // ALTURA, que é o que realmente varia o preço desse modelo.
             const chapaPadrao = chapaPadraoParaLote(medida);
             const result = calculateCoifa({
-              width: medida, depth: 700, height: 600,
+              width: medida, depth: 700, height: linha.modelo === 'Tube' ? medida : 600,
               modelo: linha.modelo,
               carenagemHeight: linha.modelo === 'Linea' ? 600 : undefined,
               material,
