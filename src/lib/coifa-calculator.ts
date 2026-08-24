@@ -60,9 +60,11 @@ export type CoifaCalculationResult = {
 
 // Tabela específica de Tube/Línea: "frente equivalente" por largura (E3 na
 // planilha), usada como única metragem de chapa desses dois modelos — não
-// têm frente/laterais/costas separadas. Transcrita tal como enviada; a
-// queda entre 1600→2000 (2900) e 2000→2100 (3600) já é assim na origem —
-// vale confirmar essa célula específica na planilha antes de fechar preço.
+// têm frente/laterais/costas separadas. Transcrita tal como enviada; a queda
+// entre 1600→2000 (2900) e 2000→2100 (3600) é exatamente o que a fórmula
+// original do Excel produz (SES(...E3<=2000;1700+2400...E3<=2100;3400+200...)
+// — confirmado batendo célula a célula com a fórmula enviada, não é erro de
+// transcrição.
 const TUBE_LINEA_FRENTE_EQUIVALENTE: { ate: number; valor: number }[] = [
   { ate: 1000, valor: 1700 }, { ate: 1100, valor: 1900 }, { ate: 1200, valor: 2100 },
   { ate: 1300, valor: 2300 }, { ate: 1400, valor: 2500 }, { ate: 1500, valor: 2700 },
@@ -144,6 +146,13 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     details.push({ label: 'Chapa (Costas/Teto)', value: `${chapasCostasTeto.toFixed(2)} un. — ${brl(costCostasTeto)}` });
 
     sheetCost = costFrente + costCostasTeto;
+  }
+
+  // A carenagem da Línea é coletada na tela mas ainda não tem fórmula de
+  // custo definida (não veio na planilha nem nas correções enviadas) — avisa
+  // para não passar a impressão de que já está no preço.
+  if (input.modelo === 'Linea' && (input.carenagemWidth || input.carenagemDepth || input.carenagemHeight)) {
+    warnings.push('Medidas da carenagem informadas, mas o custo da carenagem ainda não entra no cálculo — falta a fórmula (pendente com o Levi).');
   }
 
   // ── 2. Filtro inercial (material do filtro é independente do da coifa) ──
