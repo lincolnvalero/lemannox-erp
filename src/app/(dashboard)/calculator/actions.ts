@@ -176,20 +176,6 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
   }
 }
 
-export async function updateParametroGlobal(chave: string, valor: number): Promise<{ success: boolean; error?: string }> {
-  try {
-    const supabase = await createClient();
-    const { error } = await supabase.from('parametros_globais').update({ valor }).eq('chave', chave);
-    if (error) throw error;
-    revalidatePath('/admin/parametros-calculadora');
-    revalidatePath('/calculator');
-    return { success: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erro ao atualizar parâmetro';
-    return { success: false, error: message };
-  }
-}
-
 // ── Tabela de Mão de Obra — edição ─────────────────────────────────────────
 
 export async function getMaoDeObra(): Promise<{ success: boolean; rows?: MaoDeObraRow[]; error?: string }> {
@@ -209,16 +195,95 @@ export async function getMaoDeObra(): Promise<{ success: boolean; rows?: MaoDeOb
   }
 }
 
-export async function updateMaoDeObraValor(id: string, valor: number): Promise<{ success: boolean; error?: string }> {
+// Salva várias linhas de uma vez (a tela de Memória edita a tabela inteira
+// e salva tudo com um único clique, em vez de um botão por célula).
+export async function updateMaoDeObraRows(rows: { id: string; valor: number }[]): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from('mao_de_obra').update({ valor }).eq('id', id);
-    if (error) throw error;
-    revalidatePath('/admin/mao-de-obra');
+    for (const row of rows) {
+      const { error } = await supabase.from('mao_de_obra').update({ valor: row.valor }).eq('id', row.id);
+      if (error) throw error;
+    }
+    revalidatePath('/admin/memoria');
     revalidatePath('/calculator');
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar mão de obra';
+    return { success: false, error: message };
+  }
+}
+
+// ── Tabela de Iluminação — edição ──────────────────────────────────────────
+
+export async function getIluminacao(): Promise<{ success: boolean; rows?: IluminacaoRow[]; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('tabela_iluminacao')
+      .select('*')
+      .order('tipo_coifa', { ascending: true })
+      .order('tipo_instalacao', { ascending: true })
+      .order('medida', { ascending: true });
+    if (error) throw error;
+    const rows: IluminacaoRow[] = (data ?? []).map(r => ({
+      id: r.id, tipoCoifa: r.tipo_coifa, tipoInstalacao: r.tipo_instalacao, medida: r.medida,
+      qtdLampadas: r.qtd_lampadas, qtdFonte: r.qtd_fonte, qtdBotoeira: r.qtd_botoeira, qtdBotao: r.qtd_botao, qtdChicote: r.qtd_chicote,
+    }));
+    return { success: true, rows };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao buscar tabela de iluminação';
+    return { success: false, error: message };
+  }
+}
+
+export type IluminacaoRowUpdate = {
+  id: string;
+  qtdLampadas: number;
+  qtdFonte: number;
+  qtdBotoeira: number;
+  qtdBotao: number;
+  qtdChicote: number;
+};
+
+export async function updateIluminacaoRows(rows: IluminacaoRowUpdate[]): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    for (const row of rows) {
+      const { error } = await supabase
+        .from('tabela_iluminacao')
+        .update({
+          qtd_lampadas: row.qtdLampadas,
+          qtd_fonte: row.qtdFonte,
+          qtd_botoeira: row.qtdBotoeira,
+          qtd_botao: row.qtdBotao,
+          qtd_chicote: row.qtdChicote,
+        })
+        .eq('id', row.id);
+      if (error) throw error;
+    }
+    revalidatePath('/admin/memoria');
+    revalidatePath('/calculator');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao atualizar tabela de iluminação';
+    return { success: false, error: message };
+  }
+}
+
+// Salva vários parâmetros globais de uma vez (mesmo padrão de "Salvar
+// alterações" único usado no resto da tela de Memória).
+export async function updateParametrosGlobaisRows(rows: { chave: string; valor: number }[]): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    for (const row of rows) {
+      const { error } = await supabase.from('parametros_globais').update({ valor: row.valor }).eq('chave', row.chave);
+      if (error) throw error;
+    }
+    revalidatePath('/admin/memoria');
+    revalidatePath('/calculator');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao atualizar parâmetros';
     return { success: false, error: message };
   }
 }

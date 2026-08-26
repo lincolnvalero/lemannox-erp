@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Package, FileText, DollarSign,
-  Factory, Truck, Settings, Receipt, BarChart3, Archive,
+  Factory, Truck, Settings, Receipt, BarChart3, Archive, Calculator,
   Menu, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,9 @@ import {
 } from '@/components/ui/sheet';
 import type { AppRole } from '@/lib/role-context';
 
-type NavItem = { title: string; href: string };
+// adminOnly: item some do menu (e o middleware já bloqueia a rota) pro
+// perfil Produção, mesmo quando o grupo em si é visível pra esse perfil.
+type NavItem = { title: string; href: string; adminOnly?: boolean };
 type NavGroup = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -26,7 +28,14 @@ type NavGroup = {
 };
 
 const navGroups: NavGroup[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+  {
+    label: 'Relatórios',
+    icon: LayoutDashboard,
+    items: [
+      { title: 'Dashboard', href: '/dashboard', adminOnly: true },
+      { title: 'Relatórios Gerenciais', href: '/relatorios' },
+    ],
+  },
   {
     label: 'Comercial',
     icon: FileText,
@@ -68,11 +77,11 @@ const navGroups: NavGroup[] = [
   },
   { label: 'Estoque', icon: Archive, href: '/materials' },
   {
-    label: 'Relatórios',
-    icon: BarChart3,
+    label: 'Calculadora',
+    icon: Calculator,
     items: [
-      { title: 'Relatórios', href: '/relatorios' },
-      { title: 'Calculadora', href: '/calculator' },
+      { title: 'Cálculos', href: '/calculator' },
+      { title: 'Memória', href: '/admin/memoria', adminOnly: true },
     ],
   },
   { label: 'Fatura', icon: Receipt, href: '/invoicing' },
@@ -82,16 +91,16 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Usuários', href: '/admin/users' },
       { title: 'Empresa / NF-e', href: '/admin/empresa' },
-      { title: 'Parâmetros da Calculadora', href: '/admin/parametros-calculadora' },
-      { title: 'Mão de Obra (Coifas)', href: '/admin/mao-de-obra' },
     ],
   },
 ];
 
 export const RAIL_W = 84;
 
-// Labels dos grupos visíveis para cada role
-const PRODUCAO_VISIBLE = new Set(['Produção', 'Relatórios', 'Estoque']);
+// Labels dos grupos visíveis para cada role. Dentro de um grupo visível,
+// itens marcados adminOnly ainda são escondidos do perfil Produção (ex:
+// Dashboard dentro de Relatórios, Memória dentro de Calculadora).
+const PRODUCAO_VISIBLE = new Set(['Produção', 'Relatórios', 'Estoque', 'Calculadora']);
 
 /* ── Leamnox Logo Mark ── */
 function LeamnoxLogo({ small }: { small?: boolean }) {
@@ -132,10 +141,14 @@ function usePageTitle(pathname: string) {
 export function SidebarNav({ footer, role = 'admin' }: { footer?: React.ReactNode; role?: AppRole }) {
   const pathname = usePathname();
 
-  // Filtrar grupos de acordo com o perfil do usuário
+  // Filtrar grupos e itens de acordo com o perfil do usuário. Além de
+  // esconder grupos inteiros, itens adminOnly somem mesmo dentro de um
+  // grupo visível pro perfil Produção.
   const visibleGroups = role === 'admin'
     ? navGroups
-    : navGroups.filter(g => PRODUCAO_VISIBLE.has(g.label));
+    : navGroups
+        .filter(g => PRODUCAO_VISIBLE.has(g.label))
+        .map(g => ({ ...g, items: g.items?.filter(i => !i.adminOnly) }));
   /* ── Desktop flyout state ── */
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [flyoutTop, setFlyoutTop] = useState(0);
