@@ -92,6 +92,11 @@ export function AddProductDialog({
   const isOthers =
     watchedCategory === "Outros" ||
     (watchedCategory === NEW_CATEGORY_VALUE && watchedNewCategory === "Outros");
+  // Grills só são fabricados em Inox 304 — não faz sentido pedir preço de
+  // Inox 430 e Aço Carbono pra essa categoria.
+  const isGrill =
+    watchedCategory === "Grill" ||
+    (watchedCategory === NEW_CATEGORY_VALUE && watchedNewCategory === "Grill");
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +146,8 @@ export function AddProductDialog({
 
     const variations = isOthers
       ? [{ id: crypto.randomUUID(), material: "Padrão", price: values.pricePadrao ?? 0 }]
+      : isGrill
+      ? [{ id: crypto.randomUUID(), material: "Inox 304", price: values.priceInox304 ?? 0 }]
       : MATERIALS.map((mat, i) => ({
           id: crypto.randomUUID(),
           material: mat,
@@ -322,6 +329,26 @@ export function AddProductDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Padrão (R$)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.01"
+                          className="bg-zinc-800 border-zinc-700"
+                          placeholder="0,00"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : isGrill ? (
+                <FormField
+                  control={form.control}
+                  name="priceInox304"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Inox 304 (R$)</FormLabel>
                       <FormControl>
                         <Input
                           {...field}

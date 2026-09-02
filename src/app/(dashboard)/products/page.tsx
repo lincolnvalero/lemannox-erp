@@ -15,6 +15,7 @@ import {
   Search,
   PlusCircle,
   Trash2,
+  Pencil,
   Percent,
   FileDown,
 } from 'lucide-react';
@@ -56,6 +57,7 @@ const ProductsTable = ({
   products,
   handlePriceChange,
   setProductToDelete,
+  onEdit,
   isSavingPrice,
 }: {
   products: Product[];
@@ -65,6 +67,7 @@ const ProductsTable = ({
     newPriceStr: string
   ) => void;
   setProductToDelete: (product: Product | null) => void;
+  onEdit: (product: Product) => void;
   isSavingPrice: string | null;
 }) => {
   return (
@@ -135,6 +138,49 @@ const ProductsTable = ({
                       Não aplicável
                     </TableCell>
                   </>
+                ) : product.category === 'Grill' ? (
+                  // Grills só são fabricados em Inox 304 — as outras duas
+                  // colunas não fazem sentido pra essa categoria.
+                  <>
+                    <TableCell
+                      colSpan={materialColumns.indexOf('Inox 304')}
+                      className="text-center text-muted-foreground"
+                    >
+                      Não aplicável
+                    </TableCell>
+                    <TableCell className="text-right font-code">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          R$
+                        </span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="w-full text-right pr-3 pl-8"
+                          defaultValue={
+                            pricesByMaterial['Inox 304'] !== undefined
+                              ? pricesByMaterial['Inox 304'].toFixed(2)
+                              : ''
+                          }
+                          placeholder="-"
+                          onBlur={(e) =>
+                            handlePriceChange(
+                              product.id,
+                              'Inox 304',
+                              e.target.value
+                            )
+                          }
+                          disabled={isSavingPrice === `${product.id}-Inox 304`}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell
+                      colSpan={materialColumns.length - materialColumns.indexOf('Inox 304') - 1}
+                      className="text-center text-muted-foreground"
+                    >
+                      Não aplicável
+                    </TableCell>
+                  </>
                 ) : (
                   materialColumns.map((material) => (
                     <TableCell key={material} className="text-right font-code">
@@ -168,6 +214,14 @@ const ProductsTable = ({
                   ))
                 )}
                 <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEdit(product)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Editar</span>
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -574,6 +628,7 @@ export default function ProductsPage() {
                       products={filteredProducts}
                       handlePriceChange={handlePriceChange}
                       setProductToDelete={setProductToDelete}
+                      onEdit={handleOpenDialog}
                       isSavingPrice={isSavingPrice}
                     />
                 )}
