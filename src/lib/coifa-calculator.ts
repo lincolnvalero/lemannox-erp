@@ -53,6 +53,7 @@ export type CalculationDetail = { label: string; value: string };
 
 export type CoifaCalculationResult = {
   sheetCost: number;
+  perdasCost: number;
   filtroCost: number;
   frisoCost: number;
   iluminacaoCost: number;
@@ -221,6 +222,14 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     sheetCost = costFrente + costCostasTeto;
   }
 
+  // ── Perdas de material (20% sobre o custo de chapa) ─────────────────────
+  // Pedido em 16/9/26: depois de somar o custo de matéria-prima (chapas 22
+  // e 24), soma 20% a título de perdas — lançado logo após o detalhamento
+  // das chapas. Entra no totalCost como as outras rubricas, então a margem
+  // também incide sobre ele.
+  const perdasCost = sheetCost * 0.20;
+  details.push({ label: 'Perdas (20% sobre chapas)', value: brl(perdasCost) });
+
   // ── 2. Filtro inercial (material do filtro é independente do da coifa) ──
   let filtroCost = 0;
   if (input.filtro !== 'nenhum') {
@@ -328,14 +337,14 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   if (input.outros > 0) details.push({ label: 'Outros', value: brl(input.outros) });
   if (input.paintingCost > 0) details.push({ label: 'Pintura', value: brl(input.paintingCost) });
 
-  const totalCost = sheetCost + filtroCost + frisoCost + iluminacaoCost + laborCost + input.outros + input.paintingCost;
+  const totalCost = sheetCost + perdasCost + filtroCost + frisoCost + iluminacaoCost + laborCost + input.outros + input.paintingCost;
   const margem = p['margem_lucro_padrao'] ?? 0;
   const finalPrice = totalCost * (1 + margem / 100);
 
   const descricaoAuto = buildDescricaoAuto({ ...input, width }, lampadasDescricao, botaoOuBotoeiraDescricao);
 
   return {
-    sheetCost, filtroCost, frisoCost, iluminacaoCost, laborCost,
+    sheetCost, perdasCost, filtroCost, frisoCost, iluminacaoCost, laborCost,
     outrosCost: input.outros, paintingCost: input.paintingCost,
     totalCost, finalPrice, details, warnings, descricaoAuto,
   };
