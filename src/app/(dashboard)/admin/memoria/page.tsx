@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { BookOpen, HardHat, Lightbulb, SlidersHorizontal, Save } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -371,11 +371,6 @@ function ParametrosSection() {
         <Card key={grupo.titulo}>
           <CardHeader>
             <CardTitle className="text-base">{grupo.titulo}</CardTitle>
-            {grupo.titulo.includes('Filtro') && (
-              <CardDescription className="text-amber-500">
-                Valores de constante ainda não confirmados com o Levi.
-              </CardDescription>
-            )}
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {grupo.chaves.map(chave => (
