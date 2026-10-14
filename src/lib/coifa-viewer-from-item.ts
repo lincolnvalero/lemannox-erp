@@ -72,6 +72,8 @@ export function coifaParamsFromQuoteItem(
       frisoLinhas: salvo.frisoLinhas,
       qtdLampadas: salvo.qtdLampadas,
       qtdBotoes: salvo.qtdBotoes,
+      controle: salvo.controle,
+      posicaoLampadas: salvo.posicaoLampadas,
       exato: true,
     };
   }
@@ -83,7 +85,11 @@ export function coifaParamsFromQuoteItem(
 
   const mount = /ilha/i.test(item.name) ? 'Ilha' : 'Parede';
   const tipoAplicacao = /churrasqueira/i.test(`${item.name} ${item.category ?? ''}`) ? 'Churrasqueira' : 'Cozinha';
-  const comum = { mount, tipoAplicacao, material: item.material, exato: false } as const;
+  const comum = {
+    mount, tipoAplicacao, material: item.material, exato: false,
+    // Churrasqueira de catálogo vem com 2 botões; Cozinha, com botoeira.
+    controle: tipoAplicacao === 'Churrasqueira' ? 'botoes' : 'botoeira',
+  } as const;
 
   if (modelo === 'Tube') {
     // Diâmetro fixo — a medida relevante é a altura, que vem por último

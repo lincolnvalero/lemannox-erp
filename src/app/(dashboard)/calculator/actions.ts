@@ -63,27 +63,38 @@ export async function getCalculatorReferenceData(): Promise<{
   }
 }
 
-// ── Fase 3: emissão em lote da Tabela de Preços (Coifas de Cozinha) ────────
+// ── Fase 3: emissão em lote da Tabela de Preços (Coifas) ───────────────────
 // Gera um produto por combinação de Modelo/Instalação/Medida, com uma
 // variação de preço por material (430/304/Carbono) — mesmo formato que a
-// tela de Produtos já usa. Roda em modo "upsert": se já existir um produto
-// com a mesma Categoria/Modelo/Medida, atualiza; senão, cria. Nunca apaga
-// produtos existentes.
+// tela de Produtos já usa — para Coifas de Cozinha E de Churrasqueira.
+//
+// Pedido do Levi (16/9): os preços antigos das coifas não devem ser mantidos.
+// Então, ao gerar: (1) os itens de Cozinha em formato LxPxA (ex: 1000x700x1000),
+// que ficaram duplicados, são removidos; (2) a lista de Churrasqueira é
+// refeita do zero; (3) a lista de Cozinha em formato "1000mm" é atualizada
+// (mesma Categoria/Modelo/Medida = atualiza; senão cria). Só mexe nas
+// categorias de coifa — nenhum outro produto é tocado.
 
 const MEDIDAS = Array.from({ length: 21 }, (_, i) => 1000 + i * 100); // 1000..3000
 const MATERIAIS: string[] = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 
 type LinhaTabela = { modelo: 'Box' | 'Piramidal' | 'Linea' | 'Tube'; instalacao: 'Parede' | 'Ilha'; modelLabel: string };
 
-// Ordem descrita pelo Levi: Box de Parede, Box Ilha, Piramidal de Parede,
-// Línea, Tube — todos dentro de "Coifas de Cozinha".
+// Box de Parede, Box Ilha, Piramidal de Parede (3 águas), Piramidal Ilha
+// (4 águas), Línea e Tube — dentro de cada categoria.
 const LINHAS: LinhaTabela[] = [
   { modelo: 'Box', instalacao: 'Parede', modelLabel: 'Box de Parede' },
   { modelo: 'Box', instalacao: 'Ilha', modelLabel: 'Box Ilha' },
   { modelo: 'Piramidal', instalacao: 'Parede', modelLabel: 'Piramidal de Parede' },
+  { modelo: 'Piramidal', instalacao: 'Ilha', modelLabel: 'Piramidal Ilha' },
   { modelo: 'Linea', instalacao: 'Parede', modelLabel: 'Línea' },
   { modelo: 'Tube', instalacao: 'Parede', modelLabel: 'Tube' },
 ];
+
+const APLICACOES = [
+  { tipoAplicacao: 'Cozinha', category: 'Coifa de Cozinha' },
+  { tipoAplicacao: 'Churrasqueira', category: 'Coifa de Churrasqueira' },
+] as const;
 
 // Só usada para a emissão em lote (a calculadora interativa agora deixa a
 // escolha da chapa padrão para o usuário, por pedido explícito).
@@ -91,10 +102,14 @@ function chapaPadraoParaLote(width: number): number {
   return width <= 1900 ? 2000 : 3000;
 }
 
-export async function generatePriceTableCoifasCozinha(): Promise<{
+// Medida no formato antigo "LxPxA" (ex: 1000x700x1000).
+const MEDIDA_LXPXA = /^\s*\d+\s*[x×]\s*\d+\s*[x×]\s*\d+/i;
+
+export async function generatePriceTableCoifas(): Promise<{
   success: boolean;
   created?: number;
   updated?: number;
+  removed?: number;
   errors?: string[];
   error?: string;
   /** true quando falta definir o teto padrão da Piramidal antes de gerar. */
@@ -118,76 +133,106 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
 
     const { calculateCoifa } = await import('@/lib/coifa-calculator');
 
-    let created = 0;
-    let updated = 0;
     const errors: string[] = [];
-    const category = 'Coifa de Cozinha';
+    type NovoProduto = { category: string; model: string; measurement: string; variations: { id: string; material: string; price: number }[] };
+    const novos: NovoProduto[] = [];
 
-    for (const linha of LINHAS) {
-      for (const medida of MEDIDAS) {
-        const measurement = `${medida}mm`;
-        const variations: { id: string; material: string; price: number }[] = [];
-
-        for (const material of MATERIAIS) {
-          try {
-            // Profundidade/altura padrão (não a mesma medida da largura — uma
-            // coifa de 3000mm de largura não tem 3000mm de profundidade). Para
-            // a Línea, usa a mesma altura padrão também como altura da
-            // carenagem, para o preço em lote já incluir esse custo. Para a
-            // Tube, o diâmetro é sempre fixo (500mm) — "medida" aqui vira a
-            // ALTURA, que é o que realmente varia o preço desse modelo.
-            const chapaPadrao = chapaPadraoParaLote(medida);
-            const result = calculateCoifa({
-              width: medida,
-              depth: LOTE_PROFUNDIDADE,
-              height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? LOTE_ALTURA_CORPO_LINEA : LOTE_ALTURA,
-              modelo: linha.modelo,
-              tetoWidth: linha.modelo === 'Piramidal' ? teto.largura : undefined,
-              tetoDepth: linha.modelo === 'Piramidal' ? teto.profundidade : undefined,
-              carenagemHeight: linha.modelo === 'Linea' ? LOTE_ALTURA_CARENAGEM : undefined,
-              material,
-              larguraPadrao: chapaPadrao,
-              larguraPadraoCarenagem: chapaPadrao,
-              tipoAplicacao: 'Cozinha', tipoInstalacao: linha.instalacao,
-              filtro: 'nenhum', coletor: 'nenhum',
-              frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
-              outros: 0, paintingCost: ref.parametros['pintura_padrao'] ?? 0,
-            }, ref);
-            variations.push({ id: crypto.randomUUID(), material, price: Math.round(result.finalPrice * 100) / 100 });
-          } catch (err) {
-            errors.push(`${linha.modelLabel} ${medida}mm (${material}): ${err instanceof Error ? err.message : 'erro no cálculo'}`);
+    // 1) Calcula tudo em memória primeiro: se algo estiver errado no
+    //    Estoque/tabelas, nada é apagado.
+    for (const { tipoAplicacao, category } of APLICACOES) {
+      for (const linha of LINHAS) {
+        for (const medida of MEDIDAS) {
+          const variations: NovoProduto['variations'] = [];
+          for (const material of MATERIAIS) {
+            try {
+              // Profundidade/altura padrão (não a mesma medida da largura — uma
+              // coifa de 3000mm de largura não tem 3000mm de profundidade). Para
+              // a Línea, o corpo é baixo (100mm) e a carenagem tem altura própria
+              // — só ela entra no preço. Para a Tube, o diâmetro é sempre fixo
+              // (500mm) — "medida" aqui vira a ALTURA. A Piramidal usa o teto
+              // padrão e, por ora, não leva carenagem na tabela.
+              const chapaPadrao = chapaPadraoParaLote(medida);
+              const result = calculateCoifa({
+                width: medida,
+                depth: LOTE_PROFUNDIDADE,
+                height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? LOTE_ALTURA_CORPO_LINEA : LOTE_ALTURA,
+                modelo: linha.modelo,
+                tetoWidth: linha.modelo === 'Piramidal' ? teto.largura : undefined,
+                tetoDepth: linha.modelo === 'Piramidal' ? teto.profundidade : undefined,
+                carenagemHeight: linha.modelo === 'Linea' ? LOTE_ALTURA_CARENAGEM : undefined,
+                material,
+                larguraPadrao: chapaPadrao,
+                larguraPadraoCarenagem: chapaPadrao,
+                tipoAplicacao, tipoInstalacao: linha.instalacao,
+                filtro: 'nenhum', coletor: 'nenhum',
+                frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
+                outros: 0, paintingCost: ref.parametros['pintura_padrao'] ?? 0,
+              }, ref);
+              variations.push({ id: crypto.randomUUID(), material, price: Math.round(result.finalPrice * 100) / 100 });
+            } catch (err) {
+              errors.push(`${category} — ${linha.modelLabel} ${medida}mm (${material}): ${err instanceof Error ? err.message : 'erro no cálculo'}`);
+            }
           }
-        }
-
-        if (variations.length === 0) continue;
-
-        const { data: existing } = await supabase
-          .from('products')
-          .select('id')
-          .eq('category', category)
-          .eq('model', linha.modelLabel)
-          .eq('measurement', measurement)
-          .maybeSingle();
-
-        if (existing) {
-          const { error } = await supabase
-            .from('products')
-            .update({ variations, product_group: 'coifas' })
-            .eq('id', existing.id);
-          if (error) errors.push(`${linha.modelLabel} ${measurement}: ${error.message}`);
-          else updated++;
-        } else {
-          const { error } = await supabase
-            .from('products')
-            .insert({ category, model: linha.modelLabel, measurement, variations, product_group: 'coifas' });
-          if (error) errors.push(`${linha.modelLabel} ${measurement}: ${error.message}`);
-          else created++;
+          if (variations.length > 0) novos.push({ category, model: linha.modelLabel, measurement: `${medida}mm`, variations });
         }
       }
     }
+    if (novos.length === 0) {
+      return { success: false, error: 'Nenhum preço foi calculado — verifique o Estoque (chapas e elétricos) e as tabelas da Memória de Cálculos.', errors };
+    }
+
+    // 2) Limpeza dos lançamentos antigos (só categorias de coifa).
+    let removed = 0;
+    const idsParaApagar: string[] = [];
+    const { data: antigos, error: erroAntigos } = await supabase
+      .from('products')
+      .select('id, category, measurement')
+      .in('category', APLICACOES.map(a => a.category));
+    if (erroAntigos) throw erroAntigos;
+    for (const p of antigos ?? []) {
+      const churrasqueira = p.category === 'Coifa de Churrasqueira';
+      if (churrasqueira || MEDIDA_LXPXA.test(String(p.measurement ?? ''))) idsParaApagar.push(p.id as string);
+    }
+    // Em lotes pequenos para não estourar o tamanho da URL do PostgREST.
+    for (let i = 0; i < idsParaApagar.length; i += 100) {
+      const lote = idsParaApagar.slice(i, i + 100);
+      const { error } = await supabase.from('products').delete().in('id', lote);
+      if (error) throw error;
+      removed += lote.length;
+    }
+
+    // 3) Grava: o que já existe na Cozinha é atualizado; o resto é criado.
+    let created = 0;
+    let updated = 0;
+    const { data: existentes, error: erroExistentes } = await supabase
+      .from('products')
+      .select('id, category, model, measurement')
+      .in('category', APLICACOES.map(a => a.category));
+    if (erroExistentes) throw erroExistentes;
+    const chave = (c: string, m: string, med: string) => `${c}|${m}|${med}`;
+    const idPorChave = new Map<string, string>((existentes ?? []).map(p => [chave(p.category, p.model, p.measurement), p.id as string]));
+
+    const paraCriar: (NovoProduto & { product_group: string })[] = [];
+    for (const n of novos) {
+      const id = idPorChave.get(chave(n.category, n.model, n.measurement));
+      if (id) {
+        const { error } = await supabase.from('products').update({ variations: n.variations, product_group: 'coifas' }).eq('id', id);
+        if (error) errors.push(`${n.category} — ${n.model} ${n.measurement}: ${error.message}`);
+        else updated++;
+      } else {
+        paraCriar.push({ ...n, product_group: 'coifas' });
+      }
+    }
+    // Criação em lotes (centenas de linhas): uma ida ao banco por 100 produtos.
+    for (let i = 0; i < paraCriar.length; i += 100) {
+      const lote = paraCriar.slice(i, i + 100);
+      const { error } = await supabase.from('products').insert(lote);
+      if (error) errors.push(`Falha ao criar ${lote.length} produto(s) (a partir de ${lote[0].category} — ${lote[0].model} ${lote[0].measurement}): ${error.message}`);
+      else created += lote.length;
+    }
 
     revalidatePath('/products');
-    return { success: true, created, updated, errors: errors.length > 0 ? errors : undefined };
+    return { success: true, created, updated, removed, errors: errors.length > 0 ? errors : undefined };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao gerar tabela de preços';
     return { success: false, error: message };

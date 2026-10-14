@@ -26,7 +26,15 @@ export async function getProducts(): Promise<{ success: boolean; products?: Prod
 
     if (error) throw error;
 
-    return { success: true, products: (data ?? []).map(rowToProduct) };
+    // Categoria → Modelo → Medida. O banco ordena só categoria/modelo (texto);
+    // a medida precisa de ordem numérica ("1000mm" < "1100mm" < "2000mm" < "3000mm"),
+    // senão fica fora de ordem (ex: "1000mm", "1100mm", "1200mm", "2000mm").
+    const products = (data ?? []).map(rowToProduct).sort((a, b) =>
+      a.category.localeCompare(b.category, 'pt-BR') ||
+      a.model.localeCompare(b.model, 'pt-BR') ||
+      (a.measurement ?? '').localeCompare(b.measurement ?? '', 'pt-BR', { numeric: true }),
+    );
+    return { success: true, products };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar produtos';
     return { success: false, error: message };

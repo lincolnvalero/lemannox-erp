@@ -34,10 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCalculatorReferenceData, generatePriceTableCoifasCozinha, salvarTetoPadraoPiramidal } from './actions';
+import { getCalculatorReferenceData, generatePriceTableCoifas, salvarTetoPadraoPiramidal } from './actions';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX, tetoPadraoDefinido, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
-import { calculateCoifa, kitIluminacaoPadrao, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
+import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
+import { planejarFuros, resumoFuros } from '@/lib/coifa-furos';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks, Box as BoxIcon, RotateCcw, FilePlus2, Download } from 'lucide-react';
@@ -81,6 +82,9 @@ const formSchema = z.object({
   // Ajuste manual do kit de iluminação — vazio = usa o padrão da tabela.
   qtdLampadasManual: z.number().min(0).max(50).optional(),
   qtdBotoesManual: z.number().min(0).max(50).optional(),
+  // Churrasqueira: botões avulsos ou botoeira. Parede: onde ficam as lâmpadas.
+  controle: z.enum(['botoes', 'botoeira']),
+  posicaoLampadas: z.enum(['frente', 'parede']),
 });
 
 const MAX_KIT = 50;
@@ -98,6 +102,7 @@ const defaultValues: FormValues = {
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
+  controle: 'botoes', posicaoLampadas: 'frente',
 };
 
 export default function CostCalculatorPage() {
@@ -128,10 +133,10 @@ export default function CostCalculatorPage() {
   const gerarTabela = async () => {
     setGenerating(true);
     setGenerateSummary(null);
-    const result = await generatePriceTableCoifasCozinha();
+    const result = await generatePriceTableCoifas();
     setGenerating(false);
     if (result.success) {
-      const summary = `${result.created ?? 0} produto(s) criado(s), ${result.updated ?? 0} atualizado(s).`;
+      const summary = `${result.created ?? 0} produto(s) criado(s), ${result.updated ?? 0} atualizado(s), ${result.removed ?? 0} antigo(s) removido(s).`;
       setGenerateSummary(result.errors ? `${summary} ${result.errors.length} com erro — veja o console.` : summary);
       if (result.errors) console.error('Erros na geração da tabela de preços:', result.errors);
       toast({ title: 'Tabela de Preços gerada!', description: summary });
@@ -213,21 +218,33 @@ export default function CostCalculatorPage() {
   const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas] =
     watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas']);
   const watchedBotoesManual = watch('qtdBotoesManual');
+  const watchedControle = watch('controle');
+  const watchedPosicaoLampadas = watch('posicaoLampadas');
+  const tipoControle = tipoControleEfetivo({ modelo: watchedModelo, tipoAplicacao: watchedAplicacao, controle: watchedControle });
 
   // Quantidade padrão (da tabela de iluminação / regra da Tube) — pré-preenche
   // os campos editáveis e serve de referência pro aviso de divergência.
   const kitPadrao = useMemo(() => {
     if (!ref) return null;
     return kitIluminacaoPadrao(
-      { modelo: watchedModelo, width: Number(watchedWidth) || 0, tipoAplicacao: watchedAplicacao, tipoInstalacao: watchedInstalacao },
+      { modelo: watchedModelo, width: Number(watchedWidth) || 0, tipoAplicacao: watchedAplicacao, tipoInstalacao: watchedInstalacao, controle: watchedControle },
       ref,
     );
-  }, [ref, watchedModelo, watchedWidth, watchedAplicacao, watchedInstalacao]);
+  }, [ref, watchedModelo, watchedWidth, watchedAplicacao, watchedInstalacao, watchedControle]);
   const qtdLampadasEfetiva = watchedLampadasManual ?? kitPadrao?.qtdLampadas ?? 0;
   const qtdBotoesEfetiva = watchedBotoesManual ?? kitPadrao?.qtdBotoes ?? 0;
   const lampadasDivergem = watchedLampadasManual !== undefined && kitPadrao !== null && watchedLampadasManual !== kitPadrao.qtdLampadas;
   const botoesDivergem = watchedBotoesManual !== undefined && kitPadrao !== null && watchedBotoesManual !== kitPadrao.qtdBotoes;
-  const nomeBotao = watchedAplicacao === 'Churrasqueira' && watchedModelo !== 'Tube' ? 'Botões' : 'Botoeiras';
+  const nomeBotao = tipoControle === 'botoeira' ? 'Botoeiras' : 'Botões';
+  // Furos que o desenho mostra (base para o futuro DXF de fabricação).
+  const furosResumo = useMemo(() => {
+    if (!(Number(watchedHeight) > 0)) return null;
+    return resumoFuros(planejarFuros({
+      modelo: watchedModelo, width: Number(watchedWidth) || 0, depth: Number(watchedDepth) || 0, height: Number(watchedHeight) || 0,
+      mount: watchedInstalacao, qtdLampadas: qtdLampadasEfetiva, qtdBotoes: qtdBotoesEfetiva,
+      tipoControle, posicaoLampadas: watchedPosicaoLampadas,
+    }));
+  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas]);
   // Texto em edição dos campos do kit: permite apagar o número inteiro antes
   // de digitar outro (sem isso o campo "voltava" pro padrão a cada Backspace).
   const [kitRascunho, setKitRascunho] = useState<Partial<Record<'qtdLampadasManual' | 'qtdBotoesManual', string>>>({});
@@ -279,10 +296,12 @@ export default function CostCalculatorPage() {
         paintingCost: values.paintingCost,
         qtdLampadasManual: values.qtdLampadasManual,
         qtdBotoesManual: values.qtdBotoesManual,
+        controle: values.controle,
       };
       const result = calculateCoifa(input, ref);
       setResults(result);
       setUltimoInput(input);
+      setUltimaPosicaoLampadas(values.posicaoLampadas);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
       } else {
@@ -318,6 +337,7 @@ export default function CostCalculatorPage() {
   // agora no formulário), pra o preço levado bater com o mostrado.
   const router = useRouter();
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
+  const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
   const [orcDestino, setOrcDestino] = useState<string>('novo');
@@ -339,6 +359,7 @@ export default function CostCalculatorPage() {
       filtro: i.filtro, coletor: i.coletor,
       frisoFrente: i.frisoFrente, frisoLD: i.frisoLD, frisoLE: i.frisoLE, frisoLinhas: i.frisoLinhas,
       qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
+      controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -354,7 +375,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -398,7 +419,7 @@ export default function CostCalculatorPage() {
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-theme(spacing.32))] p-4 md:p-8 overflow-x-auto">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen p-4 md:p-6 overflow-x-auto">
       <div className="flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Calculadora de Custos — Coifas</h1>
       </div>
@@ -449,8 +470,11 @@ export default function CostCalculatorPage() {
                       <FormField control={form.control} name="tetoDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Medida do Teto — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
                     </div>
                   )}
-                  {isLinea && (
+                  {(isLinea || isPiramidal) && (
                     <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+                      <p className="text-xs font-medium">
+                        Carenagem{isPiramidal ? ' (opcional — deixe em branco se não tiver)' : ''}
+                      </p>
                       <div className="grid grid-cols-3 gap-4">
                         <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
                         <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
@@ -497,6 +521,38 @@ export default function CostCalculatorPage() {
                     <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
                     <FormField control={form.control} name="tipoInstalacao" render={({ field }) => ( <FormItem><FormLabel>Instalação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Parede">Parede</SelectItem><SelectItem value="Ilha">Ilha</SelectItem></SelectContent></Select><FormDescription className="text-xs">Ilha soma o acréscimo de mão de obra da tabela — não é mais um modelo à parte.</FormDescription></FormItem> )} />
                   </div>
+                  {(watchedAplicacao === 'Churrasqueira' && !isTube) && (
+                    <FormField control={form.control} name="controle" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Comando</FormLabel>
+                        <Select onValueChange={(v) => { field.onChange(v); form.setValue('qtdBotoesManual', undefined); setKitRascunho(d => ({ ...d, qtdBotoesManual: undefined })); }} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="botoes">2 botões</SelectItem>
+                            <SelectItem value="botoeira">Botoeira (5 botões)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Aparece no desenho e muda o item do Estoque usado no preço.</FormDescription>
+                      </FormItem>
+                    )} />
+                  )}
+                  {watchedInstalacao === 'Parede' ? (
+                    <FormField control={form.control} name="posicaoLampadas" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Posição das lâmpadas</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="frente">Na frente</SelectItem>
+                            <SelectItem value="parede">Junto à parede</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Só muda o desenho — não altera o preço.</FormDescription>
+                      </FormItem>
+                    )} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Ilha: metade das lâmpadas fica na frente e metade no fundo.</p>
+                  )}
                   <div className="rounded-md border p-3 space-y-2">
                     <p className="text-sm font-medium">Kit de Iluminação</p>
                     <p className="text-xs text-muted-foreground">
@@ -639,7 +695,7 @@ export default function CostCalculatorPage() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Emissão da Tabela de Preços</CardTitle>
                   <CardDescription>
-                    Gera/atualiza os produtos de Coifas de Cozinha (Box de Parede, Box Ilha, Piramidal de Parede, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Não apaga produtos existentes.
+                    Gera os produtos de Coifas de Cozinha e de Churrasqueira (Box de Parede, Box Ilha, Piramidal de Parede, Piramidal Ilha, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Substitui os valores antigos dessas coifas: os itens em formato LxPxA são removidos e a lista de Churrasqueira é refeita.
                   </CardDescription>
                   <p className="text-xs text-muted-foreground pt-1">
                     Teto padrão da Piramidal:{' '}
@@ -653,7 +709,7 @@ export default function CostCalculatorPage() {
                 </CardHeader>
                 <CardFooter className="flex flex-col items-stretch gap-2">
                   <Button type="button" variant="secondary" disabled={generating} onClick={handleGeneratePriceTable}>
-                    {generating ? 'Gerando...' : 'Gerar Tabela de Preços — Coifas de Cozinha'}
+                    {generating ? 'Gerando...' : 'Gerar Tabela de Preços — Coifas'}
                   </Button>
                   {generateSummary && <p className="text-xs text-muted-foreground text-center">{generateSummary}</p>}
                 </CardFooter>
@@ -678,7 +734,7 @@ export default function CostCalculatorPage() {
             <CardContent>
               {(Number(watchedHeight) > 0 && (isTube || (Number(watchedWidth) > 0 && Number(watchedDepth) > 0))) ? (
                 <CoifaViewer3D
-                  className="h-[380px]"
+                  className="h-[min(72vh,820px)] min-h-[420px]"
                   modelo={watchedModelo}
                   width={Number(watchedWidth) || 0}
                   depth={Number(watchedDepth) || 0}
@@ -691,6 +747,8 @@ export default function CostCalculatorPage() {
                   mount={watchedInstalacao}
                   qtdLampadas={qtdLampadasEfetiva}
                   qtdBotoes={qtdBotoesEfetiva}
+                  controle={tipoControle}
+                  posicaoLampadas={watchedPosicaoLampadas}
                   material={watchedMaterial}
                   filtro={watchedFiltro}
                   coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}
@@ -703,6 +761,13 @@ export default function CostCalculatorPage() {
               ) : (
                 <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/20">
                   Informe as medidas para ver a coifa em 3D.
+                </div>
+              )}
+              {furosResumo && (furosResumo.lampadas || furosResumo.botoes) && (
+                <div className="mt-3 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                  <p className="font-medium text-foreground">Furos</p>
+                  {furosResumo.botoes && <p>{furosResumo.botoes}</p>}
+                  {furosResumo.lampadas && <p>{furosResumo.lampadas}</p>}
                 </div>
               )}
             </CardContent>

@@ -20,6 +20,8 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { bandaLampadas, planejarFuros, resumoFuros, type PosicaoLampadas } from '@/lib/coifa-furos';
+import type { TipoControle } from '@/lib/coifa-calculator';
 
 export type CoifaViewerModelo = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
 export type CoifaViewerMount = 'Parede' | 'Ilha';
@@ -31,12 +33,16 @@ export interface CoifaViewer3DProps {
   height: number; // mm
   tetoWidth?: number;  // Piramidal
   tetoDepth?: number;  // Piramidal
-  carenagemWidth?: number;  // Línea — só visual, não entra no preço
-  carenagemDepth?: number;  // Línea — só visual, não entra no preço
-  carenagemHeight?: number; // Línea — essa sim entra no preço (ver coifa-calculator.ts)
+  carenagemWidth?: number;  // Línea e Piramidal — só visual, não entra no preço
+  carenagemDepth?: number;  // Línea e Piramidal — só visual, não entra no preço
+  carenagemHeight?: number; // Línea e Piramidal — essa sim entra no preço (ver coifa-calculator.ts)
   mount: CoifaViewerMount;
   qtdLampadas?: number;
   qtdBotoes?: number;
+  /** Botões avulsos ou botoeira (placa com 5 botões). Padrão: botoeira. */
+  controle?: TipoControle;
+  /** Instalação em Parede: lâmpadas na frente (padrão) ou junto à parede. Na Ilha, metade/metade. */
+  posicaoLampadas?: PosicaoLampadas;
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
   material?: string;
   filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
@@ -65,7 +71,7 @@ export interface CoifaViewer3DHandle {
   capturePng: () => string | null;
 }
 
-type ShowState = { dims: boolean; edges: boolean; xray: boolean; ortho: boolean; chapas: boolean };
+type ShowState = { dims: boolean; edges: boolean; xray: boolean; ortho: boolean; chapas: boolean; furos: boolean };
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -109,7 +115,7 @@ const HEX_22 = '#5b8fd6';
 const HEX_24 = '#e39b45';
 const LEGENDA_CHAPAS: Record<CoifaViewerModelo, [string, string]> = {
   Box: ['Chapa 22 — frente e laterais', 'Chapa 24 — costas e teto'],
-  Piramidal: ['Chapa 22 — frente e laterais', 'Chapa 24 — costas e teto'],
+  Piramidal: ['Chapa 22 — frente e laterais', 'Chapa 24 — costas, teto e carenagem'],
   Linea: ['Chapa 22 — corpo', 'Chapa 24 — carenagem'],
   Tube: ['Chapa 22 — tampas', 'Chapa 24 — corpo'],
 };
@@ -174,7 +180,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<{ request: () => void; fitView: (animate?: boolean) => void; viewTo: (name: string) => void } | null>(null);
-  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false, chapas: false });
+  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false, chapas: false, furos: false });
   const [estreito, setEstreito] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [webglIndisponivel, setWebglIndisponivel] = useState(false);
@@ -210,7 +216,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     lampMat: THREE.MeshStandardMaterial;
     btnMat: THREE.MeshStandardMaterial;
     edgesObj: THREE.LineSegments | null;
-    labels: { el: HTMLDivElement; pos: THREE.Vector3 }[];
+    labels: { el: HTMLDivElement; pos: THREE.Vector3; furos?: boolean }[];
     theta: number; phi: number; radius: number; target: THREE.Vector3;
     animId: number; pending: boolean;
     ptrs: Map<number, { x: number; y: number }>;
@@ -291,7 +297,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       s.labels.forEach(l => {
         v.copy(l.pos).project(s.camera);
         const sx = (v.x * 0.5 + 0.5) * cw, sy = (-v.y * 0.5 + 0.5) * ch;
-        const vis = s.show.dims && v.z > -1 && v.z < 1;
+        const vis = s.show.dims && (!l.furos || s.show.furos) && v.z > -1 && v.z < 1;
         l.el.style.display = vis ? 'block' : 'none';
         if (vis) { l.el.style.left = sx + 'px'; l.el.style.top = sy + 'px'; }
       });
@@ -459,12 +465,12 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     labelsEl.innerHTML = '';
     s.labels = [];
 
-    const addLabel = (pos: THREE.Vector3, text: string) => {
+    const addLabel = (pos: THREE.Vector3, text: string, furos = false) => {
       const el = document.createElement('div');
       el.className = 'absolute -translate-x-1/2 -translate-y-1/2 bg-white/90 text-orange-900 border border-orange-600 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap pointer-events-none';
       el.textContent = text;
       labelsEl.appendChild(el);
-      s.labels.push({ el, pos });
+      s.labels.push({ el, pos, furos });
     };
     const addDimLine = (pts: THREE.Vector3[]) => {
       const geo = new THREE.BufferGeometry().setFromPoints(pts);
@@ -525,7 +531,20 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(tw, td, 0, zc, height);
         const f = shellFaces(corpoBase, corpoTopo);
         partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back, f.top); partes.base.push(f.bottom);
+        // Carenagem opcional sobre o teto (mesma regra da Línea). Sem medida
+        // própria, acompanha o teto — é o duto subindo dele. Na Parede encosta
+        // no fundo; na Ilha fica centralizada: o teto da Piramidal tem 3 águas
+        // na Parede e 4 na Ilha.
+        const ch = props.carenagemHeight && props.carenagemHeight > 0 ? props.carenagemHeight : 0;
+        const cw = props.carenagemWidth && props.carenagemWidth > 0 ? props.carenagemWidth : tw;
+        const cd = props.carenagemDepth && props.carenagemDepth > 0 ? props.carenagemDepth : td;
+        const zcCar = props.mount === 'Parede' ? -(depth / 2 - cd / 2) : 0;
+        if (ch > 0) {
+          const c = shellFaces(rect(cw, cd, 0, zcCar, height), rect(cw, cd, 0, zcCar, height + ch));
+          partes['24'].push(c.front, c.back, c.right, c.left, c.top);
+        }
         addDimLabelsBoxLike(width, depth, height, tw, td, zc);
+        if (ch > 0) addLabel(V(0, height + ch / 2, zcCar), `Carenagem ${fmt(cw)}×${fmt(cd)}×${fmt(ch)}`);
       } else if (modelo === 'Linea') {
         // Corpo: caixa baixa e larga. Carenagem: segunda caixa, mais estreita,
         // subindo a partir do topo do corpo — largura/profundidade dela são só
@@ -541,7 +560,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
           const c = shellFaces(rect(cw, cd, 0, zc, height), rect(cw, cd, 0, zc, height + ch));
           partes['24'].push(c.front, c.back, c.right, c.left, c.top);
         }
-        addDimLabelsLinea(width, depth, height, ch);
+        addDimLabelsLinea(width, depth, height, ch, cw, cd, zc);
       } else {
         // Box: caixa reta, sem afunilar — não existe campo de chaminé pro Box
         // no modelo de dados real.
@@ -583,12 +602,27 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       modelGroup.add(new THREE.Mesh(geomFromQuads(quads), frisoMat));
     }
 
+    // ── Furos (lâmpadas e botões/botoeira) ───────────────────────────────────
+    // As posições vêm de planejarFuros (lib/coifa-furos.ts) — a mesma lista
+    // servirá de base para o DXF. Ilha: metade das lâmpadas na frente e metade
+    // no fundo; Parede: só na frente (ou junto à parede, se escolhido).
+    const plano = planejarFuros({
+      modelo, width, depth, height, mount: props.mount,
+      qtdLampadas: Math.min(MAX_MARCADORES, Math.max(0, props.qtdLampadas ?? 0)),
+      qtdBotoes: Math.min(MAX_MARCADORES, Math.max(0, props.qtdBotoes ?? 0)),
+      tipoControle: props.controle ?? 'botoeira',
+      posicaoLampadas: props.posicaoLampadas,
+    });
+
     // ── Filtro e coletor de gordura (vistos por baixo — vista "Inferior").
+    // O filtro deixa livre a faixa onde ficam as lâmpadas (frente e/ou fundo).
     const temFiltro = props.filtro && props.filtro !== 'nenhum' && modelo !== 'Tube';
     if (temFiltro) {
       const margem = Math.min(40, width * 0.05);
-      const zFrente = depth / 2 - Math.min(120, depth * 0.25); // faixa da frente fica pras lâmpadas
-      const z0 = -depth / 2 + margem, z1 = zFrente, x0 = -width / 2 + margem, x1 = width / 2 - margem;
+      const banda = bandaLampadas(depth);
+      const z0 = -depth / 2 + (plano.lampadas.nFundos > 0 ? banda : margem);
+      const z1 = depth / 2 - (plano.lampadas.nFrente > 0 ? banda : margem);
+      const x0 = -width / 2 + margem, x1 = width / 2 - margem;
       if (z1 - z0 > 50 && x1 - x0 > 50) {
         s.filtroMat.color.setHex(props.filtro === 'aluminio' ? 0xcfd4db : props.filtro === 'inercial_304' ? 0xb8bfc8 : 0x969da7);
         const placa = new THREE.Mesh(geomFromQuads([[[x0, -0.6, z0], [x1, -0.6, z0], [x1, -0.6, z1], [x0, -0.6, z1]]]), s.filtroMat);
@@ -606,36 +640,51 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
             modelGroup.add(m);
           };
           calha(z1 + 18);
-          if (props.coletor === 'duplo') calha(z0 - 18 + 36);
+          if (props.coletor === 'duplo') calha(z0 - 18);
         }
       }
     }
 
-    // Botões (face frontal, na base) e lâmpadas (face inferior) — só
-    // indicadores visuais da quantidade já calculada no preço.
-    const n = Math.min(MAX_MARCADORES, Math.max(0, Math.round(props.qtdBotoes ?? 0)));
-    if (n > 0 && modelo !== 'Tube') {
-      const dia = Math.min(16, width / (n * 2));
-      const total = n * dia + (n - 1) * (dia * 0.6);
-      const x0 = -total / 2 + dia / 2;
-      const bg = new THREE.CylinderGeometry(dia / 2, dia / 2, 4, 20);
-      for (let i = 0; i < n; i++) {
-        const m = new THREE.Mesh(bg, btnMat);
-        m.rotation.x = Math.PI / 2;
-        m.position.set(x0 + i * (dia + dia * 0.6), Math.min(height, 60) / 2, depth / 2 + 1);
-        modelGroup.add(m);
-      }
-    }
-    const lampN = Math.min(MAX_MARCADORES, Math.max(0, Math.round(props.qtdLampadas ?? 0)));
-    if (lampN > 0 && modelo !== 'Tube') {
-      const lampDia = Math.min(80, width / (lampN * 1.5));
-      const lg = new THREE.CylinderGeometry(lampDia / 2, lampDia / 2, 4, 24);
-      // Com filtro, as lâmpadas ficam na faixa da frente (o filtro ocupa o meio).
-      const zLamp = temFiltro ? depth / 2 - Math.min(60, depth * 0.12) : 0;
-      for (let j = 0; j < lampN; j++) {
+    // Lâmpadas: discos na face de baixo.
+    if (plano.lampadas.furos.length > 0) {
+      const lg = new THREE.CylinderGeometry(plano.lampadas.diametro / 2, plano.lampadas.diametro / 2, 4, 24);
+      plano.lampadas.furos.forEach(f => {
         const m = new THREE.Mesh(lg, lampMat);
-        m.position.set(-width / 2 + width * (j + 0.5) / lampN, -1.5, zLamp);
+        m.position.set(f.x, -1.5, f.z);
         modelGroup.add(m);
+      });
+    }
+
+    // Botões ou botoeira na frente, rente à face (que é inclinada na Piramidal).
+    const zFrenteEm = (y: number) => (corpoBase && corpoTopo ? secao(corpoBase, corpoTopo, y).z1 : depth / 2);
+    if (plano.botoes.furos.length > 0) {
+      const dBot = plano.botoes.diametro;
+      const bg = new THREE.CylinderGeometry(dBot / 2, dBot / 2, 4, 20);
+      plano.botoes.placas.forEach(pl => {
+        const placa = new THREE.Mesh(new THREE.BoxGeometry(pl.largura, pl.altura, 3), btnMat);
+        placa.position.set(pl.x, pl.y, zFrenteEm(pl.y) + 1.5);
+        modelGroup.add(placa);
+      });
+      const recuo = plano.botoes.placas.length > 0 ? 3 : 0; // botões da botoeira saem da placa
+      plano.botoes.furos.forEach(f => {
+        const m = new THREE.Mesh(bg, plano.botoes.placas.length > 0 ? s.coletorMat : btnMat);
+        m.rotation.x = Math.PI / 2;
+        m.position.set(f.x, f.y, zFrenteEm(f.y) + 1 + recuo + 1);
+        modelGroup.add(m);
+      });
+    }
+    // Notas dos furos (somem junto com as cotas) — mesma informação que o
+    // protótipo do Marcelo mostrava: quantidade e diâmetro.
+    if (modelo !== 'Tube') {
+      const resumo = resumoFuros(plano);
+      if (resumo.botoes && plano.botoes.furos.length > 0) {
+        const alvo = plano.botoes.placas[0] ?? plano.botoes.furos[0];
+        const xMedio = plano.botoes.furos.reduce((a, f) => a + f.x, 0) / plano.botoes.furos.length;
+        addLabel(V(xMedio, alvo.y + 46, zFrenteEm(alvo.y) + 4), resumo.botoes.split(' — ')[0], true);
+      }
+      if (plano.lampadas.furos.length > 0) {
+        const n = plano.lampadas.furos.length;
+        addLabel(V(0, -4, 0), `${n}× Ø${fmt(Math.round(plano.lampadas.diametro))} lâmpadas${plano.lampadas.nFrente > 0 && plano.lampadas.nFundos > 0 ? ` (${plano.lampadas.nFrente} frente + ${plano.lampadas.nFundos} fundo)` : ''}`, true);
       }
     }
 
@@ -654,9 +703,9 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         addLabel(V(0, h + gap * 0.1, zc), `Teto ${fmt(tw)}×${fmt(td)}`);
       }
     }
-    function addDimLabelsLinea(w: number, d: number, h: number, ch: number) {
+    function addDimLabelsLinea(w: number, d: number, h: number, ch: number, cw: number, cd: number, zc: number) {
       addDimLabelsBoxLike(w, d, h);
-      if (ch > 0) addLabel(V(0, h + ch / 2, 0), 'Carenagem ' + fmt(ch));
+      if (ch > 0) addLabel(V(0, h + ch / 2, zc), `Carenagem ${fmt(cw)}×${fmt(cd)}×${fmt(ch)}`);
     }
 
     apiRef.current?.fitView(false);
@@ -664,7 +713,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.material, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.material, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 
@@ -731,7 +780,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [webglIndisponivel]);
 
   const VISTAS = [['front', 'Frontal'], ['right', 'Lateral'], ['top', 'Superior'], ['bottom', 'Inferior'], ['iso', 'Isométrica']] as const;
-  const EXIBIR = [['dims', 'Cotas'], ['edges', 'Arestas'], ['chapas', 'Chapas 22/24'], ['xray', 'Raio-X'], ['ortho', 'Ortogonal']] as const;
+  const EXIBIR = [['dims', 'Cotas'], ['edges', 'Arestas'], ['chapas', 'Chapas 22/24'], ['furos', 'Furos'], ['xray', 'Raio-X'], ['ortho', 'Ortogonal']] as const;
   const alternar = (key: keyof ShowState) => setShow(v => ({ ...v, [key]: !v[key] }));
 
   if (webglIndisponivel) {

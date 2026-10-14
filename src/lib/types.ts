@@ -68,6 +68,10 @@ export type CoifaParamsSalvos = {
   frisoLinhas?: number;
   qtdLampadas?: number;
   qtdBotoes?: number;
+  /** Botões avulsos ou botoeira (placa de 5 botões). Ausente = botoeira. */
+  controle?: 'botoes' | 'botoeira';
+  /** Parede: lâmpadas na frente (padrão) ou junto à parede. */
+  posicaoLampadas?: 'frente' | 'parede';
 };
 
 export type QuoteItem = {

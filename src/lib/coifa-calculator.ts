@@ -17,6 +17,8 @@ export type TipoAplicacao = 'Cozinha' | 'Churrasqueira';
 export type TipoInstalacaoCoifa = 'Parede' | 'Ilha';
 export type FiltroTipo = 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
 export type ColetorTipo = 'nenhum' | 'simples' | 'duplo';
+// Comando da coifa: botoeira (uma placa com 5 botões) ou botões avulsos.
+export type TipoControle = 'botoes' | 'botoeira';
 
 export interface CoifaCalculatorInput {
   width: number;  // largura (mm) — ignorado para Tube: o diâmetro é sempre fixo em 500mm
@@ -26,9 +28,10 @@ export interface CoifaCalculatorInput {
   // Piramidal — medida do teto (abertura/duto, menor que a base da coifa)
   tetoWidth?: number;
   tetoDepth?: number;
-  // Línea — medidas da carenagem (a "moldura" que sobe até o teto). Só a
-  // altura entra no cálculo (mesma fórmula da altura da Tube); largura e
-  // profundidade são só informativas/físicas.
+  // Línea e Piramidal — medidas da carenagem (a "moldura" que sobe até o
+  // teto). Só a altura entra no cálculo (mesma fórmula da altura da Tube);
+  // largura e profundidade são só informativas/físicas. Na Línea é obrigatória
+  // (avisa se faltar); na Piramidal é opcional — sem altura, não há carenagem.
   carenagemWidth?: number;
   carenagemDepth?: number;
   carenagemHeight?: number;
@@ -52,6 +55,9 @@ export interface CoifaCalculatorInput {
   // Tube). "Botões" = botoeira na Cozinha, botão na Churrasqueira.
   qtdLampadasManual?: number;
   qtdBotoesManual?: number;
+  // Churrasqueira: "botoes" (padrão — 2 botões) ou "botoeira" (1 botoeira de
+  // 5 botões). Cozinha e Tube sempre usam botoeira; este campo não muda isso.
+  controle?: TipoControle;
 }
 
 export type CalculationDetail = { label: string; value: string };
@@ -74,18 +80,31 @@ export type CoifaCalculationResult = {
   // que o visualizador 3D desenha, pra nunca ficarem desencontrados.
   qtdLampadas: number;
   qtdBotoes: number;
+  tipoControle: TipoControle;
 };
+
+// Cozinha e Tube sempre levam botoeira; só a Churrasqueira escolhe.
+export function tipoControleEfetivo(
+  input: Pick<CoifaCalculatorInput, 'modelo' | 'tipoAplicacao' | 'controle'>,
+): TipoControle {
+  if (input.modelo === 'Tube' || input.tipoAplicacao === 'Cozinha') return 'botoeira';
+  return input.controle === 'botoeira' ? 'botoeira' : 'botoes';
+}
 
 // Quantidade padrão de lâmpadas/botões para os parâmetros informados, sem
 // ajuste manual — a tela usa pra pré-preencher os campos e sinalizar quando
 // o valor digitado diverge do padrão.
 export function kitIluminacaoPadrao(
-  input: Pick<CoifaCalculatorInput, 'modelo' | 'width' | 'tipoAplicacao' | 'tipoInstalacao'>,
+  input: Pick<CoifaCalculatorInput, 'modelo' | 'width' | 'tipoAplicacao' | 'tipoInstalacao' | 'controle'>,
   ref: Pick<CalculatorReferenceData, 'tabelaIluminacao'>,
 ): { qtdLampadas: number; qtdBotoes: number } | null {
   if (input.modelo === 'Tube') return { ...KIT_TUBE };
   const row = findIluminacaoRow(input, ref);
   if (!row) return null;
+  // Churrasqueira com botoeira: 1 botoeira (de 5 botões) no lugar dos 2 botões da tabela.
+  if (input.tipoAplicacao === 'Churrasqueira' && tipoControleEfetivo(input) === 'botoeira') {
+    return { qtdLampadas: row.qtdLampadas, qtdBotoes: 1 };
+  }
   return { qtdLampadas: row.qtdLampadas, qtdBotoes: row.qtdBotoeira || row.qtdBotao };
 }
 
@@ -201,6 +220,24 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   const materiaisEstoque = ref.materiaisEstoque ?? [];
   const eletricos = ref.eletricosEstoque ?? [];
 
+  // Carenagem (Línea e Piramidal): bitola 24, consumo pela ALTURA da carenagem
+  // (mesma tabela da altura da Tube). Pode usar uma chapa padrão diferente da
+  // do corpo. `obrigatoria`: na Línea, avisa quando falta a altura; na
+  // Piramidal ela é opcional e simplesmente não entra.
+  const custoCarenagem = (modeloNome: string, obrigatoria: boolean): number => {
+    if (!(input.carenagemHeight && input.carenagemHeight > 0)) {
+      if (obrigatoria) warnings.push(`Altura da carenagem não informada — custo da carenagem da ${modeloNome} não incluído.`);
+      return 0;
+    }
+    const larguraPadraoCarenagem = input.larguraPadraoCarenagem || larguraPadrao;
+    const alturaEq = alturaEquivalenteCarenagem(input.carenagemHeight);
+    const chapaCarenagem = findChapaEstoque(materiaisEstoque, input.material, 24, larguraPadraoCarenagem);
+    if (!chapaCarenagem) warnings.push(`Chapa ${input.material} bitola 24 / ${larguraPadraoCarenagem}mm não encontrada no Estoque (carenagem da ${modeloNome}).`);
+    const { cost, chapas } = custoGrupoChapa(alturaEq, larguraPadraoCarenagem, chapaCarenagem);
+    details.push({ label: `Chapa (${modeloNome} — carenagem, altura equiv. ${alturaEq}mm)`, value: `${chapas.toFixed(2)} un. — ${brl(cost)}` });
+    return cost;
+  };
+
   // ── 1. Chapas ────────────────────────────────────────────────────────────
   let sheetCost = 0;
 
@@ -231,18 +268,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
 
     // Carenagem (moldura até o teto): bitola 24, consumo pela ALTURA DA
     // CARENAGEM (campo próprio) — pode usar chapa padrão diferente do corpo.
-    let costCarenagem = 0;
-    if (input.carenagemHeight && input.carenagemHeight > 0) {
-      const larguraPadraoCarenagem = input.larguraPadraoCarenagem || larguraPadrao;
-      const alturaEq = alturaEquivalenteCarenagem(input.carenagemHeight);
-      const chapaCarenagem = findChapaEstoque(materiaisEstoque, input.material, 24, larguraPadraoCarenagem);
-      if (!chapaCarenagem) warnings.push(`Chapa ${input.material} bitola 24 / ${larguraPadraoCarenagem}mm não encontrada no Estoque (carenagem da Línea).`);
-      const { cost, chapas } = custoGrupoChapa(alturaEq, larguraPadraoCarenagem, chapaCarenagem);
-      costCarenagem = cost;
-      details.push({ label: `Chapa (Línea — carenagem, altura equiv. ${alturaEq}mm)`, value: `${chapas.toFixed(2)} un. — ${brl(cost)}` });
-    } else {
-      warnings.push('Altura da carenagem não informada — custo da carenagem da Línea não incluído.');
-    }
+    const costCarenagem = custoCarenagem('Línea', true);
 
     sheetCost = costCorpo + costCarenagem;
   } else {
@@ -262,7 +288,10 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     const { cost: costCostasTeto, chapas: chapasCostasTeto } = custoGrupoChapa(metragemCostasTeto, larguraPadrao, chapaCostasTeto);
     details.push({ label: 'Chapa (Costas/Teto)', value: `${chapasCostasTeto.toFixed(2)} un. — ${brl(costCostasTeto)}` });
 
-    sheetCost = costFrente + costCostasTeto;
+    // Piramidal pode ter carenagem sobre o teto, calculada como a da Línea.
+    const costCarenagem = input.modelo === 'Piramidal' ? custoCarenagem('Piramidal', false) : 0;
+
+    sheetCost = costFrente + costCostasTeto + costCarenagem;
   }
 
   // ── Perdas de material (20% sobre o custo de chapa) ─────────────────────
@@ -320,6 +349,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   let iluminacaoCost = 0;
   let lampadasDescricao = 0;
   let botaoOuBotoeiraDescricao = 0;
+  const tipoControle = tipoControleEfetivo(input);
 
   const lampadasAjustadas = manualValido(input.qtdLampadasManual);
   const botoesAjustados = manualValido(input.qtdBotoesManual);
@@ -348,9 +378,14 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
       const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : iluminacaoRow.qtdLampadas;
       // A tabela usa botoeira (Cozinha) OU botão (Churrasqueira) — o ajuste
       // manual substitui a quantidade da coluna que aquele tipo usa.
-      const usaBotoeira = iluminacaoRow.qtdBotoeira > 0 || input.tipoAplicacao === 'Cozinha';
+      const usaBotoeira = tipoControle === 'botoeira' || iluminacaoRow.qtdBotoeira > 0;
       let qtdBotoeira = iluminacaoRow.qtdBotoeira;
       let qtdBotao = iluminacaoRow.qtdBotao;
+      // Churrasqueira com botoeira: 1 botoeira no lugar dos botões da tabela.
+      if (input.tipoAplicacao === 'Churrasqueira' && tipoControle === 'botoeira') {
+        qtdBotoeira = 1;
+        qtdBotao = 0;
+      }
       if (botoesAjustados) {
         qtdBotoeira = usaBotoeira ? input.qtdBotoesManual! : 0;
         qtdBotao = usaBotoeira ? 0 : input.qtdBotoesManual!;
@@ -374,7 +409,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
         const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : 0;
         const qtdBot = botoesAjustados ? input.qtdBotoesManual! : 0;
         const precoLampada = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Lâmpada Cozinha' : 'Lâmpada Churrasqueira');
-        const precoBot = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Botoeira' : 'Botão');
+        const precoBot = precoEletrico(eletricos, tipoControle === 'botoeira' ? 'Botoeira' : 'Botão');
         iluminacaoCost = qtdLamp * precoLampada + qtdBot * precoBot;
         lampadasDescricao = qtdLamp;
         botaoOuBotoeiraDescricao = qtdBot;
@@ -412,23 +447,24 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   const margem = p['margem_lucro_padrao'] ?? 0;
   const finalPrice = totalCost * (1 + margem / 100);
 
-  const descricaoAuto = buildDescricaoAuto({ ...input, width }, lampadasDescricao, botaoOuBotoeiraDescricao);
+  const descricaoAuto = buildDescricaoAuto({ ...input, width }, lampadasDescricao, botaoOuBotoeiraDescricao, tipoControle);
 
   return {
     sheetCost, perdasCost, filtroCost, frisoCost, iluminacaoCost, laborCost,
     outrosCost: input.outros, paintingCost: input.paintingCost,
     totalCost, finalPrice, details, warnings, descricaoAuto,
-    qtdLampadas: lampadasDescricao, qtdBotoes: botaoOuBotoeiraDescricao,
+    qtdLampadas: lampadasDescricao, qtdBotoes: botaoOuBotoeiraDescricao, tipoControle,
   };
 }
 
-function buildDescricaoAuto(input: CoifaCalculatorInput, qtdLampadas: number, qtdBotaoOuBotoeira: number): string {
+function buildDescricaoAuto(input: CoifaCalculatorInput, qtdLampadas: number, qtdBotaoOuBotoeira: number, tipoControle: TipoControle): string {
   const parts: string[] = [`Coifa ${input.modelo} ${input.tipoAplicacao}`];
   if (qtdLampadas > 0) {
     parts.push(`${qtdLampadas} lâmpada${qtdLampadas !== 1 ? 's' : ''}`);
     if (qtdBotaoOuBotoeira > 0) {
-      const nome = input.tipoAplicacao === 'Cozinha' ? 'botoeira' : 'botão';
-      parts.push(`${qtdBotaoOuBotoeira} ${nome}${qtdBotaoOuBotoeira !== 1 ? (nome === 'botão' ? 'es' : 's') : ''}`);
+      const plural = qtdBotaoOuBotoeira !== 1;
+      const nome = tipoControle === 'botoeira' ? (plural ? 'botoeiras' : 'botoeira') : (plural ? 'botões' : 'botão');
+      parts.push(`${qtdBotaoOuBotoeira} ${nome}`);
     }
   }
   if (input.filtro !== 'nenhum') {

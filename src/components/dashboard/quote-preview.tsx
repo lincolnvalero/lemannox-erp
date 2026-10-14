@@ -224,7 +224,7 @@ export function QuotePreview({ quote }: Props) {
                 const kit = viewerParams.qtdLampadas !== undefined
                   ? { qtdLampadas: viewerParams.qtdLampadas, qtdBotoes: viewerParams.qtdBotoes ?? 0 }
                   : kitIluminacaoPadrao(
-                      { modelo: viewerParams.modelo, width: viewerParams.width, tipoAplicacao, tipoInstalacao: viewerParams.mount },
+                      { modelo: viewerParams.modelo, width: viewerParams.width, tipoAplicacao, tipoInstalacao: viewerParams.mount, controle: viewerParams.controle },
                       { tabelaIluminacao: iluminacao },
                     );
                 const teto = !exato && viewerParams.modelo === "Piramidal" && tetoPadrao

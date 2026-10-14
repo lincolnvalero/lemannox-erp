@@ -437,7 +437,7 @@ export default function QuoteEditorPage() {
       return Array.from(new Set(products
           .filter(p => p.category === addItemCategory && p.model === addItemModel)
           .map(p => p.measurement)
-      )).sort();
+      )).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   }, [addItemCategory, addItemModel, products]);
 
   const availableMaterials = useMemo(() => {
