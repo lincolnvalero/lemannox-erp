@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -32,11 +33,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getCalculatorReferenceData, generatePriceTableCoifasCozinha } from './actions';
-import { calculateCoifa, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
+import { calculateCoifa, kitIluminacaoPadrao, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks } from 'lucide-react';
-import { CalculatorDiagram } from '@/components/dashboard/calculator-diagram';
+import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks, Box as BoxIcon, RotateCcw } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const CoifaViewer3D = dynamic(
+  () => import('@/components/dashboard/coifa-viewer-3d').then(m => m.CoifaViewer3D),
+  { ssr: false, loading: () => <div className="h-[380px] rounded-md bg-muted/30 animate-pulse" /> },
+);
 import type { CalculatorReferenceData } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -67,6 +73,9 @@ const formSchema = z.object({
   frisoLinhas: z.coerce.number().min(1).max(3),
   outros: numField,
   paintingCost: numField,
+  // Ajuste manual do kit de iluminação — vazio = usa o padrão da tabela.
+  qtdLampadasManual: z.number().min(0).optional(),
+  qtdBotoesManual: z.number().min(0).optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -81,6 +90,7 @@ const defaultValues: FormValues = {
   filtro: 'nenhum', coletor: 'nenhum',
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
   outros: 0, paintingCost: 0,
+  qtdLampadasManual: undefined, qtdBotoesManual: undefined,
 };
 
 export default function CostCalculatorPage() {
@@ -146,6 +156,30 @@ export default function CostCalculatorPage() {
   const watchedWidth = watch('width');
   const watchedDepth = watch('depth');
   const watchedHeight = watch('height');
+  const watchedTetoWidth = watch('tetoWidth');
+  const watchedTetoDepth = watch('tetoDepth');
+  const watchedCarenagemWidth = watch('carenagemWidth');
+  const watchedCarenagemDepth = watch('carenagemDepth');
+  const watchedCarenagemHeight = watch('carenagemHeight');
+  const watchedAplicacao = watch('tipoAplicacao');
+  const watchedInstalacao = watch('tipoInstalacao');
+  const watchedLampadasManual = watch('qtdLampadasManual');
+  const watchedBotoesManual = watch('qtdBotoesManual');
+
+  // Quantidade padrão (da tabela de iluminação / regra da Tube) — pré-preenche
+  // os campos editáveis e serve de referência pro aviso de divergência.
+  const kitPadrao = useMemo(() => {
+    if (!ref) return null;
+    return kitIluminacaoPadrao(
+      { modelo: watchedModelo, width: Number(watchedWidth) || 0, tipoAplicacao: watchedAplicacao, tipoInstalacao: watchedInstalacao },
+      ref,
+    );
+  }, [ref, watchedModelo, watchedWidth, watchedAplicacao, watchedInstalacao]);
+  const qtdLampadasEfetiva = watchedLampadasManual ?? kitPadrao?.qtdLampadas ?? 0;
+  const qtdBotoesEfetiva = watchedBotoesManual ?? kitPadrao?.qtdBotoes ?? 0;
+  const lampadasDivergem = watchedLampadasManual !== undefined && kitPadrao !== null && watchedLampadasManual !== kitPadrao.qtdLampadas;
+  const botoesDivergem = watchedBotoesManual !== undefined && kitPadrao !== null && watchedBotoesManual !== kitPadrao.qtdBotoes;
+  const nomeBotao = watchedAplicacao === 'Churrasqueira' && watchedModelo !== 'Tube' ? 'Botões' : 'Botoeiras';
 
   const larguraPadraoDisponivel = useMemo(() => {
     if (!watchedMaterial) return [];
@@ -192,6 +226,8 @@ export default function CostCalculatorPage() {
         frisoLinhas: values.frisoLinhas as 1 | 2 | 3,
         outros: values.outros,
         paintingCost: values.paintingCost,
+        qtdLampadasManual: values.qtdLampadasManual,
+        qtdBotoesManual: values.qtdBotoesManual,
       };
       const result = calculateCoifa(input, ref);
       setResults(result);
@@ -326,9 +362,54 @@ export default function CostCalculatorPage() {
                     <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
                     <FormField control={form.control} name="tipoInstalacao" render={({ field }) => ( <FormItem><FormLabel>Instalação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Parede">Parede</SelectItem><SelectItem value="Ilha">Ilha</SelectItem></SelectContent></Select><FormDescription className="text-xs">Ilha soma o acréscimo de mão de obra da tabela — não é mais um modelo à parte.</FormDescription></FormItem> )} />
                   </div>
+                  <div className="rounded-md border p-3 space-y-2">
+                    <p className="text-sm font-medium">Kit de Iluminação</p>
+                    <p className="text-xs text-muted-foreground">
+                      Vem preenchido com o padrão da tabela de iluminação. Ajuste só quando o pedido for fora do padrão —
+                      o valor ajustado vale tanto pro preço quanto pro desenho 3D.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      {([
+                        { name: 'qtdLampadasManual' as const, label: 'Lâmpadas', manual: watchedLampadasManual, efetiva: qtdLampadasEfetiva, padrao: kitPadrao?.qtdLampadas, diverge: lampadasDivergem },
+                        { name: 'qtdBotoesManual' as const, label: nomeBotao, manual: watchedBotoesManual, efetiva: qtdBotoesEfetiva, padrao: kitPadrao?.qtdBotoes, diverge: botoesDivergem },
+                      ]).map(campo => (
+                        <div key={campo.name} className="space-y-1">
+                          <Label className="text-xs">{campo.label}</Label>
+                          <div className="flex gap-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={campo.efetiva}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                form.setValue(campo.name, v === '' ? undefined : Math.max(0, Math.round(Number(v))));
+                              }}
+                              className={campo.diverge ? 'border-amber-500' : undefined}
+                            />
+                            {campo.manual !== undefined && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                title="Voltar ao padrão da tabela"
+                                onClick={() => form.setValue(campo.name, undefined)}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          {campo.diverge && (
+                            <p className="text-[11px] text-amber-600">Diferente do padrão da tabela ({campo.padrao}).</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {isTube && (
                     <p className="text-xs text-muted-foreground rounded-md border p-2 bg-muted/30">
-                      Coifa Tube sempre usa 2 lâmpadas + 1 botoeira + 1 chicote, fixo — não varia por medida ou instalação.
+                      Coifa Tube usa por padrão 2 lâmpadas + 1 botoeira + 1 chicote — não varia por medida ou instalação.
                       Diâmetro sempre 500mm; mão de obra calculada pela altura. Se marcar friso, o custo usa a fórmula
                       própria da Tube (25% do valor da chapa em matéria-prima + 25% em mão de obra por linha), não a extensão em cm.
                     </p>
@@ -425,6 +506,37 @@ export default function CostCalculatorPage() {
         </ScrollArea>
 
         <ScrollArea className="flex-1">
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2"><BoxIcon className="h-5 w-5 text-primary" />Visualização 3D</CardTitle>
+              <CardDescription>
+                Só ilustrativo — o preço vem exclusivamente do cálculo abaixo. Arraste pra girar, botão direito (ou Shift) pra mover, roda do mouse pra zoom.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(Number(watchedHeight) > 0 && (isTube || (Number(watchedWidth) > 0 && Number(watchedDepth) > 0))) ? (
+                <CoifaViewer3D
+                  className="h-[380px]"
+                  modelo={watchedModelo}
+                  width={Number(watchedWidth) || 0}
+                  depth={Number(watchedDepth) || 0}
+                  height={Number(watchedHeight) || 0}
+                  tetoWidth={Number(watchedTetoWidth) || undefined}
+                  tetoDepth={Number(watchedTetoDepth) || undefined}
+                  carenagemWidth={Number(watchedCarenagemWidth) || undefined}
+                  carenagemDepth={Number(watchedCarenagemDepth) || undefined}
+                  carenagemHeight={Number(watchedCarenagemHeight) || undefined}
+                  mount={watchedInstalacao}
+                  qtdLampadas={qtdLampadasEfetiva}
+                  qtdBotoes={qtdBotoesEfetiva}
+                />
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/20">
+                  Informe as medidas para ver a coifa em 3D.
+                </div>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Resultados do Cálculo</CardTitle>
@@ -435,7 +547,6 @@ export default function CostCalculatorPage() {
 
               {!results && !isLoading && (
                 <div className="space-y-4">
-                  <CalculatorDiagram width={watchedWidth} height={watchedHeight} depth={watchedDepth} />
                   <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                     <Bot className="h-10 w-10 mb-4" />
                     <p className="font-semibold">Aguardando cálculo</p>

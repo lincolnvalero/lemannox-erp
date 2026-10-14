@@ -47,6 +47,11 @@ export interface CoifaCalculatorInput {
   frisoLinhas: 1 | 2 | 3;
   outros: number;
   paintingCost: number;
+  // Ajuste manual do kit de iluminação, pra pedidos fora do padrão. Quando
+  // omitido, vale a quantidade da tabela de iluminação (ou a regra fixa da
+  // Tube). "Botões" = botoeira na Cozinha, botão na Churrasqueira.
+  qtdLampadasManual?: number;
+  qtdBotoesManual?: number;
 }
 
 export type CalculationDetail = { label: string; value: string };
@@ -65,7 +70,30 @@ export type CoifaCalculationResult = {
   details: CalculationDetail[];
   warnings: string[];
   descricaoAuto: string;
+  // Quantidade efetivamente usada no preço (padrão ou ajustada) — é a mesma
+  // que o visualizador 3D desenha, pra nunca ficarem desencontrados.
+  qtdLampadas: number;
+  qtdBotoes: number;
 };
+
+// Quantidade padrão de lâmpadas/botões para os parâmetros informados, sem
+// ajuste manual — a tela usa pra pré-preencher os campos e sinalizar quando
+// o valor digitado diverge do padrão.
+export function kitIluminacaoPadrao(
+  input: Pick<CoifaCalculatorInput, 'modelo' | 'width' | 'tipoAplicacao' | 'tipoInstalacao'>,
+  ref: Pick<CalculatorReferenceData, 'tabelaIluminacao'>,
+): { qtdLampadas: number; qtdBotoes: number } | null {
+  if (input.modelo === 'Tube') return { qtdLampadas: 2, qtdBotoes: 1 };
+  const row = findByMedidaFaixa(
+    ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
+    input.width,
+  );
+  if (!row) return null;
+  return { qtdLampadas: row.qtdLampadas, qtdBotoes: row.qtdBotoeira || row.qtdBotao };
+}
+
+const manualValido = (v: number | undefined): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 // Tabela de "altura equivalente" (bitola 24 / 0,6mm) usada tanto pela
 // carenagem da Línea quanto pelo corpo cilíndrico da Tube — em ambos os
@@ -278,16 +306,22 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
   let lampadasDescricao = 0;
   let botaoOuBotoeiraDescricao = 0;
 
+  const lampadasAjustadas = manualValido(input.qtdLampadasManual);
+  const botoesAjustados = manualValido(input.qtdBotoesManual);
+  const sufixoAjuste = lampadasAjustadas || botoesAjustados ? ' (ajustado manualmente)' : '';
+
   if (input.modelo === 'Tube') {
-    // Fórmula fixa, independente de medida/instalação: 2 lâmpadas + 1
-    // botoeira + 1 chicote — sempre, conforme instrução específica.
+    // Padrão fixo, independente de medida/instalação: 2 lâmpadas + 1
+    // botoeira + 1 chicote, conforme instrução específica.
     const precoLampada = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Lâmpada Cozinha' : 'Lâmpada Churrasqueira');
     const precoBotoeira = precoEletrico(eletricos, 'Botoeira');
     const precoChicote = precoEletrico(eletricos, 'Chicote');
-    iluminacaoCost = 2 * precoLampada + 1 * precoBotoeira + 1 * precoChicote;
-    lampadasDescricao = 2;
-    botaoOuBotoeiraDescricao = 1;
-    details.push({ label: 'Kit Iluminação (Tube — fixo)', value: `2 lâmp., 1 botoeira, 1 chicote — ${brl(iluminacaoCost)}` });
+    const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : 2;
+    const qtdBot = botoesAjustados ? input.qtdBotoesManual! : 1;
+    iluminacaoCost = qtdLamp * precoLampada + qtdBot * precoBotoeira + 1 * precoChicote;
+    lampadasDescricao = qtdLamp;
+    botaoOuBotoeiraDescricao = qtdBot;
+    details.push({ label: `Kit Iluminação (Tube)${sufixoAjuste}`, value: `${qtdLamp} lâmp., ${qtdBot} botoeira, 1 chicote — ${brl(iluminacaoCost)}` });
   } else {
     const iluminacaoRow = findByMedidaFaixa(
       ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
@@ -299,16 +333,26 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
       const precoBotoeira = precoEletrico(eletricos, 'Botoeira');
       const precoBotao = precoEletrico(eletricos, 'Botão');
       const precoChicote = precoEletrico(eletricos, 'Chicote');
-      iluminacaoCost += iluminacaoRow.qtdLampadas * precoLampada;
+      const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : iluminacaoRow.qtdLampadas;
+      // A tabela usa botoeira (Cozinha) OU botão (Churrasqueira) — o ajuste
+      // manual substitui a quantidade da coluna que aquele tipo usa.
+      const usaBotoeira = iluminacaoRow.qtdBotoeira > 0 || input.tipoAplicacao === 'Cozinha';
+      let qtdBotoeira = iluminacaoRow.qtdBotoeira;
+      let qtdBotao = iluminacaoRow.qtdBotao;
+      if (botoesAjustados) {
+        qtdBotoeira = usaBotoeira ? input.qtdBotoesManual! : 0;
+        qtdBotao = usaBotoeira ? 0 : input.qtdBotoesManual!;
+      }
+      iluminacaoCost += qtdLamp * precoLampada;
       iluminacaoCost += iluminacaoRow.qtdFonte * precoFonte;
-      iluminacaoCost += iluminacaoRow.qtdBotoeira * precoBotoeira;
-      iluminacaoCost += iluminacaoRow.qtdBotao * precoBotao;
+      iluminacaoCost += qtdBotoeira * precoBotoeira;
+      iluminacaoCost += qtdBotao * precoBotao;
       iluminacaoCost += iluminacaoRow.qtdChicote * precoChicote;
-      lampadasDescricao = iluminacaoRow.qtdLampadas;
-      botaoOuBotoeiraDescricao = iluminacaoRow.qtdBotoeira || iluminacaoRow.qtdBotao;
+      lampadasDescricao = qtdLamp;
+      botaoOuBotoeiraDescricao = qtdBotoeira || qtdBotao;
       details.push({
-        label: 'Kit Iluminação',
-        value: `${iluminacaoRow.qtdLampadas} lâmp., ${botaoOuBotoeiraDescricao} bot., ${iluminacaoRow.qtdChicote} chicote — ${brl(iluminacaoCost)}`,
+        label: `Kit Iluminação${sufixoAjuste}`,
+        value: `${qtdLamp} lâmp., ${botaoOuBotoeiraDescricao} bot., ${iluminacaoRow.qtdChicote} chicote — ${brl(iluminacaoCost)}`,
       });
     } else {
       warnings.push('Nenhuma faixa de iluminação encontrada para essa medida/aplicação/instalação.');
@@ -347,6 +391,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     sheetCost, perdasCost, filtroCost, frisoCost, iluminacaoCost, laborCost,
     outrosCost: input.outros, paintingCost: input.paintingCost,
     totalCost, finalPrice, details, warnings, descricaoAuto,
+    qtdLampadas: lampadasDescricao, qtdBotoes: botaoOuBotoeiraDescricao,
   };
 }
 

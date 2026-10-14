@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Quote } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Quote, IluminacaoRow } from "@/lib/types";
 import { getNfeSettings } from "@/app/actions/nfe";
+import { getIluminacao } from "@/app/(dashboard)/calculator/actions";
+import dynamic from "next/dynamic";
+import type { CoifaViewer3DHandle } from "@/components/dashboard/coifa-viewer-3d";
+
+// Carregado sob demanda: o Three.js só baixa quando o orçamento tem coifa —
+// as telas de lista de orçamentos/produção não pagam esse peso à toa.
+const CoifaViewer3D = dynamic(
+  () => import("@/components/dashboard/coifa-viewer-3d").then((m) => m.CoifaViewer3D),
+  { ssr: false, loading: () => <div className="h-[280px] rounded bg-gray-100 animate-pulse" /> },
+);
+import { coifaParamsFromQuoteItem, type CoifaItemParams } from "@/lib/coifa-viewer-from-item";
+import { kitIluminacaoPadrao } from "@/lib/coifa-calculator";
 
 interface Props {
   quote: Quote;
@@ -36,6 +48,51 @@ export function QuotePreview({ quote }: Props) {
     });
   }, []);
 
+  // Coifas do orçamento que dá pra desenhar em 3D (uma por modelo+medida, sem
+  // repetir — cada visualizador abre um contexto WebGL, que o navegador limita).
+  const coifas = useMemo(() => {
+    const unicos = new Map<string, { key: string; label: string; params: CoifaItemParams; churrasqueira: boolean }>();
+    quote.items.forEach((item) => {
+      const params = coifaParamsFromQuoteItem(item);
+      if (!params) return;
+      const key = `${item.name}|${item.measurement}`;
+      if (!unicos.has(key)) {
+        unicos.set(key, {
+          key,
+          label: [item.name, item.measurement].filter(Boolean).join(" – "),
+          params,
+          churrasqueira: /churrasqueira/i.test(`${item.name} ${item.category ?? ""}`),
+        });
+      }
+    });
+    return Array.from(unicos.values());
+  }, [quote.items]);
+
+  // Tabela de iluminação só pra desenhar a quantidade certa de lâmpadas.
+  const [iluminacao, setIluminacao] = useState<IluminacaoRow[]>([]);
+  useEffect(() => {
+    if (coifas.length === 0) return;
+    getIluminacao().then((r) => { if (r.success && r.rows) setIluminacao(r.rows); });
+  }, [coifas.length]);
+
+  // Na impressão (botão do sistema ou Ctrl+P), o canvas 3D é trocado por uma
+  // imagem tirada do ângulo atual — canvas WebGL não sai confiável no PDF.
+  // O src é setado direto no DOM porque o beforeprint precisa ser síncrono.
+  const viewerRefs = useRef<Record<string, CoifaViewer3DHandle | null>>({});
+  const imgRefs = useRef<Record<string, HTMLImageElement | null>>({});
+  useEffect(() => {
+    if (coifas.length === 0) return;
+    const capturar = () => {
+      coifas.forEach((c) => {
+        const url = viewerRefs.current[c.key]?.capturePng();
+        const img = imgRefs.current[c.key];
+        if (url && img) img.src = url;
+      });
+    };
+    window.addEventListener("beforeprint", capturar);
+    return () => window.removeEventListener("beforeprint", capturar);
+  }, [coifas]);
+
   const discount = quote.discount ?? 0;
   const freight = quote.freight ?? 0;
 
@@ -56,7 +113,11 @@ export function QuotePreview({ quote }: Props) {
           .print-this, .print-this * { visibility: visible; }
           .print-this { position: fixed; top: 0; left: 0; width: 100%; }
           .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .print-only:not([src]) { display: none !important; }
+          .coifa-figure { break-inside: avoid; }
         }
+        .print-only { display: none; }
       `}</style>
 
       <div className="print-this bg-white text-gray-900 p-10 min-h-screen font-sans">
@@ -133,6 +194,45 @@ export function QuotePreview({ quote }: Props) {
             </tbody>
           </table>
         </section>
+
+        {/* Visualização 3D das coifas */}
+        {coifas.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Visualização</h2>
+            <p className="text-xs text-gray-500 mb-2 no-print">
+              Gire e posicione cada coifa — ao imprimir ou salvar em PDF, sai a imagem no ângulo em que ela estiver.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              {coifas.map((c) => {
+                const kit = kitIluminacaoPadrao(
+                  { modelo: c.params.modelo, width: c.params.width, tipoAplicacao: c.churrasqueira ? "Churrasqueira" : "Cozinha", tipoInstalacao: c.params.mount },
+                  { tabelaIluminacao: iluminacao },
+                );
+                return (
+                  <figure key={c.key} className="coifa-figure border border-gray-200 rounded p-2">
+                    <div className="no-print">
+                      <CoifaViewer3D
+                        ref={(el) => { viewerRefs.current[c.key] = el; }}
+                        className="h-[280px]"
+                        {...c.params}
+                        qtdLampadas={kit?.qtdLampadas}
+                        qtdBotoes={kit?.qtdBotoes}
+                      />
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      ref={(el) => { imgRefs.current[c.key] = el; }}
+                      alt={c.label}
+                      className="print-only w-full rounded"
+                    />
+                    <figcaption className="text-xs text-gray-600 mt-1 text-center">{c.label}</figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">Imagem ilustrativa. Medidas e acabamento conforme a descrição de cada item.</p>
+          </section>
+        )}
 
         {/* Totais */}
         <div className="flex justify-end mb-6">
