@@ -74,9 +74,11 @@ const formSchema = z.object({
   outros: numField,
   paintingCost: numField,
   // Ajuste manual do kit de iluminação — vazio = usa o padrão da tabela.
-  qtdLampadasManual: z.number().min(0).optional(),
-  qtdBotoesManual: z.number().min(0).optional(),
+  qtdLampadasManual: z.number().min(0).max(50).optional(),
+  qtdBotoesManual: z.number().min(0).max(50).optional(),
 });
+
+const MAX_KIT = 50;
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -180,6 +182,9 @@ export default function CostCalculatorPage() {
   const lampadasDivergem = watchedLampadasManual !== undefined && kitPadrao !== null && watchedLampadasManual !== kitPadrao.qtdLampadas;
   const botoesDivergem = watchedBotoesManual !== undefined && kitPadrao !== null && watchedBotoesManual !== kitPadrao.qtdBotoes;
   const nomeBotao = watchedAplicacao === 'Churrasqueira' && watchedModelo !== 'Tube' ? 'Botões' : 'Botoeiras';
+  // Texto em edição dos campos do kit: permite apagar o número inteiro antes
+  // de digitar outro (sem isso o campo "voltava" pro padrão a cada Backspace).
+  const [kitRascunho, setKitRascunho] = useState<Partial<Record<'qtdLampadasManual' | 'qtdBotoesManual', string>>>({});
 
   const larguraPadraoDisponivel = useMemo(() => {
     if (!watchedMaterial) return [];
@@ -379,11 +384,21 @@ export default function CostCalculatorPage() {
                             <Input
                               type="number"
                               min={0}
+                              max={MAX_KIT}
                               step={1}
-                              value={campo.efetiva}
+                              value={kitRascunho[campo.name] ?? String(campo.efetiva)}
                               onChange={(e) => {
                                 const v = e.target.value;
-                                form.setValue(campo.name, v === '' ? undefined : Math.max(0, Math.round(Number(v))));
+                                setKitRascunho(d => ({ ...d, [campo.name]: v }));
+                                const n = Number(v);
+                                if (v !== '' && Number.isFinite(n)) {
+                                  form.setValue(campo.name, Math.min(MAX_KIT, Math.max(0, Math.round(n))));
+                                }
+                              }}
+                              onBlur={() => {
+                                // Campo deixado vazio = volta ao padrão da tabela.
+                                if (kitRascunho[campo.name] === '') form.setValue(campo.name, undefined);
+                                setKitRascunho(d => ({ ...d, [campo.name]: undefined }));
                               }}
                               className={campo.diverge ? 'border-amber-500' : undefined}
                             />
@@ -393,7 +408,10 @@ export default function CostCalculatorPage() {
                                 size="icon"
                                 variant="ghost"
                                 title="Voltar ao padrão da tabela"
-                                onClick={() => form.setValue(campo.name, undefined)}
+                                onClick={() => {
+                                  form.setValue(campo.name, undefined);
+                                  setKitRascunho(d => ({ ...d, [campo.name]: undefined }));
+                                }}
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
                               </Button>
@@ -481,7 +499,7 @@ export default function CostCalculatorPage() {
                     <Calculator className="mr-2 h-4 w-4" />
                     {isLoading ? 'Calculando...' : 'Calcular Custo e Preço'}
                   </Button>
-                  <Button type="button" variant="outline" className="w-full" onClick={() => { form.reset(defaultValues); setResults(null); }}>
+                  <Button type="button" variant="outline" className="w-full" onClick={() => { form.reset(defaultValues); setKitRascunho({}); setResults(null); }}>
                     <XCircle className="mr-2 h-4 w-4" />Limpar
                   </Button>
                 </CardFooter>

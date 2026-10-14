@@ -34,9 +34,19 @@ export interface CoifaViewer3DProps {
   qtdLampadas?: number;
   qtdBotoes?: number;
   className?: string;
-  /** Oculta a barra de ferramentas e cotas — usado na miniatura do orçamento. */
-  compact?: boolean;
+  /**
+   * Modo embutido (prévia do orçamento): a roda do mouse só dá zoom depois de
+   * clicar no desenho, e o arrasto vertical no celular rola a página — senão o
+   * visualizador "sequestra" a rolagem de quem só está lendo o orçamento.
+   */
+  embedded?: boolean;
+  /** Chamado (com atraso curto) sempre que o desenho muda de ângulo ou forma. */
+  onViewChange?: () => void;
 }
+
+// Limite de marcadores desenhados — protege contra digitação errada (ex: 1000
+// lâmpadas) travando a aba com milhares de objetos 3D.
+const MAX_MARCADORES = 50;
 
 export interface CoifaViewer3DHandle {
   /** Devolve um PNG (data URL) do frame atual — usado na impressão do orçamento. */
@@ -98,7 +108,14 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<{ request: () => void; fitView: (animate?: boolean) => void; viewTo: (name: string) => void } | null>(null);
-  const [show, setShow] = useState<ShowState>({ dims: !props.compact, edges: true, xray: false, ortho: false });
+  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false });
+  const [webglIndisponivel, setWebglIndisponivel] = useState(false);
+  const [ativo, setAtivo] = useState(false);
+  // Callback mais recente sem precisar recriar a cena quando ele muda.
+  const onViewChangeRef = useRef(props.onViewChange);
+  onViewChangeRef.current = props.onViewChange;
+  const embeddedRef = useRef(props.embedded);
+  embeddedRef.current = props.embedded;
 
   // Tudo que precisa sobreviver entre renders (cena, câmera, estado de
   // órbita etc.) fica num único ref — evita recriar a cena do zero a cada
@@ -122,6 +139,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     animId: number; pending: boolean;
     ptrs: Map<number, { x: number; y: number }>;
     show: ShowState;
+    ativo: boolean;
   } | null>(null);
 
   // ── Inicialização da cena (uma única vez) ───────────────────────────────
@@ -134,8 +152,16 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     scene.background = new THREE.Color(0xf3f4f6);
     const persp = new THREE.PerspectiveCamera(40, 1, 10, 100000);
     const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -50000, 50000);
-    // preserveDrawingBuffer: permite capturar o PNG do canvas a qualquer momento.
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    // Sem WebGL (aceleração desligada, acesso remoto, GPU bloqueada) o
+    // construtor lança erro — sem esse try, a prévia do orçamento inteira
+    // quebraria por causa de um desenho ilustrativo.
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch {
+      setWebglIndisponivel(true);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
@@ -162,13 +188,16 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       scene, persp, ortho, camera: persp, renderer, modelGroup, dimGroup,
       metalMat, edgeMat, dimMat, lampMat, btnMat, edgesObj: null, labels: [],
       theta: 0.65, phi: 1.15, radius: 2000, target: new THREE.Vector3(0, 300, 0),
-      animId: 0, pending: false, ptrs: new Map(), show,
+      animId: 0, pending: false, ptrs: new Map(), show, ativo: false,
     };
 
+    let notifyTimer: ReturnType<typeof setTimeout> | undefined;
     const render = () => {
       const s = sceneRef.current;
       if (!s) return;
       s.pending = false;
+      if (notifyTimer) clearTimeout(notifyTimer);
+      notifyTimer = setTimeout(() => onViewChangeRef.current?.(), 400);
       updateCamera();
       s.renderer.render(s.scene, s.camera);
       const cw = host.clientWidth, ch = host.clientHeight, v = new THREE.Vector3();
@@ -252,7 +281,12 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     };
     const onPointerDown = (e: PointerEvent) => {
       const s = sceneRef.current; if (!s) return;
+      s.ativo = true; setAtivo(true);
       host.setPointerCapture(e.pointerId); s.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); s.animId++;
+    };
+    const onPointerLeave = () => {
+      const s = sceneRef.current;
+      if (s && s.ptrs.size === 0) { s.ativo = false; setAtivo(false); }
     };
     const onPointerMove = (e: PointerEvent) => {
       const s = sceneRef.current; if (!s) return;
@@ -274,6 +308,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const onPointerUp = (e: PointerEvent) => { sceneRef.current?.ptrs.delete(e.pointerId); };
     const onWheel = (e: WheelEvent) => {
       const s = sceneRef.current; if (!s) return;
+      // No modo embutido, sem clicar antes, a roda rola a página normalmente.
+      if (embeddedRef.current && !s.ativo) return;
       e.preventDefault(); s.animId++;
       s.radius = Math.min(50000, Math.max(50, s.radius * Math.exp(e.deltaY * 0.0015))); request();
     };
@@ -287,6 +323,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     host.addEventListener('wheel', onWheel, { passive: false });
     host.addEventListener('dblclick', onDblClick);
     host.addEventListener('contextmenu', onContextMenu);
+    host.addEventListener('pointerleave', onPointerLeave);
 
     apiRef.current = { request, fitView, viewTo };
 
@@ -302,11 +339,16 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       host.removeEventListener('wheel', onWheel);
       host.removeEventListener('dblclick', onDblClick);
       host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('pointerleave', onPointerLeave);
+      if (notifyTimer) clearTimeout(notifyTimer);
       modelGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
       dimGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
       metalMat.dispose(); btnMat.dispose(); lampMat.dispose(); edgeMat.dispose(); dimMat.dispose();
       envTexture.dispose();
       renderer.dispose();
+      // Libera o contexto WebGL na hora — o navegador só aceita ~16 abertos,
+      // e a prévia do orçamento monta/desmonta os visualizadores ao trocar de aba.
+      renderer.forceContextLoss();
       if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement);
       sceneRef.current = null;
     };
@@ -399,7 +441,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     // Botões (face frontal, na base) e lâmpadas (face inferior) — só
     // indicadores visuais da quantidade já calculada no preço, não é um
     // novo campo de entrada.
-    const n = Math.max(0, Math.round(props.qtdBotoes ?? 0));
+    const n = Math.min(MAX_MARCADORES, Math.max(0, Math.round(props.qtdBotoes ?? 0)));
     if (n > 0 && modelo !== 'Tube') {
       const dia = Math.min(16, width / (n * 2));
       const total = n * dia + (n - 1) * (dia * 0.6);
@@ -412,7 +454,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         modelGroup.add(m);
       }
     }
-    const lampN = Math.max(0, Math.round(props.qtdLampadas ?? 0));
+    const lampN = Math.min(MAX_MARCADORES, Math.max(0, Math.round(props.qtdLampadas ?? 0)));
     if (lampN > 0 && modelo !== 'Tube') {
       const lampDia = Math.min(80, width / (lampN * 1.5));
       const lg = new THREE.CylinderGeometry(lampDia / 2, lampDia / 2, 4, 24);
@@ -492,12 +534,26 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     },
   }));
 
+  if (webglIndisponivel) {
+    return (
+      <div className={cn('relative w-full h-full min-h-[200px] rounded-md border border-dashed flex items-center justify-center p-4 text-center text-sm text-muted-foreground', props.className)}>
+        Visualização 3D indisponível neste computador (o navegador não liberou aceleração gráfica/WebGL).
+        O cálculo e o orçamento não são afetados.
+      </div>
+    );
+  }
+
   return (
     <div className={cn('relative w-full h-full min-h-[280px] bg-muted/30 rounded-md overflow-hidden', props.className)}>
-      <div ref={hostRef} className="absolute inset-0 cursor-grab active:cursor-grabbing touch-none" />
+      {/* No modo embutido, arrasto vertical no celular rola a página. */}
+      <div ref={hostRef} className={cn('absolute inset-0 cursor-grab active:cursor-grabbing', props.embedded ? 'touch-pan-y' : 'touch-none')} />
       <div ref={labelsRef} className="absolute inset-0 pointer-events-none overflow-hidden" />
-      {!props.compact && (
-        <>
+      {props.embedded && !ativo && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded bg-black/55 px-2 py-0.5 text-[11px] text-white">
+          Clique e arraste para girar · clique antes de usar o zoom
+        </div>
+      )}
+      <>
           <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[70%] z-10">
             {([['front', 'Frontal'], ['right', 'Lateral'], ['top', 'Superior'], ['iso', 'Isométrica'], ['fit', 'Ajustar']] as const).map(([v, label]) => (
               <Button key={v} type="button" size="sm" variant="secondary" className="h-6 px-2 text-[11px]" onClick={() => apiRef.current?.viewTo(v)}>
@@ -519,8 +575,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
               </Button>
             ))}
           </div>
-        </>
-      )}
+      </>
     </div>
   );
 });

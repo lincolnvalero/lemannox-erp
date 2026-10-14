@@ -83,13 +83,25 @@ export function kitIluminacaoPadrao(
   input: Pick<CoifaCalculatorInput, 'modelo' | 'width' | 'tipoAplicacao' | 'tipoInstalacao'>,
   ref: Pick<CalculatorReferenceData, 'tabelaIluminacao'>,
 ): { qtdLampadas: number; qtdBotoes: number } | null {
-  if (input.modelo === 'Tube') return { qtdLampadas: 2, qtdBotoes: 1 };
-  const row = findByMedidaFaixa(
+  if (input.modelo === 'Tube') return { ...KIT_TUBE };
+  const row = findIluminacaoRow(input, ref);
+  if (!row) return null;
+  return { qtdLampadas: row.qtdLampadas, qtdBotoes: row.qtdBotoeira || row.qtdBotao };
+}
+
+// Padrão fixo da Tube: 2 lâmpadas + 1 botoeira (+ 1 chicote), em qualquer medida.
+const KIT_TUBE = { qtdLampadas: 2, qtdBotoes: 1 };
+
+// Única regra de escolha da faixa da tabela de iluminação — usada tanto pelo
+// preço quanto pelo padrão mostrado na tela, pra nunca divergirem.
+function findIluminacaoRow(
+  input: Pick<CoifaCalculatorInput, 'width' | 'tipoAplicacao' | 'tipoInstalacao'>,
+  ref: Pick<CalculatorReferenceData, 'tabelaIluminacao'>,
+) {
+  return findByMedidaFaixa(
     ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
     input.width,
   );
-  if (!row) return null;
-  return { qtdLampadas: row.qtdLampadas, qtdBotoes: row.qtdBotoeira || row.qtdBotao };
 }
 
 const manualValido = (v: number | undefined): v is number =>
@@ -243,6 +255,9 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     const chapaCostasTeto = findChapaEstoque(materiaisEstoque, input.material, 24, larguraPadrao);
     if (!chapaCostasTeto) warnings.push(`Chapa ${input.material} bitola 24 / ${larguraPadrao}mm não encontrada no Estoque.`);
     const tetoContribuicao = input.modelo === 'Piramidal' ? (input.tetoWidth || 0) : width;
+    if (input.modelo === 'Piramidal' && !(input.tetoWidth && input.tetoWidth > 0)) {
+      warnings.push('Medida do teto não informada — a chapa do teto da Piramidal não entrou no custo.');
+    }
     const metragemCostasTeto = width + tetoContribuicao;
     const { cost: costCostasTeto, chapas: chapasCostasTeto } = custoGrupoChapa(metragemCostasTeto, larguraPadrao, chapaCostasTeto);
     details.push({ label: 'Chapa (Costas/Teto)', value: `${chapasCostasTeto.toFixed(2)} un. — ${brl(costCostasTeto)}` });
@@ -316,17 +331,14 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     const precoLampada = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Lâmpada Cozinha' : 'Lâmpada Churrasqueira');
     const precoBotoeira = precoEletrico(eletricos, 'Botoeira');
     const precoChicote = precoEletrico(eletricos, 'Chicote');
-    const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : 2;
-    const qtdBot = botoesAjustados ? input.qtdBotoesManual! : 1;
+    const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : KIT_TUBE.qtdLampadas;
+    const qtdBot = botoesAjustados ? input.qtdBotoesManual! : KIT_TUBE.qtdBotoes;
     iluminacaoCost = qtdLamp * precoLampada + qtdBot * precoBotoeira + 1 * precoChicote;
     lampadasDescricao = qtdLamp;
     botaoOuBotoeiraDescricao = qtdBot;
     details.push({ label: `Kit Iluminação (Tube)${sufixoAjuste}`, value: `${qtdLamp} lâmp., ${qtdBot} botoeira, 1 chicote — ${brl(iluminacaoCost)}` });
   } else {
-    const iluminacaoRow = findByMedidaFaixa(
-      ref.tabelaIluminacao.filter(r => r.tipoCoifa === input.tipoAplicacao && r.tipoInstalacao === input.tipoInstalacao),
-      width
-    );
+    const iluminacaoRow = findIluminacaoRow({ ...input, width }, ref);
     if (iluminacaoRow) {
       const precoLampada = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Lâmpada Cozinha' : 'Lâmpada Churrasqueira');
       const precoFonte = precoEletrico(eletricos, 'Fonte');
@@ -356,6 +368,21 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
       });
     } else {
       warnings.push('Nenhuma faixa de iluminação encontrada para essa medida/aplicação/instalação.');
+      // Mesmo sem faixa na tabela, o que foi ajustado à mão entra no preço —
+      // senão o desenho mostraria lâmpadas que o preço não cobra.
+      if (lampadasAjustadas || botoesAjustados) {
+        const qtdLamp = lampadasAjustadas ? input.qtdLampadasManual! : 0;
+        const qtdBot = botoesAjustados ? input.qtdBotoesManual! : 0;
+        const precoLampada = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Lâmpada Cozinha' : 'Lâmpada Churrasqueira');
+        const precoBot = precoEletrico(eletricos, input.tipoAplicacao === 'Cozinha' ? 'Botoeira' : 'Botão');
+        iluminacaoCost = qtdLamp * precoLampada + qtdBot * precoBot;
+        lampadasDescricao = qtdLamp;
+        botaoOuBotoeiraDescricao = qtdBot;
+        details.push({
+          label: 'Kit Iluminação (ajustado manualmente, sem faixa na tabela)',
+          value: `${qtdLamp} lâmp., ${qtdBot} bot. — ${brl(iluminacaoCost)}`,
+        });
+      }
     }
   }
 

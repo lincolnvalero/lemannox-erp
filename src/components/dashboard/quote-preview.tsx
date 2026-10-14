@@ -67,6 +67,10 @@ export function QuotePreview({ quote }: Props) {
     });
     return Array.from(unicos.values());
   }, [quote.items]);
+  // Cada desenho abre um contexto WebGL e o navegador limita (~16). Acima do
+  // limite, os demais itens continuam no orçamento, só sem o desenho.
+  const MAX_DESENHOS = 8;
+  const coifasDesenhadas = coifas.slice(0, MAX_DESENHOS);
 
   // Tabela de iluminação só pra desenhar a quantidade certa de lâmpadas.
   const [iluminacao, setIluminacao] = useState<IluminacaoRow[]>([]);
@@ -77,20 +81,24 @@ export function QuotePreview({ quote }: Props) {
 
   // Na impressão (botão do sistema ou Ctrl+P), o canvas 3D é trocado por uma
   // imagem tirada do ângulo atual — canvas WebGL não sai confiável no PDF.
-  // O src é setado direto no DOM porque o beforeprint precisa ser síncrono.
+  // A imagem é atualizada logo depois de cada giro/zoom (não no momento de
+  // imprimir): o navegador decodifica imagem de forma assíncrona, e trocar o
+  // src dentro do "beforeprint" pode fazer a figura sair em branco no PDF.
   const viewerRefs = useRef<Record<string, CoifaViewer3DHandle | null>>({});
   const imgRefs = useRef<Record<string, HTMLImageElement | null>>({});
+  const atualizarImagem = (key: string) => {
+    const url = viewerRefs.current[key]?.capturePng();
+    const img = imgRefs.current[key];
+    if (url && img && img.src !== url) img.src = url;
+  };
   useEffect(() => {
     if (coifas.length === 0) return;
-    const capturar = () => {
-      coifas.forEach((c) => {
-        const url = viewerRefs.current[c.key]?.capturePng();
-        const img = imgRefs.current[c.key];
-        if (url && img) img.src = url;
-      });
+    // Rede de segurança: se por algum motivo a imagem ainda não existir.
+    const capturarFaltantes = () => {
+      coifas.forEach((c) => { if (!imgRefs.current[c.key]?.getAttribute("src")) atualizarImagem(c.key); });
     };
-    window.addEventListener("beforeprint", capturar);
-    return () => window.removeEventListener("beforeprint", capturar);
+    window.addEventListener("beforeprint", capturarFaltantes);
+    return () => window.removeEventListener("beforeprint", capturarFaltantes);
   }, [coifas]);
 
   const discount = quote.discount ?? 0;
@@ -203,7 +211,7 @@ export function QuotePreview({ quote }: Props) {
               Gire e posicione cada coifa — ao imprimir ou salvar em PDF, sai a imagem no ângulo em que ela estiver.
             </p>
             <div className="grid grid-cols-2 gap-4">
-              {coifas.map((c) => {
+              {coifasDesenhadas.map((c) => {
                 const kit = kitIluminacaoPadrao(
                   { modelo: c.params.modelo, width: c.params.width, tipoAplicacao: c.churrasqueira ? "Churrasqueira" : "Cozinha", tipoInstalacao: c.params.mount },
                   { tabelaIluminacao: iluminacao },
@@ -214,6 +222,8 @@ export function QuotePreview({ quote }: Props) {
                       <CoifaViewer3D
                         ref={(el) => { viewerRefs.current[c.key] = el; }}
                         className="h-[280px]"
+                        embedded
+                        onViewChange={() => atualizarImagem(c.key)}
                         {...c.params}
                         qtdLampadas={kit?.qtdLampadas}
                         qtdBotoes={kit?.qtdBotoes}
@@ -230,6 +240,11 @@ export function QuotePreview({ quote }: Props) {
                 );
               })}
             </div>
+            {coifas.length > MAX_DESENHOS && (
+              <p className="text-xs text-gray-500 mt-2 no-print">
+                Mostrando {MAX_DESENHOS} de {coifas.length} modelos — os demais aparecem só na lista de itens.
+              </p>
+            )}
             <p className="text-[10px] text-gray-400 mt-2">Imagem ilustrativa. Medidas e acabamento conforme a descrição de cada item.</p>
           </section>
         )}
