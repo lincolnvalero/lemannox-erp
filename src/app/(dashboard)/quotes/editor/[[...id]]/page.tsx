@@ -57,8 +57,12 @@ import { Separator } from '@/components/ui/separator';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
 import { OsEditor } from '@/components/dashboard/os-editor';
 import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
+import { CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 
 
+// .passthrough(): o zod descarta por padrão os campos que não estão no
+// schema — sem isso, salvar o orçamento apagava o status de produção dos
+// itens (concluído/entregue), o id e as medidas da coifa vindas da Calculadora.
 const quoteItemSchema = z.object({
   productId: z.string(),
   name: z.string().min(1, 'A descrição é obrigatória.'),
@@ -68,7 +72,7 @@ const quoteItemSchema = z.object({
   unitPrice: z.coerce.number().min(0, 'Preço deve ser positivo.'),
   tax: z.coerce.number().min(0, 'Imposto deve ser positivo.'),
   total: z.number(),
-});
+}).passthrough();
 
 const quoteSchema = z.object({
   customerId: z.string().min(1, 'O cliente é obrigatório.'),
@@ -308,6 +312,31 @@ export default function QuoteEditorPage() {
     }
     loadData();
   }, [quoteId, isEditMode, toast, form]);
+
+  // Coifa enviada pela Calculadora ("Adicionar ao orçamento"): é anexada só
+  // depois que o orçamento terminou de carregar (senão o reset do formulário
+  // a apagaria), e o parâmetro sai da URL pra não duplicar ao recarregar.
+  const itemPendenteProcessado = useRef(false);
+  useEffect(() => {
+    if (isLoading || itemPendenteProcessado.current) return;
+    if (searchParams.get('adicionarItem') !== '1') return;
+    itemPendenteProcessado.current = true;
+    let item: unknown = null;
+    try {
+      item = JSON.parse(sessionStorage.getItem(CHAVE_ITEM_PENDENTE_ORCAMENTO) || 'null');
+      sessionStorage.removeItem(CHAVE_ITEM_PENDENTE_ORCAMENTO);
+    } catch {
+      item = null;
+    }
+    if (item && typeof item === 'object') {
+      append(item as QuoteFormValues['items'][number]);
+      toast({
+        title: 'Coifa adicionada ao orçamento',
+        description: isEditMode ? 'Revise o item — o orçamento é salvo automaticamente.' : 'Escolha o cliente e salve o orçamento.',
+      });
+    }
+    router.replace(isEditMode ? `/quotes/editor?id=${quoteId}` : '/quotes/editor');
+  }, [isLoading, searchParams, append, toast, isEditMode, quoteId, router]);
 
   useEffect(() => {
     if (watchedCustomerId) {
@@ -846,6 +875,13 @@ export default function QuoteEditorPage() {
                                         />
                                       </TableCell>
                                       <TableCell className="align-middle">
+                                        {/* Item sem produto cadastrado (ex: coifa vinda da Calculadora):
+                                            o preço foi calculado pra esse material — trocar aqui zeraria o preço. */}
+                                        {!product ? (
+                                          <div className="h-10 flex items-center rounded-md border bg-muted/40 px-3 text-sm" title="Material definido no cálculo — para trocar, recalcule na Calculadora">
+                                            {item.material || '—'}
+                                          </div>
+                                        ) : (
                                         <Select
                                           value={item.material}
                                           onValueChange={(value) => handleMaterialChange(index, value)}
@@ -864,6 +900,7 @@ export default function QuoteEditorPage() {
                                               ))}
                                           </SelectContent>
                                         </Select>
+                                        )}
                                       </TableCell>
                                       <TableCell className="align-middle">
                                         <Input

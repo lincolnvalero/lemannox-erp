@@ -15,6 +15,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
+import { Eye, SlidersHorizontal } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 export type CoifaViewerModelo = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
@@ -33,6 +37,14 @@ export interface CoifaViewer3DProps {
   mount: CoifaViewerMount;
   qtdLampadas?: number;
   qtdBotoes?: number;
+  /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
+  material?: string;
+  filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
+  coletor?: 'nenhum' | 'simples' | 'duplo';
+  frisoFrente?: boolean;
+  frisoLD?: boolean;
+  frisoLE?: boolean;
+  frisoLinhas?: number;
   className?: string;
   /**
    * Modo embutido (prévia do orçamento): a roda do mouse só dá zoom depois de
@@ -53,7 +65,7 @@ export interface CoifaViewer3DHandle {
   capturePng: () => string | null;
 }
 
-type ShowState = { dims: boolean; edges: boolean; xray: boolean; ortho: boolean };
+type ShowState = { dims: boolean; edges: boolean; xray: boolean; ortho: boolean; chapas: boolean };
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -63,19 +75,44 @@ const rect = (w: number, d: number, cx: number, cz: number, y: number): Rect => 
   x0: cx - w / 2, x1: cx + w / 2, z0: cz - d / 2, z1: cz + d / 2, y,
 });
 
-// Casca com 4 faces laterais entre dois retângulos (caixa ou tronco de
-// pirâmide), com tampa opcional embaixo e/ou em cima.
-function shellQuads(b: Rect, t: Rect, bottomCap: boolean, topCap = false): number[][][] {
-  const q = [
-    [[b.x0, b.y, b.z1], [b.x1, b.y, b.z1], [t.x1, t.y, t.z1], [t.x0, t.y, t.z1]],
-    [[b.x1, b.y, b.z0], [b.x0, b.y, b.z0], [t.x0, t.y, t.z0], [t.x1, t.y, t.z0]],
-    [[b.x1, b.y, b.z1], [b.x1, b.y, b.z0], [t.x1, t.y, t.z0], [t.x1, t.y, t.z1]],
-    [[b.x0, b.y, b.z0], [b.x0, b.y, b.z1], [t.x0, t.y, t.z1], [t.x0, t.y, t.z0]],
-  ];
-  if (bottomCap) q.push([[b.x0, b.y, b.z0], [b.x1, b.y, b.z0], [b.x1, b.y, b.z1], [b.x0, b.y, b.z1]]);
-  if (topCap) q.push([[t.x0, t.y, t.z1], [t.x1, t.y, t.z1], [t.x1, t.y, t.z0], [t.x0, t.y, t.z0]]);
-  return q;
+// Faces nomeadas da casca entre dois retângulos (caixa ou tronco de
+// pirâmide). Nomeadas pra cada face poder ir pro grupo de chapa certo
+// (frente/laterais = chapa 22; costas/teto = chapa 24), igual ao cálculo.
+type Quad = number[][];
+type Faces = { front: Quad; back: Quad; right: Quad; left: Quad; bottom: Quad; top: Quad };
+function shellFaces(b: Rect, t: Rect): Faces {
+  return {
+    front: [[b.x0, b.y, b.z1], [b.x1, b.y, b.z1], [t.x1, t.y, t.z1], [t.x0, t.y, t.z1]],
+    back: [[b.x1, b.y, b.z0], [b.x0, b.y, b.z0], [t.x0, t.y, t.z0], [t.x1, t.y, t.z0]],
+    right: [[b.x1, b.y, b.z1], [b.x1, b.y, b.z0], [t.x1, t.y, t.z0], [t.x1, t.y, t.z1]],
+    left: [[b.x0, b.y, b.z0], [b.x0, b.y, b.z1], [t.x0, t.y, t.z1], [t.x0, t.y, t.z0]],
+    bottom: [[b.x0, b.y, b.z0], [b.x1, b.y, b.z0], [b.x1, b.y, b.z1], [b.x0, b.y, b.z1]],
+    top: [[t.x0, t.y, t.z1], [t.x1, t.y, t.z1], [t.x1, t.y, t.z0], [t.x0, t.y, t.z0]],
+  };
 }
+// Seção da casca na altura y (interpola entre a base e o topo — serve pro
+// tronco da Piramidal, onde as faces são inclinadas).
+function secao(b: Rect, t: Rect, y: number): Rect {
+  const k = t.y === b.y ? 0 : (y - b.y) / (t.y - b.y);
+  const l = (a: number, c: number) => a + (c - a) * k;
+  return { x0: l(b.x0, t.x0), x1: l(b.x1, t.x1), z0: l(b.z0, t.z0), z1: l(b.z1, t.z1), y };
+}
+// Faixa horizontal (friso) numa face, entre as alturas ya e yb.
+function faixa(b: Rect, t: Rect, face: 'front' | 'right' | 'left', ya: number, yb: number): Quad {
+  return shellFaces(secao(b, t, ya), secao(b, t, yb))[face];
+}
+
+// Cores do modo "Chapas" — as mesmas da legenda.
+const COR_CHAPA_22 = 0x5b8fd6;
+const COR_CHAPA_24 = 0xe39b45;
+const HEX_22 = '#5b8fd6';
+const HEX_24 = '#e39b45';
+const LEGENDA_CHAPAS: Record<CoifaViewerModelo, [string, string]> = {
+  Box: ['Chapa 22 — frente e laterais', 'Chapa 24 — costas e teto'],
+  Piramidal: ['Chapa 22 — frente e laterais', 'Chapa 24 — costas e teto'],
+  Linea: ['Chapa 22 — corpo', 'Chapa 24 — carenagem'],
+  Tube: ['Chapa 22 — tampas', 'Chapa 24 — corpo'],
+};
 
 // Reflexos de "estúdio" gerados por código (mesma técnica do protótipo):
 // sem isso o material metálico fica quase preto, já que não há o que refletir.
@@ -104,11 +141,42 @@ function geomFromQuads(quads: number[][][]): THREE.BufferGeometry {
   return g;
 }
 
+type MateriaisCasca = {
+  hullMeshes: THREE.Mesh[];
+  show: ShowState;
+  carbono: boolean;
+  metalMat: THREE.MeshStandardMaterial;
+  carbonoMat: THREE.MeshStandardMaterial;
+  chapa22Mat: THREE.MeshStandardMaterial;
+  chapa24Mat: THREE.MeshStandardMaterial;
+};
+// Decide o material de cada parte da casca: aparência real (inox escovado
+// ou carbono pintado) ou, no modo "Chapas", a cor do grupo de chapa.
+function aplicarMateriais(s: MateriaisCasca) {
+  const base = s.carbono ? s.carbonoMat : s.metalMat;
+  s.hullMeshes.forEach(m => {
+    if (m.userData.tube) {
+      // Cilindro: grupo 0 = corpo (chapa 24), 1 e 2 = tampas (chapa 22).
+      m.material = s.show.chapas ? [s.chapa24Mat, s.chapa22Mat, s.chapa22Mat] : base;
+    } else if (s.show.chapas && m.userData.grupo === '22') m.material = s.chapa22Mat;
+    else if (s.show.chapas && m.userData.grupo === '24') m.material = s.chapa24Mat;
+    else m.material = base;
+  });
+  [s.metalMat, s.carbonoMat, s.chapa22Mat, s.chapa24Mat].forEach(mat => {
+    mat.transparent = s.show.xray;
+    mat.opacity = s.show.xray ? 0.3 : 1;
+    mat.depthWrite = !s.show.xray;
+    mat.needsUpdate = true;
+  });
+}
+
 export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>(function CoifaViewer3D(props, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<{ request: () => void; fitView: (animate?: boolean) => void; viewTo: (name: string) => void } | null>(null);
-  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false });
+  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false, chapas: false });
+  const [estreito, setEstreito] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [webglIndisponivel, setWebglIndisponivel] = useState(false);
   const [ativo, setAtivo] = useState(false);
   // Callback mais recente sem precisar recriar a cena quando ele muda.
@@ -129,6 +197,14 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     modelGroup: THREE.Group;
     dimGroup: THREE.Group;
     metalMat: THREE.MeshStandardMaterial;
+    carbonoMat: THREE.MeshStandardMaterial;
+    chapa22Mat: THREE.MeshStandardMaterial;
+    chapa24Mat: THREE.MeshStandardMaterial;
+    frisoMat: THREE.MeshStandardMaterial;
+    filtroMat: THREE.MeshStandardMaterial;
+    coletorMat: THREE.MeshStandardMaterial;
+    hullMeshes: THREE.Mesh[];
+    carbono: boolean;
     edgeMat: THREE.LineBasicMaterial;
     dimMat: THREE.LineBasicMaterial;
     lampMat: THREE.MeshStandardMaterial;
@@ -176,6 +252,16 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       color: 0xb4bac2, metalness: 0.9, roughness: 0.38, envMapIntensity: 1.1, side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     });
+    // Polygon offset em todos os materiais da casca: frisos e filtro são
+    // desenhados rente às faces e precisam ganhar a disputa de profundidade.
+    const offset = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, side: THREE.DoubleSide } as const;
+    // Aço carbono sai pintado (fosco, escuro) — não brilha como inox.
+    const carbonoMat = new THREE.MeshStandardMaterial({ color: 0x4b525c, metalness: 0.25, roughness: 0.6, ...offset });
+    const chapa22Mat = new THREE.MeshStandardMaterial({ color: COR_CHAPA_22, metalness: 0.35, roughness: 0.45, ...offset });
+    const chapa24Mat = new THREE.MeshStandardMaterial({ color: COR_CHAPA_24, metalness: 0.35, roughness: 0.45, ...offset });
+    const frisoMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide });
+    const filtroMat = new THREE.MeshStandardMaterial({ color: 0x9aa1aa, metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide });
+    const coletorMat = new THREE.MeshStandardMaterial({ color: 0x7c848f, metalness: 0.7, roughness: 0.4 });
     const btnMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, metalness: 0.3, roughness: 0.6 });
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffd66b, emissiveIntensity: 0.8, roughness: 0.2 });
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x4b5563 });
@@ -186,7 +272,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
 
     sceneRef.current = {
       scene, persp, ortho, camera: persp, renderer, modelGroup, dimGroup,
-      metalMat, edgeMat, dimMat, lampMat, btnMat, edgesObj: null, labels: [],
+      metalMat, carbonoMat, chapa22Mat, chapa24Mat, frisoMat, filtroMat, coletorMat, hullMeshes: [], carbono: false,
+      edgeMat, dimMat, lampMat, btnMat, edgesObj: null, labels: [],
       theta: 0.65, phi: 1.15, radius: 2000, target: new THREE.Vector3(0, 300, 0),
       animId: 0, pending: false, ptrs: new Map(), show, ativo: false,
     };
@@ -343,7 +430,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       if (notifyTimer) clearTimeout(notifyTimer);
       modelGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
       dimGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
-      metalMat.dispose(); btnMat.dispose(); lampMat.dispose(); edgeMat.dispose(); dimMat.dispose();
+      [metalMat, carbonoMat, chapa22Mat, chapa24Mat, frisoMat, filtroMat, coletorMat, btnMat, lampMat, edgeMat, dimMat].forEach(m => m.dispose());
       envTexture.dispose();
       renderer.dispose();
       // Libera o contexto WebGL na hora — o navegador só aceita ~16 abertos,
@@ -362,7 +449,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const labelsEl = labelsRef.current;
     if (!labelsEl) return;
 
-    const { modelGroup, dimGroup, metalMat, edgeMat, dimMat, lampMat, btnMat } = s;
+    const { modelGroup, dimGroup, metalMat, edgeMat, dimMat, lampMat, btnMat, frisoMat } = s;
     // Geometrias de cada rebuild precisam ser liberadas — senão vazam memória
     // de GPU a cada tecla digitada no formulário.
     [modelGroup, dimGroup].forEach(g => {
@@ -391,56 +478,141 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const height = Math.max(1, props.height);
     const gap = Math.max(width, depth, height) * 0.12;
 
-    let hullGeom: THREE.BufferGeometry;
+    // Casca separada por grupo de chapa, igual ao cálculo de custo:
+    // Box/Piramidal — frente+laterais = chapa 22; costas+teto = chapa 24.
+    // Línea — corpo = chapa 22; carenagem = chapa 24. Tube — tampas = 22, corpo = 24.
+    // "base" = fundo, que não é chapa do cálculo (só fecha o desenho).
+    type Grupo = '22' | '24' | 'base';
+    const partes: Record<Grupo, Quad[]> = { '22': [], '24': [], base: [] };
+    s.hullMeshes = [];
+    s.carbono = /carbono/i.test(props.material ?? '');
+    const todas: Quad[] = [];
+    let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
 
     if (modelo === 'Tube') {
       const radius = 250; // diâmetro fixo 500mm
-      hullGeom = new THREE.CylinderGeometry(radius, radius, height, 32);
-      hullGeom.translate(0, height / 2, 0);
+      const geo = new THREE.CylinderGeometry(radius, radius, height, 48);
+      geo.translate(0, height / 2, 0);
+      // Grupos do CylinderGeometry: 0 = lateral (corpo), 1 = topo, 2 = base (tampas).
+      const tube = new THREE.Mesh(geo, metalMat);
+      tube.userData.tube = true;
+      modelGroup.add(tube);
+      s.hullMeshes.push(tube);
+      const edgesTube = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), edgeMat);
+      edgesTube.visible = s.show.edges;
+      modelGroup.add(edgesTube);
+      s.edgesObj = edgesTube;
       addDimLine([V(-radius, 0, radius), V(radius, 0, radius)]);
       addLabel(V(0, -gap * 0.15, radius + gap * 0.2), 'Ø 500');
       addDimLine([V(radius, 0, 0), V(radius, height, 0)]);
       addLabel(V(radius + gap * 0.3, height / 2, 0), 'Altura ' + fmt(height));
-    } else if (modelo === 'Piramidal') {
-      const tw = props.tetoWidth && props.tetoWidth > 0 ? props.tetoWidth : width * 0.4;
-      const td = props.tetoDepth && props.tetoDepth > 0 ? props.tetoDepth : depth * 0.7;
-      const zc = props.mount === 'Parede' ? -(depth / 2 - td / 2) : 0;
-      const quads = shellQuads(rect(width, depth, 0, 0, 0), rect(tw, td, 0, zc, height), true);
-      hullGeom = geomFromQuads(quads);
-      addDimLabelsBoxLike(width, depth, height, tw, td, zc);
-    } else if (modelo === 'Linea') {
-      // Corpo: caixa baixa e larga. Carenagem: segunda caixa, mais estreita,
-      // subindo a partir do topo do corpo — largura/profundidade dela são só
-      // estéticas (não entram no cálculo de preço, só a altura entra).
-      const corpoQuads = shellQuads(rect(width, depth, 0, 0, 0), rect(width, depth, 0, 0, height), true, true);
-      const cw = props.carenagemWidth && props.carenagemWidth > 0 ? props.carenagemWidth : width * 0.5;
-      const cd = props.carenagemDepth && props.carenagemDepth > 0 ? props.carenagemDepth : depth * 0.5;
-      const ch = props.carenagemHeight && props.carenagemHeight > 0 ? props.carenagemHeight : 0;
-      const zc = props.mount === 'Parede' ? -(depth / 2 - cd / 2) : 0;
-      let quads = corpoQuads;
-      if (ch > 0) {
-        quads = quads.concat(shellQuads(rect(cw, cd, 0, zc, height), rect(cw, cd, 0, zc, height + ch), false, true));
+      // Frisos da Tube: anéis em volta do corpo, na parte de baixo.
+      if (props.frisoFrente || props.frisoLD || props.frisoLE) {
+        const nLinhas = Math.max(1, Math.min(3, props.frisoLinhas ?? 1));
+        const faixaAltura = Math.min(height * 0.3, 400);
+        const esp = Math.min(12, faixaAltura / (nLinhas + 1) * 0.5);
+        for (let i = 0; i < nLinhas; i++) {
+          const anel = new THREE.Mesh(new THREE.CylinderGeometry(radius + 1, radius + 1, esp, 48, 1, true), frisoMat);
+          anel.position.y = faixaAltura * (i + 1) / (nLinhas + 1);
+          modelGroup.add(anel);
+        }
       }
-      hullGeom = geomFromQuads(quads);
-      addDimLabelsLinea(width, depth, height, ch);
     } else {
-      // Box: caixa reta, sem afunilar — não existe campo de chaminé pro Box
-      // no modelo de dados real.
-      const quads = shellQuads(rect(width, depth, 0, 0, 0), rect(width, depth, 0, 0, height), true, true);
-      hullGeom = geomFromQuads(quads);
-      addDimLabelsBoxLike(width, depth, height);
+      if (modelo === 'Piramidal') {
+        const tw = props.tetoWidth && props.tetoWidth > 0 ? props.tetoWidth : width * 0.4;
+        const td = props.tetoDepth && props.tetoDepth > 0 ? props.tetoDepth : depth * 0.7;
+        const zc = props.mount === 'Parede' ? -(depth / 2 - td / 2) : 0;
+        corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(tw, td, 0, zc, height);
+        const f = shellFaces(corpoBase, corpoTopo);
+        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back, f.top); partes.base.push(f.bottom);
+        addDimLabelsBoxLike(width, depth, height, tw, td, zc);
+      } else if (modelo === 'Linea') {
+        // Corpo: caixa baixa e larga. Carenagem: segunda caixa, mais estreita,
+        // subindo a partir do topo do corpo — largura/profundidade dela são só
+        // estéticas (não entram no cálculo de preço, só a altura entra).
+        corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(width, depth, 0, 0, height);
+        const f = shellFaces(corpoBase, corpoTopo);
+        partes['22'].push(f.front, f.back, f.right, f.left, f.top); partes.base.push(f.bottom);
+        const cw = props.carenagemWidth && props.carenagemWidth > 0 ? props.carenagemWidth : width * 0.5;
+        const cd = props.carenagemDepth && props.carenagemDepth > 0 ? props.carenagemDepth : depth * 0.5;
+        const ch = props.carenagemHeight && props.carenagemHeight > 0 ? props.carenagemHeight : 0;
+        const zc = props.mount === 'Parede' ? -(depth / 2 - cd / 2) : 0;
+        if (ch > 0) {
+          const c = shellFaces(rect(cw, cd, 0, zc, height), rect(cw, cd, 0, zc, height + ch));
+          partes['24'].push(c.front, c.back, c.right, c.left, c.top);
+        }
+        addDimLabelsLinea(width, depth, height, ch);
+      } else {
+        // Box: caixa reta, sem afunilar — não existe campo de chaminé pro Box
+        // no modelo de dados real.
+        corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(width, depth, 0, 0, height);
+        const f = shellFaces(corpoBase, corpoTopo);
+        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back, f.top); partes.base.push(f.bottom);
+        addDimLabelsBoxLike(width, depth, height);
+      }
+      (['22', '24', 'base'] as Grupo[]).forEach(g => {
+        if (partes[g].length === 0) return;
+        const mesh = new THREE.Mesh(geomFromQuads(partes[g]), metalMat);
+        mesh.userData.grupo = g;
+        modelGroup.add(mesh);
+        s.hullMeshes.push(mesh);
+        todas.push(...partes[g]);
+      });
+      const edgesGeo = geomFromQuads(todas);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(edgesGeo, 20), edgeMat);
+      edgesGeo.dispose();
+      edges.visible = s.show.edges;
+      modelGroup.add(edges);
+      s.edgesObj = edges;
     }
 
-    const hull = new THREE.Mesh(hullGeom, metalMat);
-    modelGroup.add(hull);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(hullGeom, 20), edgeMat);
-    edges.visible = s.show.edges;
-    modelGroup.add(edges);
-    s.edgesObj = edges;
+    // ── Frisos (Box/Piramidal/Línea): faixas na parte de baixo das faces marcadas.
+    if (corpoBase && corpoTopo && (props.frisoFrente || props.frisoLD || props.frisoLE)) {
+      const nLinhas = Math.max(1, Math.min(3, props.frisoLinhas ?? 1));
+      const faixaAltura = modelo === 'Linea' ? height : Math.min(height * 0.35, 180);
+      const esp = Math.min(10, faixaAltura / (nLinhas + 1) * 0.5);
+      const faces: ('front' | 'right' | 'left')[] = [];
+      if (props.frisoFrente) faces.push('front');
+      if (props.frisoLD) faces.push('right');
+      if (props.frisoLE) faces.push('left');
+      const quads: Quad[] = [];
+      for (let i = 0; i < nLinhas; i++) {
+        const yc = faixaAltura * (i + 1) / (nLinhas + 1);
+        faces.forEach(face => quads.push(faixa(corpoBase!, corpoTopo!, face, yc - esp / 2, yc + esp / 2)));
+      }
+      modelGroup.add(new THREE.Mesh(geomFromQuads(quads), frisoMat));
+    }
+
+    // ── Filtro e coletor de gordura (vistos por baixo — vista "Inferior").
+    const temFiltro = props.filtro && props.filtro !== 'nenhum' && modelo !== 'Tube';
+    if (temFiltro) {
+      const margem = Math.min(40, width * 0.05);
+      const zFrente = depth / 2 - Math.min(120, depth * 0.25); // faixa da frente fica pras lâmpadas
+      const z0 = -depth / 2 + margem, z1 = zFrente, x0 = -width / 2 + margem, x1 = width / 2 - margem;
+      if (z1 - z0 > 50 && x1 - x0 > 50) {
+        s.filtroMat.color.setHex(props.filtro === 'aluminio' ? 0xcfd4db : props.filtro === 'inercial_304' ? 0xb8bfc8 : 0x969da7);
+        const placa = new THREE.Mesh(geomFromQuads([[[x0, -0.6, z0], [x1, -0.6, z0], [x1, -0.6, z1], [x0, -0.6, z1]]]), s.filtroMat);
+        modelGroup.add(placa);
+        // Lâminas (chicanas) do filtro.
+        const pts: THREE.Vector3[] = [];
+        const passo = 60;
+        for (let x = x0 + passo / 2; x < x1; x += passo) pts.push(V(x, -1, z0), V(x, -1, z1));
+        pts.push(V(x0, -1, z0), V(x1, -1, z0), V(x1, -1, z0), V(x1, -1, z1), V(x1, -1, z1), V(x0, -1, z1), V(x0, -1, z1), V(x0, -1, z0));
+        modelGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), edgeMat));
+        if (props.coletor && props.coletor !== 'nenhum') {
+          const calha = (z: number) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 22, 36), s.coletorMat);
+            m.position.set(0, -12, z);
+            modelGroup.add(m);
+          };
+          calha(z1 + 18);
+          if (props.coletor === 'duplo') calha(z0 - 18 + 36);
+        }
+      }
+    }
 
     // Botões (face frontal, na base) e lâmpadas (face inferior) — só
-    // indicadores visuais da quantidade já calculada no preço, não é um
-    // novo campo de entrada.
+    // indicadores visuais da quantidade já calculada no preço.
     const n = Math.min(MAX_MARCADORES, Math.max(0, Math.round(props.qtdBotoes ?? 0)));
     if (n > 0 && modelo !== 'Tube') {
       const dia = Math.min(16, width / (n * 2));
@@ -458,12 +630,16 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     if (lampN > 0 && modelo !== 'Tube') {
       const lampDia = Math.min(80, width / (lampN * 1.5));
       const lg = new THREE.CylinderGeometry(lampDia / 2, lampDia / 2, 4, 24);
+      // Com filtro, as lâmpadas ficam na faixa da frente (o filtro ocupa o meio).
+      const zLamp = temFiltro ? depth / 2 - Math.min(60, depth * 0.12) : 0;
       for (let j = 0; j < lampN; j++) {
         const m = new THREE.Mesh(lg, lampMat);
-        m.position.set(-width / 2 + width * (j + 0.5) / lampN, -1, 0);
+        m.position.set(-width / 2 + width * (j + 0.5) / lampN, -1.5, zLamp);
         modelGroup.add(m);
       }
     }
+
+    aplicarMateriais(s);
 
     function addDimLabelsBoxLike(w: number, d: number, h: number, tw?: number, td?: number, zc?: number) {
       const zf = d / 2;
@@ -488,7 +664,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes,
+    props.qtdLampadas, props.qtdBotoes, props.material, props.filtro, props.coletor,
+    props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 
   // ── Aplica toggles (arestas, raio-x, ortho, cotas) ───────────────────────
@@ -498,10 +675,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     s.show = show;
     if (s.edgesObj) s.edgesObj.visible = show.edges;
     s.dimGroup.visible = show.dims;
-    s.metalMat.transparent = show.xray;
-    s.metalMat.opacity = show.xray ? 0.3 : 1;
-    s.metalMat.depthWrite = !show.xray;
-    s.metalMat.needsUpdate = true;
+    aplicarMateriais(s);
     s.camera = show.ortho ? s.ortho : s.persp;
     apiRef.current?.request();
   }, [show]);
@@ -530,9 +704,35 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         g.strokeStyle = '#c2410c'; g.lineWidth = k; g.strokeRect(x - tw / 2, y - 9 * k, tw, 18 * k);
         g.fillStyle = '#9a3412'; g.fillText(text, x, y);
       });
+      if (s.show.chapas) {
+        const [t22, t24] = LEGENDA_CHAPAS[props.modelo];
+        g.font = `600 ${11 * k}px Arial`; g.textAlign = 'left';
+        const largura = Math.max(g.measureText(t22).width, g.measureText(t24).width) + 34 * k;
+        const x0 = 8 * k, y0 = out.height - 52 * k;
+        g.fillStyle = 'rgba(255,255,255,.93)'; g.fillRect(x0, y0, largura, 44 * k);
+        [[HEX_22, t22], [HEX_24, t24]].forEach(([cor, texto], i) => {
+          const y = y0 + 13 * k + i * 18 * k;
+          g.fillStyle = cor; g.fillRect(x0 + 8 * k, y - 6 * k, 14 * k, 12 * k);
+          g.fillStyle = '#1f2937'; g.fillText(texto, x0 + 28 * k, y);
+        });
+      }
       return out.toDataURL('image/png');
     },
   }));
+
+  // Barra de ferramentas vira dois menus quando o espaço é estreito (celular,
+  // miniatura do orçamento) — com botões soltos ela cobria o desenho.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setEstreito(e.contentRect.width < 560));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [webglIndisponivel]);
+
+  const VISTAS = [['front', 'Frontal'], ['right', 'Lateral'], ['top', 'Superior'], ['bottom', 'Inferior'], ['iso', 'Isométrica']] as const;
+  const EXIBIR = [['dims', 'Cotas'], ['edges', 'Arestas'], ['chapas', 'Chapas 22/24'], ['xray', 'Raio-X'], ['ortho', 'Ortogonal']] as const;
+  const alternar = (key: keyof ShowState) => setShow(v => ({ ...v, [key]: !v[key] }));
 
   if (webglIndisponivel) {
     return (
@@ -544,38 +744,78 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }
 
   return (
-    <div className={cn('relative w-full h-full min-h-[280px] bg-muted/30 rounded-md overflow-hidden', props.className)}>
+    <div ref={rootRef} className={cn('relative w-full h-full min-h-[280px] bg-muted/30 rounded-md overflow-hidden', props.className)}>
       {/* No modo embutido, arrasto vertical no celular rola a página. */}
       <div ref={hostRef} className={cn('absolute inset-0 cursor-grab active:cursor-grabbing', props.embedded ? 'touch-pan-y' : 'touch-none')} />
       <div ref={labelsRef} className="absolute inset-0 pointer-events-none overflow-hidden" />
-      {props.embedded && !ativo && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded bg-black/55 px-2 py-0.5 text-[11px] text-white">
-          Clique e arraste para girar · clique antes de usar o zoom
+      {props.embedded && !ativo && !show.chapas && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded bg-black/55 px-2 py-0.5 text-[11px] text-white whitespace-nowrap">
+          Arraste para girar · clique antes de usar o zoom
         </div>
       )}
-      <>
-          <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[70%] z-10">
-            {([['front', 'Frontal'], ['right', 'Lateral'], ['top', 'Superior'], ['iso', 'Isométrica'], ['fit', 'Ajustar']] as const).map(([v, label]) => (
+      {show.chapas && (
+        <div className="absolute bottom-2 left-2 z-10 rounded bg-white/90 px-2 py-1 text-[11px] text-gray-800 shadow-sm space-y-0.5 pointer-events-none">
+          {LEGENDA_CHAPAS[props.modelo].map((texto, i) => (
+            <div key={texto} className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-3.5 rounded-sm" style={{ background: i === 0 ? HEX_22 : HEX_24 }} />
+              {texto}
+            </div>
+          ))}
+        </div>
+      )}
+      {estreito ? (
+        <div className="absolute top-2 left-2 right-2 z-10 flex justify-between gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs"><Eye className="mr-1 h-3.5 w-3.5" />Vista</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {VISTAS.map(([v, label]) => (
+                <DropdownMenuItem key={v} onSelect={() => apiRef.current?.viewTo(v)}>{label}</DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => apiRef.current?.viewTo('fit')}>Ajustar à tela</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs"><SlidersHorizontal className="mr-1 h-3.5 w-3.5" />Exibir</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {EXIBIR.map(([key, label]) => (
+                <DropdownMenuCheckboxItem key={key} checked={show[key]} onCheckedChange={() => alternar(key)} onSelect={e => e.preventDefault()}>
+                  {label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : (
+        <>
+          <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[55%] z-10">
+            {VISTAS.map(([v, label]) => (
               <Button key={v} type="button" size="sm" variant="secondary" className="h-6 px-2 text-[11px]" onClick={() => apiRef.current?.viewTo(v)}>
                 {label}
               </Button>
             ))}
+            <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-[11px]" onClick={() => apiRef.current?.viewTo('fit')}>Ajustar</Button>
           </div>
-          <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end max-w-[70%] z-10">
-            {([['dims', 'Cotas'], ['edges', 'Arestas'], ['xray', 'Raio-X'], ['ortho', 'Ortogonal']] as const).map(([key, label]) => (
+          <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end max-w-[45%] z-10">
+            {EXIBIR.map(([key, label]) => (
               <Button
                 key={key}
                 type="button"
                 size="sm"
                 variant={show[key] ? 'default' : 'secondary'}
                 className="h-6 px-2 text-[11px]"
-                onClick={() => setShow(v => ({ ...v, [key]: !v[key] }))}
+                onClick={() => alternar(key)}
               >
                 {label}
               </Button>
             ))}
           </div>
-      </>
+        </>
+      )}
     </div>
   );
 });

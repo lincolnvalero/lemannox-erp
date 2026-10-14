@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Quote, IluminacaoRow } from "@/lib/types";
 import { getNfeSettings } from "@/app/actions/nfe";
-import { getIluminacao } from "@/app/(dashboard)/calculator/actions";
+import { getIluminacao, getTetoPadraoPiramidal } from "@/app/(dashboard)/calculator/actions";
 import dynamic from "next/dynamic";
 import type { CoifaViewer3DHandle } from "@/components/dashboard/coifa-viewer-3d";
 
@@ -51,18 +51,15 @@ export function QuotePreview({ quote }: Props) {
   // Coifas do orçamento que dá pra desenhar em 3D (uma por modelo+medida, sem
   // repetir — cada visualizador abre um contexto WebGL, que o navegador limita).
   const coifas = useMemo(() => {
-    const unicos = new Map<string, { key: string; label: string; params: CoifaItemParams; churrasqueira: boolean }>();
+    const unicos = new Map<string, { key: string; label: string; params: CoifaItemParams }>();
     quote.items.forEach((item) => {
       const params = coifaParamsFromQuoteItem(item);
       if (!params) return;
-      const key = `${item.name}|${item.measurement}`;
+      // Item da Calculadora: chave pelas medidas exatas (dois itens com o
+      // mesmo nome podem ter tetos/carenagens diferentes).
+      const key = params.exato ? JSON.stringify(item.coifaParams) : `${item.name}|${item.measurement}`;
       if (!unicos.has(key)) {
-        unicos.set(key, {
-          key,
-          label: [item.name, item.measurement].filter(Boolean).join(" – "),
-          params,
-          churrasqueira: /churrasqueira/i.test(`${item.name} ${item.category ?? ""}`),
-        });
+        unicos.set(key, { key, label: [item.name, item.measurement].filter(Boolean).join(" – "), params });
       }
     });
     return Array.from(unicos.values());
@@ -72,12 +69,21 @@ export function QuotePreview({ quote }: Props) {
   const MAX_DESENHOS = 8;
   const coifasDesenhadas = coifas.slice(0, MAX_DESENHOS);
 
-  // Tabela de iluminação só pra desenhar a quantidade certa de lâmpadas.
+  // Itens de catálogo não guardam o kit nem o teto: buscamos a tabela de
+  // iluminação (quantidade de lâmpadas) e o teto padrão da Piramidal (o
+  // mesmo usado no preço da Tabela de Preços). Itens da Calculadora já trazem tudo.
   const [iluminacao, setIluminacao] = useState<IluminacaoRow[]>([]);
+  const [tetoPadrao, setTetoPadrao] = useState<{ largura: number; profundidade: number } | null>(null);
+  const precisaReferencia = coifas.some((c) => !c.params.exato);
+  const temPiramidalCatalogo = coifas.some((c) => !c.params.exato && c.params.modelo === "Piramidal");
   useEffect(() => {
-    if (coifas.length === 0) return;
+    if (!precisaReferencia) return;
     getIluminacao().then((r) => { if (r.success && r.rows) setIluminacao(r.rows); });
-  }, [coifas.length]);
+  }, [precisaReferencia]);
+  useEffect(() => {
+    if (!temPiramidalCatalogo) return;
+    getTetoPadraoPiramidal().then(setTetoPadrao);
+  }, [temPiramidalCatalogo]);
 
   // Na impressão (botão do sistema ou Ctrl+P), o canvas 3D é trocado por uma
   // imagem tirada do ângulo atual — canvas WebGL não sai confiável no PDF.
@@ -212,10 +218,18 @@ export function QuotePreview({ quote }: Props) {
             </p>
             <div className="grid grid-cols-2 gap-4">
               {coifasDesenhadas.map((c) => {
-                const kit = kitIluminacaoPadrao(
-                  { modelo: c.params.modelo, width: c.params.width, tipoAplicacao: c.churrasqueira ? "Churrasqueira" : "Cozinha", tipoInstalacao: c.params.mount },
-                  { tabelaIluminacao: iluminacao },
-                );
+                const { exato, tipoAplicacao, ...viewerParams } = c.params;
+                // Kit salvo pela Calculadora (pode ter sido ajustado à mão) tem
+                // prioridade; item de catálogo usa o padrão da tabela.
+                const kit = viewerParams.qtdLampadas !== undefined
+                  ? { qtdLampadas: viewerParams.qtdLampadas, qtdBotoes: viewerParams.qtdBotoes ?? 0 }
+                  : kitIluminacaoPadrao(
+                      { modelo: viewerParams.modelo, width: viewerParams.width, tipoAplicacao, tipoInstalacao: viewerParams.mount },
+                      { tabelaIluminacao: iluminacao },
+                    );
+                const teto = !exato && viewerParams.modelo === "Piramidal" && tetoPadrao
+                  ? { tetoWidth: tetoPadrao.largura, tetoDepth: tetoPadrao.profundidade }
+                  : {};
                 return (
                   <figure key={c.key} className="coifa-figure border border-gray-200 rounded p-2">
                     <div className="no-print">
@@ -224,7 +238,8 @@ export function QuotePreview({ quote }: Props) {
                         className="h-[280px]"
                         embedded
                         onViewChange={() => atualizarImagem(c.key)}
-                        {...c.params}
+                        {...viewerParams}
+                        {...teto}
                         qtdLampadas={kit?.qtdLampadas}
                         qtdBotoes={kit?.qtdBotoes}
                       />

@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
 import type { CalculatorReferenceData, IluminacaoRow, MaoDeObraRow, ParametrosGlobais, RawMaterial } from '@/lib/types';
 import { getMaterials } from '@/app/(dashboard)/materials/actions';
+import {
+  LOTE_PROFUNDIDADE, LOTE_ALTURA, LOTE_ALTURA_CORPO_LINEA, LOTE_ALTURA_CARENAGEM,
+  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX, tetoPadraoDefinido,
+} from '@/lib/coifa-padroes';
 
 export async function getCalculatorReferenceData(): Promise<{
   success: boolean;
@@ -93,6 +97,8 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
   updated?: number;
   errors?: string[];
   error?: string;
+  /** true quando falta definir o teto padrão da Piramidal antes de gerar. */
+  precisaTetoPadrao?: boolean;
 }> {
   try {
     const supabase = await createClient();
@@ -101,6 +107,14 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
       return { success: false, error: refResult.error || 'Não foi possível carregar os dados de referência.' };
     }
     const ref = refResult.data;
+
+    // Sem teto, o custo do teto da Piramidal entraria como zero e a tabela
+    // sairia com preço abaixo do real — por isso é obrigatório (checado aqui
+    // também, não só na tela).
+    const teto = tetoPadraoDefinido(ref.parametros);
+    if (!teto) {
+      return { success: false, precisaTetoPadrao: true, error: 'Defina o teto padrão da Piramidal antes de gerar a tabela.' };
+    }
 
     const { calculateCoifa } = await import('@/lib/coifa-calculator');
 
@@ -124,9 +138,13 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
             // ALTURA, que é o que realmente varia o preço desse modelo.
             const chapaPadrao = chapaPadraoParaLote(medida);
             const result = calculateCoifa({
-              width: medida, depth: 700, height: linha.modelo === 'Tube' ? medida : 600,
+              width: medida,
+              depth: LOTE_PROFUNDIDADE,
+              height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? LOTE_ALTURA_CORPO_LINEA : LOTE_ALTURA,
               modelo: linha.modelo,
-              carenagemHeight: linha.modelo === 'Linea' ? 600 : undefined,
+              tetoWidth: linha.modelo === 'Piramidal' ? teto.largura : undefined,
+              tetoDepth: linha.modelo === 'Piramidal' ? teto.profundidade : undefined,
+              carenagemHeight: linha.modelo === 'Linea' ? LOTE_ALTURA_CARENAGEM : undefined,
               material,
               larguraPadrao: chapaPadrao,
               larguraPadraoCarenagem: chapaPadrao,
@@ -172,6 +190,46 @@ export async function generatePriceTableCoifasCozinha(): Promise<{
     return { success: true, created, updated, errors: errors.length > 0 ? errors : undefined };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao gerar tabela de preços';
+    return { success: false, error: message };
+  }
+}
+
+// Teto padrão da Piramidal (só leitura) — usado pra desenhar no orçamento as
+// Piramidais de catálogo com o mesmo teto usado no preço delas.
+export async function getTetoPadraoPiramidal(): Promise<{ largura: number; profundidade: number } | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('parametros_globais')
+      .select('chave, valor')
+      .in('chave', [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE]);
+    if (error) throw error;
+    const params: Record<string, number> = {};
+    for (const r of data ?? []) params[r.chave] = Number(r.valor);
+    return tetoPadraoDefinido(params);
+  } catch {
+    return null;
+  }
+}
+
+// Teto padrão da Piramidal usado na geração da Tabela de Preços.
+export async function salvarTetoPadraoPiramidal(largura: number, profundidade: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valido = (v: number) => Number.isFinite(v) && v >= TETO_MIN && v <= TETO_MAX;
+    if (!valido(largura) || !valido(profundidade)) {
+      return { success: false, error: `Informe largura e profundidade entre ${TETO_MIN} e ${TETO_MAX} mm.` };
+    }
+    const supabase = await createClient();
+    const { error } = await supabase.from('parametros_globais').upsert([
+      { chave: CHAVE_TETO_LARGURA, valor: Math.round(largura), descricao: 'Piramidal — largura do teto usada na Tabela de Preços (mm)' },
+      { chave: CHAVE_TETO_PROFUNDIDADE, valor: Math.round(profundidade), descricao: 'Piramidal — profundidade do teto usada na Tabela de Preços (mm)' },
+    ], { onConflict: 'chave' });
+    if (error) throw error;
+    revalidatePath('/admin/memoria');
+    revalidatePath('/calculator');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro ao salvar o teto padrão';
     return { success: false, error: message };
   }
 }
@@ -274,11 +332,19 @@ export async function updateIluminacaoRows(rows: IluminacaoRowUpdate[]): Promise
 // alterações" único usado no resto da tela de Memória).
 export async function updateParametrosGlobaisRows(rows: { chave: string; valor: number }[]): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
-    for (const row of rows) {
-      const { error } = await supabase.from('parametros_globais').update({ valor: row.valor }).eq('chave', row.chave);
-      if (error) throw error;
+    const tetoInvalido = rows.find(r =>
+      (r.chave === CHAVE_TETO_LARGURA || r.chave === CHAVE_TETO_PROFUNDIDADE) && !(r.valor >= TETO_MIN && r.valor <= TETO_MAX));
+    if (tetoInvalido) {
+      return { success: false, error: `O teto padrão da Piramidal deve ficar entre ${TETO_MIN} e ${TETO_MAX} mm.` };
     }
+    const supabase = await createClient();
+    // upsert (não update): parâmetro que ainda não existe no banco — como o
+    // teto padrão da Piramidal — passa a ser criado em vez de ignorado.
+    const { error } = await supabase.from('parametros_globais').upsert(
+      rows.map(r => ({ chave: r.chave, valor: r.valor })),
+      { onConflict: 'chave' },
+    );
+    if (error) throw error;
     revalidatePath('/admin/memoria');
     revalidatePath('/calculator');
     return { success: true };

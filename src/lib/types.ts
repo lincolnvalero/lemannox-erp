@@ -45,6 +45,31 @@ export type ProductionStatus = {
   entregueEm: string | null;
 };
 
+// Medidas exatas de uma coifa calculada na Calculadora e enviada para o
+// orçamento — permitem redesenhar o 3D sem adivinhar profundidade/altura.
+export type CoifaParamsSalvos = {
+  modelo: 'Box' | 'Piramidal' | 'Linea' | 'Tube';
+  width: number;
+  depth: number;
+  height: number;
+  tetoWidth?: number;
+  tetoDepth?: number;
+  carenagemWidth?: number;
+  carenagemDepth?: number;
+  carenagemHeight?: number;
+  tipoAplicacao: 'Cozinha' | 'Churrasqueira';
+  tipoInstalacao: 'Parede' | 'Ilha';
+  material?: string;
+  filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
+  coletor?: 'nenhum' | 'simples' | 'duplo';
+  frisoFrente?: boolean;
+  frisoLD?: boolean;
+  frisoLE?: boolean;
+  frisoLinhas?: number;
+  qtdLampadas?: number;
+  qtdBotoes?: number;
+};
+
 export type QuoteItem = {
   id: string;
   productId?: string;   // referência ao produto cadastrado
@@ -58,6 +83,7 @@ export type QuoteItem = {
   tax?: number;
   notes?: string;
   productionStatus?: ProductionStatus;
+  coifaParams?: CoifaParamsSalvos;
 };
 
 export type Quote = {

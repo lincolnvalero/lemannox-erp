@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { getQuotes } from '@/app/(dashboard)/quotes/actions';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -32,18 +34,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCalculatorReferenceData, generatePriceTableCoifasCozinha } from './actions';
+import { getCalculatorReferenceData, generatePriceTableCoifasCozinha, salvarTetoPadraoPiramidal } from './actions';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX, tetoPadraoDefinido, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks, Box as BoxIcon, RotateCcw } from 'lucide-react';
+import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks, Box as BoxIcon, RotateCcw, FilePlus2, Download } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const CoifaViewer3D = dynamic(
   () => import('@/components/dashboard/coifa-viewer-3d').then(m => m.CoifaViewer3D),
   { ssr: false, loading: () => <div className="h-[380px] rounded-md bg-muted/30 animate-pulse" /> },
 );
-import type { CalculatorReferenceData } from '@/lib/types';
+import type { CalculatorReferenceData, CoifaParamsSalvos, Quote, QuoteItem } from '@/lib/types';
+import type { CoifaViewer3DHandle } from '@/components/dashboard/coifa-viewer-3d';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -104,7 +109,23 @@ export default function CostCalculatorPage() {
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleGeneratePriceTable = async () => {
+  // Teto padrão da Piramidal: obrigatório pra gerar a Tabela de Preços, mas
+  // só é pedido uma vez (quando ainda não existe) — depois fica salvo e pode
+  // ser alterado pelo link no próprio card ou na Memória de Cálculos.
+  const [tetoDialog, setTetoDialog] = useState<null | 'gerar' | 'editar'>(null);
+  const [tetoLargura, setTetoLargura] = useState('');
+  const [tetoProfundidade, setTetoProfundidade] = useState('');
+  const [salvandoTeto, setSalvandoTeto] = useState(false);
+  const tetoAtual = ref ? tetoPadraoDefinido(ref.parametros) : null;
+
+  const abrirDialogoTeto = (modo: 'gerar' | 'editar') => {
+    // Sugestão inicial = exemplo da planilha original (Piramidal 1200 com teto 500×500).
+    setTetoLargura(String(tetoAtual?.largura ?? 500));
+    setTetoProfundidade(String(tetoAtual?.profundidade ?? 500));
+    setTetoDialog(modo);
+  };
+
+  const gerarTabela = async () => {
     setGenerating(true);
     setGenerateSummary(null);
     const result = await generatePriceTableCoifasCozinha();
@@ -114,9 +135,32 @@ export default function CostCalculatorPage() {
       setGenerateSummary(result.errors ? `${summary} ${result.errors.length} com erro — veja o console.` : summary);
       if (result.errors) console.error('Erros na geração da tabela de preços:', result.errors);
       toast({ title: 'Tabela de Preços gerada!', description: summary });
+    } else if (result.precisaTetoPadrao) {
+      abrirDialogoTeto('gerar');
     } else {
       toast({ variant: 'destructive', title: 'Erro ao gerar tabela', description: result.error });
     }
+  };
+
+  const handleGeneratePriceTable = () => {
+    if (!tetoAtual) { abrirDialogoTeto('gerar'); return; }
+    gerarTabela();
+  };
+
+  const salvarTeto = async () => {
+    const largura = Number(tetoLargura), profundidade = Number(tetoProfundidade);
+    setSalvandoTeto(true);
+    const result = await salvarTetoPadraoPiramidal(largura, profundidade);
+    setSalvandoTeto(false);
+    if (!result.success) {
+      toast({ variant: 'destructive', title: 'Teto não salvo', description: result.error });
+      return;
+    }
+    setRef(r => r ? { ...r, parametros: { ...r.parametros, [CHAVE_TETO_LARGURA]: Math.round(largura), [CHAVE_TETO_PROFUNDIDADE]: Math.round(profundidade) } } : r);
+    const modo = tetoDialog;
+    setTetoDialog(null);
+    toast({ title: 'Teto padrão salvo', description: `${Math.round(largura)} × ${Math.round(profundidade)} mm` });
+    if (modo === 'gerar') gerarTabela();
   };
 
   const form = useForm<FormValues>({
@@ -166,6 +210,8 @@ export default function CostCalculatorPage() {
   const watchedAplicacao = watch('tipoAplicacao');
   const watchedInstalacao = watch('tipoInstalacao');
   const watchedLampadasManual = watch('qtdLampadasManual');
+  const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas] =
+    watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas']);
   const watchedBotoesManual = watch('qtdBotoesManual');
 
   // Quantidade padrão (da tabela de iluminação / regra da Tube) — pré-preenche
@@ -236,6 +282,7 @@ export default function CostCalculatorPage() {
       };
       const result = calculateCoifa(input, ref);
       setResults(result);
+      setUltimoInput(input);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
       } else {
@@ -248,6 +295,89 @@ export default function CostCalculatorPage() {
       setIsLoading(false);
     }
   }
+
+  // Exporta o desenho (com cotas, e legenda se o modo Chapas estiver ligado)
+  // como PNG — pra mandar por WhatsApp/e-mail.
+  const viewerRef = useRef<CoifaViewer3DHandle | null>(null);
+  const exportarImagem = () => {
+    const url = viewerRef.current?.capturePng();
+    if (!url) {
+      toast({ variant: 'destructive', title: 'Nada para exportar', description: 'Informe as medidas para gerar o desenho.' });
+      return;
+    }
+    const v = form.getValues();
+    const medidas = v.modelo === 'Tube' ? `D500x${v.height}` : `${v.width}x${v.depth}x${v.height}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coifa_${v.modelo.toLowerCase()}_${medidas}.png`;
+    a.click();
+  };
+
+  // ── Adicionar ao orçamento ─────────────────────────────────────────────
+  // Usa exatamente os dados do último cálculo (não o que estiver digitado
+  // agora no formulário), pra o preço levado bater com o mostrado.
+  const router = useRouter();
+  const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
+  const [orcDialog, setOrcDialog] = useState(false);
+  const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
+  const [orcDestino, setOrcDestino] = useState<string>('novo');
+
+  const itemParaOrcamento = useMemo((): QuoteItem | null => {
+    if (!results || !ultimoInput) return null;
+    const i = ultimoInput;
+    const preco = Math.round(results.finalPrice * 100) / 100;
+    // Descrição sem as medidas (elas vão na coluna Medida).
+    const partes = results.descricaoAuto.split(', ');
+    const nome = (partes.length > 1 ? partes.slice(0, -1) : partes).join(', ').replace('Coifa Linea', 'Coifa Línea')
+      + (i.tipoInstalacao === 'Ilha' ? ', instalação em Ilha' : '');
+    const medida = i.modelo === 'Tube' ? `Ø500 x ${i.height}mm` : `${i.width}x${i.depth}x${i.height}mm`;
+    const coifaParams: CoifaParamsSalvos = {
+      modelo: i.modelo, width: i.width, depth: i.depth, height: i.height,
+      tetoWidth: i.tetoWidth, tetoDepth: i.tetoDepth,
+      carenagemWidth: i.carenagemWidth, carenagemDepth: i.carenagemDepth, carenagemHeight: i.carenagemHeight,
+      tipoAplicacao: i.tipoAplicacao, tipoInstalacao: i.tipoInstalacao, material: i.material,
+      filtro: i.filtro, coletor: i.coletor,
+      frisoFrente: i.frisoFrente, frisoLD: i.frisoLD, frisoLE: i.frisoLE, frisoLinhas: i.frisoLinhas,
+      qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
+    };
+    return {
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
+      productId: '',
+      name: nome,
+      category: i.tipoAplicacao === 'Cozinha' ? 'Coifa de Cozinha' : 'Coifa de Churrasqueira',
+      measurement: medida,
+      material: i.material,
+      quantity: 1,
+      unitPrice: preco,
+      tax: Math.round(preco * 0.045 * 100) / 100,
+      total: preco,
+      notes: results.descricaoAuto,
+      coifaParams,
+    };
+  }, [results, ultimoInput]);
+
+  const abrirDialogoOrcamento = async () => {
+    setOrcDestino('novo');
+    setOrcDialog(true);
+    if (orcamentosAbertos === null) {
+      const r = await getQuotes();
+      setOrcamentosAbertos(
+        r.success && r.quotes ? r.quotes.filter(q => ['rascunho', 'aguardando', 'enviado'].includes(q.status)).slice(0, 40) : [],
+      );
+    }
+  };
+
+  const enviarParaOrcamento = () => {
+    if (!itemParaOrcamento) return;
+    try {
+      sessionStorage.setItem(CHAVE_ITEM_PENDENTE_ORCAMENTO, JSON.stringify(itemParaOrcamento));
+    } catch {
+      toast({ variant: 'destructive', title: 'Não foi possível levar o item', description: 'O navegador bloqueou o armazenamento temporário.' });
+      return;
+    }
+    setOrcDialog(false);
+    router.push(orcDestino === 'novo' ? '/quotes/editor?adicionarItem=1' : `/quotes/editor?id=${orcDestino}&adicionarItem=1`);
+  };
 
   const copyDescricao = () => {
     if (!results) return;
@@ -511,6 +641,15 @@ export default function CostCalculatorPage() {
                   <CardDescription>
                     Gera/atualiza os produtos de Coifas de Cozinha (Box de Parede, Box Ilha, Piramidal de Parede, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Não apaga produtos existentes.
                   </CardDescription>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Teto padrão da Piramidal:{' '}
+                    {tetoAtual
+                      ? <span className="font-medium text-foreground">{tetoAtual.largura} × {tetoAtual.profundidade} mm</span>
+                      : <span className="font-medium text-amber-600">não definido (será pedido ao gerar)</span>}
+                    {tetoAtual && (
+                      <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoTeto('editar')}>alterar</Button>
+                    )}
+                  </p>
                 </CardHeader>
                 <CardFooter className="flex flex-col items-stretch gap-2">
                   <Button type="button" variant="secondary" disabled={generating} onClick={handleGeneratePriceTable}>
@@ -526,7 +665,12 @@ export default function CostCalculatorPage() {
         <ScrollArea className="flex-1">
           <Card className="mb-6">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2"><BoxIcon className="h-5 w-5 text-primary" />Visualização 3D</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2"><BoxIcon className="h-5 w-5 text-primary" />Visualização 3D</CardTitle>
+                <Button type="button" size="sm" variant="outline" onClick={exportarImagem}>
+                  <Download className="mr-1.5 h-4 w-4" />Exportar imagem
+                </Button>
+              </div>
               <CardDescription>
                 Só ilustrativo — o preço vem exclusivamente do cálculo abaixo. Arraste pra girar, botão direito (ou Shift) pra mover, roda do mouse pra zoom.
               </CardDescription>
@@ -547,6 +691,14 @@ export default function CostCalculatorPage() {
                   mount={watchedInstalacao}
                   qtdLampadas={qtdLampadasEfetiva}
                   qtdBotoes={qtdBotoesEfetiva}
+                  material={watchedMaterial}
+                  filtro={watchedFiltro}
+                  coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}
+                  frisoFrente={watchedFrisoFrente}
+                  frisoLD={watchedFrisoLD}
+                  frisoLE={watchedFrisoLE}
+                  frisoLinhas={Number(watchedFrisoLinhas) || 1}
+                  ref={viewerRef}
                 />
               ) : (
                 <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/20">
@@ -617,6 +769,9 @@ export default function CostCalculatorPage() {
                         <div className="text-2xl font-bold font-code text-primary">{formatCurrency(results.finalPrice)}</div>
                       </div>
                     </div>
+                    <Button type="button" className="w-full" onClick={abrirDialogoOrcamento} disabled={!itemParaOrcamento}>
+                      <FilePlus2 className="mr-2 h-4 w-4" />Adicionar ao orçamento
+                    </Button>
                   </div>
                 </div>
               )}
@@ -624,6 +779,75 @@ export default function CostCalculatorPage() {
           </Card>
         </ScrollArea>
       </div>
+      <Dialog open={tetoDialog !== null} onOpenChange={(open) => { if (!open && !salvandoTeto) setTetoDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Teto padrão da Piramidal</DialogTitle>
+            <DialogDescription>
+              A Tabela de Preços calcula todas as Piramidais de 1000 a 3000mm com um teto padrão. Sem ele, a chapa do
+              teto não entra no custo e o preço sai abaixo do real. Informe uma vez — fica salvo (dá pra mudar depois
+              aqui ou na Memória de Cálculos).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="teto-largura">Largura do teto (mm)</Label>
+              <Input id="teto-largura" type="number" min={TETO_MIN} max={TETO_MAX} value={tetoLargura} onChange={e => setTetoLargura(e.target.value)} autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="teto-profundidade">Profundidade do teto (mm)</Label>
+              <Input id="teto-profundidade" type="number" min={TETO_MIN} max={TETO_MAX} value={tetoProfundidade} onChange={e => setTetoProfundidade(e.target.value)} />
+            </div>
+          </div>
+          {!tetoAtual && (
+            <p className="text-xs text-muted-foreground">Sugestão preenchida: 500 × 500 mm, o exemplo da planilha original. Confirme ou ajuste.</p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={salvandoTeto} onClick={() => setTetoDialog(null)}>Cancelar</Button>
+            <Button type="button" disabled={salvandoTeto} onClick={salvarTeto}>
+              {salvandoTeto ? 'Salvando...' : tetoDialog === 'gerar' ? 'Salvar e gerar tabela' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={orcDialog} onOpenChange={setOrcDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Adicionar ao orçamento</DialogTitle>
+            <DialogDescription>
+              A coifa vai com o preço e as medidas exatas deste cálculo — o desenho 3D do orçamento fica fiel ao que foi calculado.
+            </DialogDescription>
+          </DialogHeader>
+          {itemParaOrcamento && (
+            <div className="rounded-md border p-3 text-sm space-y-1">
+              <p className="font-medium">{itemParaOrcamento.name}</p>
+              <p className="text-muted-foreground">{itemParaOrcamento.measurement} · {itemParaOrcamento.material}</p>
+              <p className="font-code">{formatCurrency(itemParaOrcamento.unitPrice)} <span className="text-xs text-muted-foreground">(+ 4,5% de imposto no orçamento)</span></p>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label>Destino</Label>
+            <Select value={orcDestino} onValueChange={setOrcDestino}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="novo">Novo orçamento</SelectItem>
+                {(orcamentosAbertos ?? []).map(q => (
+                  <SelectItem key={q.id} value={q.id}>
+                    #{String(q.quoteNumber).padStart(4, '0')} — {q.customerName}{q.obra ? ` (${q.obra})` : ''} · {q.status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {orcamentosAbertos === null ? 'Carregando orçamentos em aberto...' : 'Aparecem os orçamentos em rascunho, aguardando ou enviados.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOrcDialog(false)}>Cancelar</Button>
+            <Button type="button" onClick={enviarParaOrcamento} disabled={!itemParaOrcamento}>Adicionar e abrir orçamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
