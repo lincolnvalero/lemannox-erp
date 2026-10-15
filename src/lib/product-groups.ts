@@ -5,7 +5,14 @@ export const PRODUCT_GROUPS = [
   { value: 'caixas', label: 'Caixas Refratárias' },
   { value: 'complementos', label: 'Complementos' },
   { value: 'outros', label: 'Outros' },
+  // Produtos antigos tirados de circulação (ex: tabela de coifas anterior):
+  // continuam existindo — orçamentos antigos seguem editáveis — mas não
+  // aparecem para escolha em novos orçamentos.
+  { value: 'arquivo', label: 'Arquivo (tabela antiga)' },
 ] as const;
+
+export const GRUPO_ARQUIVO = 'arquivo';
+export const produtoArquivado = (p: { group?: string }) => p.group === GRUPO_ARQUIVO;
 
 // Produtos cadastrados antes do campo Grupo existir não têm esse valor salvo.
 // Esse mapa por categoria mantém esses produtos visíveis até serem reeditados.

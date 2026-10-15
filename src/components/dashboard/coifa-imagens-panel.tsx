@@ -10,6 +10,7 @@ import { CheckCircle2, AlertTriangle, ImageOff, Pencil, Wand2 } from 'lucide-rea
 import type { CoifaParamsSalvos, QuoteItem } from '@/lib/types';
 import { avaliarDesenhoDoItem, sugerirDadosDoItem, type AvaliacaoDesenho, type CoifaItemParams } from '@/lib/coifa-viewer-from-item';
 import { formatarMedidaCoifa } from '@/lib/coifa-padroes';
+import { POSICOES_COMANDO, type PosicaoComando } from '@/lib/coifa-furos';
 import { useContextoDesenho } from '@/components/dashboard/use-contexto-desenho';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,6 +129,7 @@ type Form = {
   lamp: string; bot: string;
   controle: 'botoes' | 'botoeira';
   posLamp: 'frente' | 'parede';
+  posCmd: PosicaoComando;
   acabamento: 'escovado' | 'polido';
   filtro: NonNullable<CoifaParamsSalvos['filtro']>;
   coletor: NonNullable<CoifaParamsSalvos['coletor']>;
@@ -144,7 +146,7 @@ function salvosDeParams(p: CoifaItemParams): Partial<CoifaParamsSalvos> {
     carenagemWidth: p.carenagemWidth, carenagemDepth: p.carenagemDepth, carenagemHeight: p.carenagemHeight,
     tipoInstalacao: p.mount, tipoAplicacao: p.tipoAplicacao, material: p.material,
     filtro: p.filtro, coletor: p.coletor, frisoFrente: p.frisoFrente, frisoLD: p.frisoLD, frisoLE: p.frisoLE, frisoLinhas: p.frisoLinhas,
-    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, acabamento: p.acabamento,
+    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, posicaoComando: p.posicaoComando, acabamento: p.acabamento,
   };
 }
 
@@ -160,6 +162,7 @@ function formInicial(item: QuoteItem, atual?: AvaliacaoDesenho): Form {
     lamp: String(base.qtdLampadas ?? 0), bot: String(base.qtdBotoes ?? 0),
     controle: base.controle ?? 'botoeira',
     posLamp: base.posicaoLampadas ?? 'frente',
+    posCmd: base.posicaoComando ?? 'frente-centro',
     acabamento: base.acabamento ?? 'escovado',
     filtro: base.filtro ?? 'nenhum',
     coletor: base.coletor ?? 'nenhum',
@@ -196,7 +199,7 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
     modelo: f.modelo,
     width: L, depth: tube ? L : P, height: A,
     tipoAplicacao: f.aplicacao, tipoInstalacao: f.mount, material,
-    qtdLampadas: lamp, qtdBotoes: bot, controle: f.controle, posicaoLampadas: f.posLamp,
+    qtdLampadas: lamp, qtdBotoes: bot, controle: f.controle, posicaoLampadas: f.posLamp, posicaoComando: f.posCmd,
     acabamento: /inox/i.test(material) ? f.acabamento : undefined,
     filtro: f.filtro, coletor: f.filtro === 'nenhum' ? 'nenhum' : f.coletor,
     frisoFrente: f.frisoF, frisoLD: f.frisoLD, frisoLE: f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
@@ -295,7 +298,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 <Label className="text-xs">Comando</Label>
                 <Select value={f.controle} onValueChange={(v) => set('controle', v as Form['controle'])}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="botoes">Botões</SelectItem><SelectItem value="botoeira">Botoeira (5 botões)</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="botoes">Botões</SelectItem><SelectItem value="botoeira">Botoeira</SelectItem></SelectContent>
                 </Select>
               </div>
               {f.mount === 'Parede' && (
@@ -308,6 +311,16 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 </div>
               )}
             </div>
+
+            {!tube && (
+              <div className="space-y-1">
+                <Label className="text-xs">Posição {f.controle === 'botoeira' ? 'da botoeira' : 'dos botões'}</Label>
+                <Select value={f.posCmd} onValueChange={(v) => set('posCmd', v as PosicaoComando)}>
+                  <SelectTrigger className="w-60"><SelectValue /></SelectTrigger>
+                  <SelectContent>{POSICOES_COMANDO.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
 
             {!tube && (
               <div className="grid grid-cols-2 gap-3">
@@ -369,7 +382,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 carenagemWidth={params.carenagemWidth} carenagemDepth={params.carenagemDepth} carenagemHeight={params.carenagemHeight}
                 mount={params.tipoInstalacao}
                 qtdLampadas={params.qtdLampadas} qtdBotoes={params.qtdBotoes}
-                controle={params.controle} posicaoLampadas={params.posicaoLampadas}
+                controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando}
                 material={params.material} acabamento={params.acabamento}
                 filtro={params.filtro} coletor={params.coletor}
                 frisoFrente={params.frisoFrente} frisoLD={params.frisoLD} frisoLE={params.frisoLE} frisoLinhas={params.frisoLinhas}

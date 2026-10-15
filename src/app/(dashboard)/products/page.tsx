@@ -49,7 +49,7 @@ import {
 import { ExportProductsPdfDialog } from '@/components/dashboard/export-products-pdf-dialog';
 import { getProducts, deleteProduct, bulkUpdatePrices, updateProductPrice } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
+import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups, produtoArquivado } from '@/lib/product-groups';
 
 const materialColumns = ['Inox 430', 'Inox 304', 'Aço Carbono'];
 
@@ -453,7 +453,8 @@ export default function ProductsPage() {
   
   const filteredProducts = useMemo(() => {
       return searchedProducts.filter(p => {
-          const groupMatch = productGroup === 'all' || resolveProductGroup(p) === productGroup;
+          // Arquivados (tabela antiga) só aparecem quando o grupo "Arquivo" é escolhido — assim não há itens duplicados na lista.
+          const groupMatch = productGroup === 'all' ? !produtoArquivado(p) : resolveProductGroup(p) === productGroup;
           if (!groupMatch) return false;
 
           const categoryMatch = categoryFilter === 'all' || p.category === categoryFilter;
@@ -499,7 +500,7 @@ export default function ProductsPage() {
       <ExportProductsPdfDialog
         open={isExportDialogOpen}
         onOpenChange={setIsExportDialogOpen}
-        products={products}
+        products={products.filter((p) => !produtoArquivado(p))}
         categories={allCategories}
         materials={materialColumns}
       />

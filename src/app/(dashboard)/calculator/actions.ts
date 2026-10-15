@@ -4,14 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase-server';
 import type { CalculatorReferenceData, IluminacaoRow, MaoDeObraRow, ParametrosGlobais, RawMaterial } from '@/lib/types';
 import { getMaterials } from '@/app/(dashboard)/materials/actions';
+import { GRUPO_ARQUIVO } from '@/lib/product-groups';
 import {
   LINHAS_TABELA,
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
   LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA,
   CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
-  CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA, CARENAGEM_MIN, CARENAGEM_MAX,
-  padroesTabelaDefinidos, type PadroesTabela,
+  CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_MIN, CARENAGEM_MAX,
+  padroesTabelaDefinidos, carenagemParaTabela, tetoParaTabela, type PadroesTabela, type MedidasCarenagem,
 } from '@/lib/coifa-padroes';
 
 export async function getCalculatorReferenceData(): Promise<{
@@ -73,10 +74,13 @@ export async function getCalculatorReferenceData(): Promise<{
 // variação de preço por material (430/304/Carbono) — mesmo formato que a
 // tela de Produtos já usa — para Coifas de Cozinha E de Churrasqueira.
 //
-// Itens antigos de coifa (formato LxPxA de Cozinha e lista antiga de
-// Churrasqueira) NÃO são apagados automaticamente: o usuário escolhe, na tela,
-// se quer apagá-los (ver `apagarAntigos`). Mesma Categoria/Modelo/Medida =
-// atualiza; senão cria. Só mexe nas categorias de coifa.
+// Itens antigos de coifa (tabela anterior: formato LxPxA, lista antiga de
+// Churrasqueira, nomes longos etc.) NÃO são apagados: se o usuário confirmar,
+// eles são ARQUIVADOS (grupo "arquivo"). Continuam existindo, então orçamentos
+// já emitidos seguem editáveis e a Produção continua achando a categoria deles;
+// só saem do seletor de novos orçamentos — assim não há duplicidade na tabela.
+// Mesma Categoria/Modelo/Medida = atualiza; senão cria. Só mexe nas categorias
+// de coifa.
 
 const MEDIDAS = Array.from({ length: 21 }, (_, i) => 1000 + i * 100); // 1000..3000
 const MATERIAIS: string[] = ['Inox 430', 'Inox 304', 'Aço Carbono'];
@@ -92,60 +96,71 @@ function chapaPadraoParaLote(width: number): number {
   return width <= 1900 ? 2000 : 3000;
 }
 
-// Medida no formato antigo "LxPxA" (ex: 1000x700x1000).
-const MEDIDA_LXPXA = /^\s*\d+\s*[x×]\s*\d+\s*[x×]\s*\d+/i;
+// Produto da tabela nova: modelo da lista e medida "NNNNmm" (1000mm…3000mm).
+const MEDIDA_TABELA_NOVA = /^\d{4}mm$/i;
+const ROTULOS_TABELA = new Set(LINHAS_TABELA.map(l => l.modelLabel));
 
-// Quais produtos antigos de coifa a limpeza opcional apagaria: todos os da
-// Churrasqueira (a lista será refeita) e os de Cozinha em formato LxPxA.
-async function idsAntigosCoifas(supabase: Awaited<ReturnType<typeof createClient>>) {
+// Quem exatamente é "antigo": produto de coifa que não segue o formato da
+// tabela nova e ainda não foi arquivado.
+async function idsAntigosCoifas(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('id, category, measurement')
+    .select('id, category, model, measurement, product_group')
     .in('category', APLICACOES.map(a => a.category));
   if (error) throw error;
-  const lxpxa: string[] = [], churrasqueira: string[] = [];
-  for (const p of data ?? []) {
-    if (p.category === CATEGORIA_COIFA_CHURRASQUEIRA) churrasqueira.push(p.id as string);
-    else if (MEDIDA_LXPXA.test(String(p.measurement ?? ''))) lxpxa.push(p.id as string);
-  }
-  return { lxpxa, churrasqueira };
+  return (data ?? [])
+    .filter(p => p.product_group !== GRUPO_ARQUIVO)
+    .filter(p => !(ROTULOS_TABELA.has(String(p.model)) && MEDIDA_TABELA_NOVA.test(String(p.measurement ?? '').trim())))
+    .map(p => p.id as string);
 }
 
 // Só para mostrar na tela quantos itens antigos existem.
-export async function contarAntigosCoifas(): Promise<{ lxpxa: number; churrasqueira: number }> {
+export async function contarAntigosCoifas(): Promise<number> {
   try {
     const supabase = await createClient();
-    const ids = await idsAntigosCoifas(supabase);
-    return { lxpxa: ids.lxpxa.length, churrasqueira: ids.churrasqueira.length };
+    return (await idsAntigosCoifas(supabase)).length;
   } catch {
-    return { lxpxa: 0, churrasqueira: 0 };
+    return 0;
   }
 }
 
-export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean } = {}): Promise<{
+// Só administradores emitem a tabela (decisão do Levi, 15/10: restringir).
+async function usuarioEhAdmin(supabase: Awaited<ReturnType<typeof createClient>>): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  return profile?.role === 'admin';
+}
+
+export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boolean } = {}): Promise<{
   success: boolean;
   created?: number;
   updated?: number;
-  removed?: number;
+  archived?: number;
   errors?: string[];
   error?: string;
-  /** true quando falta definir o teto da Piramidal e/ou a carenagem da Línea antes de gerar. */
+  /** true quando falta definir o teto das Piramidais acima de 1300mm antes de gerar. */
   precisaPadroesTabela?: boolean;
 }> {
   try {
     const supabase = await createClient();
+    if (!(await usuarioEhAdmin(supabase))) {
+      return { success: false, error: 'Somente administradores podem emitir a Tabela de Preços.' };
+    }
     const refResult = await getCalculatorReferenceData();
     if (!refResult.success || !refResult.data) {
       return { success: false, error: refResult.error || 'Não foi possível carregar os dados de referência.' };
     }
     const ref = refResult.data;
 
-    // Sem teto (Piramidal) e sem carenagem (Línea), o custo dessas peças
-    // entraria como zero e a tabela sairia abaixo do real — por isso são
-    // obrigatórios (checado aqui também, não só na tela).
-    const { teto, carenagemLinea, lote } = padroesTabelaDefinidos(ref.parametros);
-    if (!teto || !carenagemLinea) {
-      return { success: false, precisaPadroesTabela: true, error: 'Defina o teto padrão da Piramidal e a carenagem padrão da Línea antes de gerar a tabela.' };
+    // Piramidais acima de 1300mm precisam do teto informado (a regra do Levi
+    // cobre só até 1300): sem ele o custo do teto entraria como zero e o preço
+    // sairia abaixo do real — por isso é obrigatório (checado aqui também, não
+    // só na tela).
+    const padroes = padroesTabelaDefinidos(ref.parametros);
+    const { lote } = padroes;
+    if (!padroes.tetoAcima1300) {
+      return { success: false, precisaPadroesTabela: true, error: 'Defina o teto padrão das Piramidais acima de 1300mm antes de gerar a tabela.' };
     }
 
     const { calculateCoifa } = await import('@/lib/coifa-calculator');
@@ -170,16 +185,19 @@ export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean
               // ALTURA. A Piramidal usa o teto padrão e não leva carenagem na
               // tabela (na Calculadora, tudo é digitado).
               const chapaPadrao = chapaPadraoParaLote(medida);
+              const teto = linha.modelo === 'Piramidal' ? tetoParaTabela(medida, padroes) : null;
+              // Línea e Piramidal levem carenagem na tabela (mesma regra por faixa de largura).
+              const carenagem = linha.modelo === 'Linea' || linha.modelo === 'Piramidal' ? carenagemParaTabela(medida, padroes) : null;
               const result = calculateCoifa({
                 width: medida,
                 depth: lote.profundidade,
                 height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? lote.alturaCorpoLinea : lote.altura,
                 modelo: linha.modelo,
-                tetoWidth: linha.modelo === 'Piramidal' ? teto.largura : undefined,
-                tetoDepth: linha.modelo === 'Piramidal' ? teto.profundidade : undefined,
-                carenagemWidth: linha.modelo === 'Linea' ? carenagemLinea.largura : undefined,
-                carenagemDepth: linha.modelo === 'Linea' ? carenagemLinea.profundidade : undefined,
-                carenagemHeight: linha.modelo === 'Linea' ? carenagemLinea.altura : undefined,
+                tetoWidth: teto?.largura,
+                tetoDepth: teto?.profundidade,
+                carenagemWidth: carenagem?.largura,
+                carenagemDepth: carenagem?.profundidade,
+                carenagemHeight: carenagem?.altura,
                 material,
                 larguraPadrao: chapaPadrao,
                 larguraPadraoCarenagem: chapaPadrao,
@@ -201,17 +219,16 @@ export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean
       return { success: false, error: 'Nenhum preço foi calculado — verifique o Estoque (chapas e elétricos) e as tabelas da Memória de Cálculos.', errors };
     }
 
-    // 2) Limpeza opcional dos lançamentos antigos (só se o usuário pediu).
-    let removed = 0;
-    if (opcoes.apagarAntigos) {
-      const { lxpxa, churrasqueira } = await idsAntigosCoifas(supabase);
-      const idsParaApagar = [...lxpxa, ...churrasqueira];
+    // 2) Arquivamento opcional dos lançamentos antigos (nunca apaga).
+    let archived = 0;
+    if (opcoes.arquivarAntigos) {
+      const idsParaArquivar = await idsAntigosCoifas(supabase);
       // Em lotes pequenos para não estourar o tamanho da URL do PostgREST.
-      for (let i = 0; i < idsParaApagar.length; i += 100) {
-        const lote = idsParaApagar.slice(i, i + 100);
-        const { error } = await supabase.from('products').delete().in('id', lote);
+      for (let i = 0; i < idsParaArquivar.length; i += 100) {
+        const lote100 = idsParaArquivar.slice(i, i + 100);
+        const { error } = await supabase.from('products').update({ product_group: GRUPO_ARQUIVO }).in('id', lote100);
         if (error) throw error;
-        removed += lote.length;
+        archived += lote100.length;
       }
     }
 
@@ -246,14 +263,14 @@ export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean
     }
 
     revalidatePath('/products');
-    return { success: true, created, updated, removed, errors: errors.length > 0 ? errors : undefined };
+    return { success: true, created, updated, archived, errors: errors.length > 0 ? errors : undefined };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro ao gerar tabela de preços';
     return { success: false, error: message };
   }
 }
 
-// Padrões da Tabela de Preços (teto da Piramidal e carenagem da Línea) — só
+// Padrões da Tabela de Preços (teto, carenagem e corpo) — só
 // leitura. Usado pra desenhar no orçamento os produtos de catálogo com as
 // mesmas medidas usadas no preço deles.
 export async function getPadroesTabela(): Promise<PadroesTabela> {
@@ -264,7 +281,7 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
       .select('chave, valor')
       .in('chave', [
         CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE,
-        CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA,
+        ...Object.values(CHAVES_CARENAGEM_ATE_1300), ...Object.values(CHAVES_CARENAGEM_ACIMA_1300),
         CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
       ]);
     if (error) throw error;
@@ -278,31 +295,39 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
 
 // Salva os padrões usados na geração da Tabela de Preços.
 export async function salvarPadroesTabela(
-  teto: { largura: number; profundidade: number },
-  carenagemLinea: { largura: number; profundidade: number; altura: number },
+  tetoAcima1300: { largura: number; profundidade: number },
+  carenagemAte1300: MedidasCarenagem,
+  carenagemAcima1300: MedidasCarenagem,
   lote: { profundidade: number; altura: number; alturaCorpoLinea: number },
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const supabase = await createClient();
+    if (!(await usuarioEhAdmin(supabase))) return { success: false, error: 'Somente administradores podem alterar os padrões da tabela.' };
     const dentro = (v: number, min: number, max: number) => Number.isFinite(v) && v >= min && v <= max;
-    if (!dentro(teto.largura, TETO_MIN, TETO_MAX) || !dentro(teto.profundidade, TETO_MIN, TETO_MAX)) {
+    if (!dentro(tetoAcima1300.largura, TETO_MIN, TETO_MAX) || !dentro(tetoAcima1300.profundidade, TETO_MIN, TETO_MAX)) {
       return { success: false, error: `Teto: informe largura e profundidade entre ${TETO_MIN} e ${TETO_MAX} mm.` };
     }
-    if (!dentro(carenagemLinea.largura, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(carenagemLinea.profundidade, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(carenagemLinea.altura, CARENAGEM_MIN, CARENAGEM_MAX)) {
-      return { success: false, error: `Carenagem da Línea: informe largura, profundidade e altura entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };
+    for (const c of [carenagemAte1300, carenagemAcima1300]) {
+      if (!dentro(c.largura, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(c.profundidade, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(c.altura, CARENAGEM_MIN, CARENAGEM_MAX)) {
+        return { success: false, error: `Carenagem: informe largura, profundidade e altura entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };
+      }
     }
     if (!dentro(lote.profundidade, LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX) || !dentro(lote.altura, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX) || !dentro(lote.alturaCorpoLinea, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX)) {
       return { success: false, error: `Corpo: profundidade ${LOTE_PROFUNDIDADE_MIN}–${LOTE_PROFUNDIDADE_MAX}, altura ${LOTE_ALTURA_MIN}–${LOTE_ALTURA_MAX} e corpo da Línea ${LOTE_CORPO_LINEA_MIN}–${LOTE_CORPO_LINEA_MAX} mm.` };
     }
-    const supabase = await createClient();
+    const car = (faixa: string, chaves: typeof CHAVES_CARENAGEM_ATE_1300, c: MedidasCarenagem) => [
+      { chave: chaves.largura, valor: Math.round(c.largura), descricao: `Carenagem ${faixa} — largura usada na Tabela de Preços (mm)` },
+      { chave: chaves.profundidade, valor: Math.round(c.profundidade), descricao: `Carenagem ${faixa} — profundidade usada na Tabela de Preços (mm)` },
+      { chave: chaves.altura, valor: Math.round(c.altura), descricao: `Carenagem ${faixa} — altura usada na Tabela de Preços (mm)` },
+    ];
     const { error } = await supabase.from('parametros_globais').upsert([
       { chave: CHAVE_LOTE_PROFUNDIDADE, valor: Math.round(lote.profundidade), descricao: 'Tabela de Preços — profundidade padrão das coifas (mm)' },
       { chave: CHAVE_LOTE_ALTURA, valor: Math.round(lote.altura), descricao: 'Tabela de Preços — altura padrão de Box e Piramidal (mm)' },
       { chave: CHAVE_LOTE_ALTURA_CORPO_LINEA, valor: Math.round(lote.alturaCorpoLinea), descricao: 'Tabela de Preços — altura do corpo da Línea (mm)' },
-      { chave: CHAVE_TETO_LARGURA, valor: Math.round(teto.largura), descricao: 'Piramidal — largura do teto usada na Tabela de Preços (mm)' },
-      { chave: CHAVE_TETO_PROFUNDIDADE, valor: Math.round(teto.profundidade), descricao: 'Piramidal — profundidade do teto usada na Tabela de Preços (mm)' },
-      { chave: CHAVE_CARENAGEM_LINEA_LARGURA, valor: Math.round(carenagemLinea.largura), descricao: 'Línea — largura da carenagem usada na Tabela de Preços (mm)' },
-      { chave: CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, valor: Math.round(carenagemLinea.profundidade), descricao: 'Línea — profundidade da carenagem usada na Tabela de Preços (mm)' },
-      { chave: CHAVE_CARENAGEM_LINEA_ALTURA, valor: Math.round(carenagemLinea.altura), descricao: 'Línea — altura da carenagem usada na Tabela de Preços (mm)' },
+      { chave: CHAVE_TETO_LARGURA, valor: Math.round(tetoAcima1300.largura), descricao: 'Piramidal acima de 1300 — largura do teto usada na Tabela de Preços (mm)' },
+      { chave: CHAVE_TETO_PROFUNDIDADE, valor: Math.round(tetoAcima1300.profundidade), descricao: 'Piramidal acima de 1300 — profundidade do teto usada na Tabela de Preços (mm)' },
+      ...car('até 1300', CHAVES_CARENAGEM_ATE_1300, carenagemAte1300),
+      ...car('acima de 1300', CHAVES_CARENAGEM_ACIMA_1300, carenagemAcima1300),
     ], { onConflict: 'chave' });
     if (error) throw error;
     revalidatePath('/admin/memoria');
@@ -413,7 +438,7 @@ export async function updateIluminacaoRows(rows: IluminacaoRowUpdate[]): Promise
 export async function updateParametrosGlobaisRows(rows: { chave: string; valor: number }[]): Promise<{ success: boolean; error?: string }> {
   try {
     const chavesTeto = [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE];
-    const chavesCarenagem = [CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA];
+    const chavesCarenagem: string[] = [...Object.values(CHAVES_CARENAGEM_ATE_1300), ...Object.values(CHAVES_CARENAGEM_ACIMA_1300)];
     if (rows.some(r => chavesTeto.includes(r.chave) && !(r.valor >= TETO_MIN && r.valor <= TETO_MAX))) {
       return { success: false, error: `O teto padrão da Piramidal deve ficar entre ${TETO_MIN} e ${TETO_MAX} mm.` };
     }

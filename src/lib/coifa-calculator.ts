@@ -17,7 +17,7 @@ export type TipoAplicacao = 'Cozinha' | 'Churrasqueira';
 export type TipoInstalacaoCoifa = 'Parede' | 'Ilha';
 export type FiltroTipo = 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
 export type ColetorTipo = 'nenhum' | 'simples' | 'duplo';
-// Comando da coifa: botoeira (uma placa com 5 botões) ou botões avulsos.
+// Comando da coifa: botoeira (placa de botões) ou botões avulsos.
 export type TipoControle = 'botoes' | 'botoeira';
 
 export interface CoifaCalculatorInput {
@@ -56,8 +56,11 @@ export interface CoifaCalculatorInput {
   qtdLampadasManual?: number;
   qtdBotoesManual?: number;
   // Churrasqueira: "botoes" (padrão — 2 botões) ou "botoeira" (1 botoeira de
-  // 5 botões). Cozinha e Tube sempre usam botoeira; este campo não muda isso.
+  // Cozinha e Tube sempre usam botoeira; este campo não muda isso.
   controle?: TipoControle;
+  // Piramidal: com ou sem carenagem (a Línea é sempre com). `true` = o
+  // usuário disse que tem carenagem — se faltar a altura, avisa.
+  comCarenagem?: boolean;
 }
 
 export type CalculationDetail = { label: string; value: string };
@@ -101,7 +104,7 @@ export function kitIluminacaoPadrao(
   if (input.modelo === 'Tube') return { ...KIT_TUBE };
   const row = findIluminacaoRow(input, ref);
   if (!row) return null;
-  // Churrasqueira com botoeira: 1 botoeira (de 5 botões) no lugar dos 2 botões da tabela.
+  // Churrasqueira com botoeira: 1 botoeira no lugar dos 2 botões da tabela.
   if (input.tipoAplicacao === 'Churrasqueira' && tipoControleEfetivo(input) === 'botoeira') {
     return { qtdLampadas: row.qtdLampadas, qtdBotoes: 1 };
   }
@@ -289,7 +292,7 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
     details.push({ label: 'Chapa (Costas/Teto)', value: `${chapasCostasTeto.toFixed(2)} un. — ${brl(costCostasTeto)}` });
 
     // Piramidal pode ter carenagem sobre o teto, calculada como a da Línea.
-    const costCarenagem = input.modelo === 'Piramidal' ? custoCarenagem('Piramidal', false) : 0;
+    const costCarenagem = input.modelo === 'Piramidal' && input.comCarenagem !== false ? custoCarenagem('Piramidal', input.comCarenagem === true) : 0;
 
     sheetCost = costFrente + costCostasTeto + costCarenagem;
   }

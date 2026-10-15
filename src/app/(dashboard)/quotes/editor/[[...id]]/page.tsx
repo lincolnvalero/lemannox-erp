@@ -57,7 +57,7 @@ import { Separator } from '@/components/ui/separator';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
 import { CoifaImagensPanel } from '@/components/dashboard/coifa-imagens-panel';
 import { OsEditor } from '@/components/dashboard/os-editor';
-import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
+import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups, produtoArquivado, GRUPO_ARQUIVO } from '@/lib/product-groups';
 import { CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 
 
@@ -412,45 +412,49 @@ export default function QuoteEditorPage() {
   // Add Product Logic
   const productGroups = useMemo(
     () => [
-      ...PRODUCT_GROUPS,
+      ...PRODUCT_GROUPS.filter((g) => g.value !== GRUPO_ARQUIVO),
       ...collectCustomGroups(products).map((g) => ({ value: g, label: g })),
     ],
     [products]
   );
 
+  // Produtos arquivados (tabela antiga) continuam existindo para os orçamentos
+  // já emitidos, mas não são oferecidos na escolha de itens novos.
+  const catalogo = useMemo(() => products.filter((p) => !produtoArquivado(p)), [products]);
+
   const availableCategories = useMemo(() => {
     if (!addItemGroup) return [];
-    return Array.from(new Set(products
+    return Array.from(new Set(catalogo
         .filter(p => resolveProductGroup(p) === addItemGroup)
         .map(p => p.category)
     )).sort();
-  }, [addItemGroup, products]);
+  }, [addItemGroup, catalogo]);
 
   const availableModels = useMemo(() => {
       if (!addItemCategory) return [];
-      return Array.from(new Set(products
+      return Array.from(new Set(catalogo
           .filter(p => p.category === addItemCategory)
           .map(p => p.model)
       )).sort();
-  }, [addItemCategory, products]);
+  }, [addItemCategory, catalogo]);
 
   const availableMeasurements = useMemo(() => {
       if (!addItemModel) return [];
-      return Array.from(new Set(products
+      return Array.from(new Set(catalogo
           .filter(p => p.category === addItemCategory && p.model === addItemModel)
           .map(p => p.measurement)
       )).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
-  }, [addItemCategory, addItemModel, products]);
+  }, [addItemCategory, addItemModel, catalogo]);
 
   const availableMaterials = useMemo(() => {
     if (!addItemMeasurement) return [];
-    const product = products.find(p => 
+    const product = catalogo.find(p => 
         p.category === addItemCategory &&
         p.model === addItemModel &&
         p.measurement === addItemMeasurement
     );
     return product ? product.variations.map(v => v.material).sort() : [];
-  }, [addItemCategory, addItemModel, addItemMeasurement, products]);
+  }, [addItemCategory, addItemModel, addItemMeasurement, catalogo]);
 
   const handleGroupChange = (value: string) => {
       setAddItemGroup(value);
@@ -475,7 +479,7 @@ export default function QuoteEditorPage() {
 
   const handleMeasurementChange = (value: string) => {
     setAddItemMeasurement(value);
-    const product = products.find(
+    const product = catalogo.find(
       (p) =>
         p.category === addItemCategory &&
         p.model === addItemModel &&
@@ -490,7 +494,7 @@ export default function QuoteEditorPage() {
 
   const handleProductAdd = () => {
     const isOutrosCategory = addItemCategory === 'Outros';
-    const product = products.find(p => 
+    const product = catalogo.find(p => 
         p.category === addItemCategory &&
         p.model === addItemModel &&
         p.measurement === addItemMeasurement

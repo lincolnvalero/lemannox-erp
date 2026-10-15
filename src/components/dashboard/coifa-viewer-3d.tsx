@@ -20,7 +20,7 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { bandaLampadas, planejarFuros, resumoFuros, type PosicaoLampadas } from '@/lib/coifa-furos';
+import { planejarFuros, resumoFuros, type PosicaoLampadas, type PosicaoComando } from '@/lib/coifa-furos';
 import type { TipoControle } from '@/lib/coifa-calculator';
 
 export type CoifaViewerModelo = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
@@ -43,6 +43,8 @@ export interface CoifaViewer3DProps {
   controle?: TipoControle;
   /** Instalação em Parede: lâmpadas na frente (padrão) ou junto à parede. Na Ilha, metade/metade. */
   posicaoLampadas?: PosicaoLampadas;
+  /** Onde ficam os botões/botoeira: frente ou embaixo × esquerda/centro/direita. Padrão: frente-centro. */
+  posicaoComando?: PosicaoComando;
   /** Inox escovado (padrão) ou polido/brilhante. Carbono é sempre pintado. */
   acabamento?: 'escovado' | 'polido';
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
@@ -685,6 +687,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       qtdBotoes: Math.min(MAX_MARCADORES, Math.max(0, props.qtdBotoes ?? 0)),
       tipoControle: props.controle ?? 'botoeira',
       posicaoLampadas: props.posicaoLampadas,
+      posicaoComando: props.posicaoComando,
     });
 
     // ── Filtro e coletor de gordura (vistos por baixo — vista "Inferior").
@@ -692,9 +695,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const temFiltro = props.filtro && props.filtro !== 'nenhum' && modelo !== 'Tube';
     if (temFiltro) {
       const margem = Math.min(40, width * 0.05);
-      const banda = bandaLampadas(depth);
-      const z0 = -depth / 2 + (plano.lampadas.nFundos > 0 ? banda : margem);
-      const z1 = depth / 2 - (plano.lampadas.nFrente > 0 ? banda : margem);
+      const z0 = -depth / 2 + (plano.reservaFundo > 0 ? plano.reservaFundo : margem);
+      const z1 = depth / 2 - (plano.reservaFrente > 0 ? plano.reservaFrente : margem);
       const x0 = -width / 2 + margem, x1 = width / 2 - margem;
       if (z1 - z0 > 50 && x1 - x0 > 50) {
         s.filtroMat.color.setHex(props.filtro === 'aluminio' ? 0xcfd4db : props.filtro === 'inercial_304' ? 0xb8bfc8 : 0x969da7);
@@ -728,21 +730,34 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       });
     }
 
-    // Botões ou botoeira na frente, rente à face (que é inclinada na Piramidal).
+    // Botões ou botoeira: na frente (rente à face, que é inclinada na Piramidal)
+    // ou embaixo (face de baixo, junto à borda da frente).
     const zFrenteEm = (y: number) => (corpoBase && corpoTopo ? secao(corpoBase, corpoTopo, y).z1 : depth / 2);
+    const embaixo = plano.botoes.lado === 'embaixo';
     if (plano.botoes.furos.length > 0) {
       const dBot = plano.botoes.diametro;
       const bg = new THREE.CylinderGeometry(dBot / 2, dBot / 2, 4, 20);
       plano.botoes.placas.forEach(pl => {
-        const placa = new THREE.Mesh(new THREE.BoxGeometry(pl.largura, pl.altura, 3), btnMat);
-        placa.position.set(pl.x, pl.y, zFrenteEm(pl.y) + 1.5);
-        modelGroup.add(placa);
+        if (embaixo) {
+          // Embaixo o casco é escuro: placa clara e botões escuros pra aparecer.
+          const placa = new THREE.Mesh(new THREE.BoxGeometry(pl.largura, 3, pl.altura), s.coletorMat);
+          placa.position.set(pl.x, -1.5, pl.z ?? 0);
+          modelGroup.add(placa);
+        } else {
+          const placa = new THREE.Mesh(new THREE.BoxGeometry(pl.largura, pl.altura, 3), btnMat);
+          placa.position.set(pl.x, pl.y ?? 0, zFrenteEm(pl.y ?? 0) + 1.5);
+          modelGroup.add(placa);
+        }
       });
       const recuo = plano.botoes.placas.length > 0 ? 3 : 0; // botões da botoeira saem da placa
       plano.botoes.furos.forEach(f => {
-        const m = new THREE.Mesh(bg, plano.botoes.placas.length > 0 ? s.coletorMat : btnMat);
-        m.rotation.x = Math.PI / 2;
-        m.position.set(f.x, f.y, zFrenteEm(f.y) + 1 + recuo + 1);
+        const m = new THREE.Mesh(bg, plano.botoes.placas.length > 0 && !embaixo ? s.coletorMat : btnMat);
+        if (embaixo) {
+          m.position.set(f.x, -2 - recuo, f.z ?? 0);
+        } else {
+          m.rotation.x = Math.PI / 2;
+          m.position.set(f.x, f.y ?? 0, zFrenteEm(f.y ?? 0) + 2 + recuo);
+        }
         modelGroup.add(m);
       });
     }
@@ -753,7 +768,10 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       if (resumo.botoes && plano.botoes.furos.length > 0) {
         const alvo = plano.botoes.placas[0] ?? plano.botoes.furos[0];
         const xMedio = plano.botoes.furos.reduce((a, f) => a + f.x, 0) / plano.botoes.furos.length;
-        addLabel(V(xMedio, alvo.y + 46, zFrenteEm(alvo.y) + 4), resumo.botoes.split(' — ')[0], true);
+        addLabel(
+          embaixo ? V(xMedio, -14, (alvo.z ?? 0) - 24) : V(xMedio, (alvo.y ?? 0) + 46, zFrenteEm(alvo.y ?? 0) + 4),
+          resumo.botoes.split(' — ')[0], true,
+        );
       }
       if (plano.lampadas.furos.length > 0) {
         const n = plano.lampadas.furos.length;
@@ -786,7 +804,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.material, props.acabamento, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.material, props.acabamento, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 

@@ -17,7 +17,7 @@ import {
 import type { MaoDeObraRow, IluminacaoRow } from '@/lib/types';
 import {
   CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE,
-  CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA,
+  CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_ATE_1300_INICIAL, CARENAGEM_ACIMA_1300_INICIAL,
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
 } from '@/lib/coifa-padroes';
 
@@ -308,9 +308,10 @@ const GRUPOS_PARAMETROS: { titulo: string; chaves: string[] }[] = [
   { titulo: 'Margem e Pintura', chaves: ['margem_lucro_padrao', 'pintura_padrao'] },
   { titulo: 'Friso decorativo', chaves: ['preco_friso_por_cm'] },
   { titulo: 'Filtro inercial (fórmula: constante ÷ 0,7 × L×P ÷ 1.000.000)', chaves: ['filtro_constante_430', 'filtro_constante_304', 'filtro_constante_aluminio', 'filtro_coletor_gordura_por_cm'] },
-  { titulo: 'Tabela de Preços — teto padrão da Piramidal (mm)', chaves: [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE] },
+  { titulo: 'Tabela de Preços — teto da Piramidal acima de 1300 mm (até 1300 vale 1/3 da largura × 350)', chaves: [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE] },
   { titulo: 'Tabela de Preços — medidas do corpo (mm)', chaves: [CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA] },
-  { titulo: 'Tabela de Preços — carenagem padrão da Línea (mm)', chaves: [CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA] },
+  { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas até 1300 mm', chaves: Object.values(CHAVES_CARENAGEM_ATE_1300) },
+  { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas a partir de 1400 mm', chaves: Object.values(CHAVES_CARENAGEM_ACIMA_1300) },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
@@ -324,18 +325,27 @@ const PARAM_LABELS: Record<string, string> = {
   [CHAVE_TETO_LARGURA]: 'Largura do teto (mm)',
   [CHAVE_TETO_PROFUNDIDADE]: 'Profundidade do teto (mm)',
   [CHAVE_LOTE_PROFUNDIDADE]: 'Profundidade padrão das coifas (mm) — padrão 700',
-  [CHAVE_LOTE_ALTURA]: 'Altura padrão de Box e Piramidal (mm) — padrão 600',
+  [CHAVE_LOTE_ALTURA]: 'Altura padrão de Box e Piramidal (mm) — padrão 1000',
   [CHAVE_LOTE_ALTURA_CORPO_LINEA]: 'Altura do corpo da Línea (mm) — padrão 100',
-  [CHAVE_CARENAGEM_LINEA_LARGURA]: 'Largura da carenagem (mm)',
-  [CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]: 'Profundidade da carenagem (mm)',
-  [CHAVE_CARENAGEM_LINEA_ALTURA]: 'Altura da carenagem (mm) — é a que muda o preço',
+  [CHAVES_CARENAGEM_ATE_1300.largura]: 'Largura da carenagem (mm) — padrão 320',
+  [CHAVES_CARENAGEM_ATE_1300.profundidade]: 'Profundidade da carenagem (mm) — padrão 300',
+  [CHAVES_CARENAGEM_ATE_1300.altura]: 'Altura da carenagem (mm) — padrão 1000 (é a que muda o preço)',
+  [CHAVES_CARENAGEM_ACIMA_1300.largura]: 'Largura da carenagem (mm) — padrão 500',
+  [CHAVES_CARENAGEM_ACIMA_1300.profundidade]: 'Profundidade da carenagem (mm) — padrão 300',
+  [CHAVES_CARENAGEM_ACIMA_1300.altura]: 'Altura da carenagem (mm) — padrão 1000 (é a que muda o preço)',
 };
 
 // Valor mostrado enquanto o parâmetro ainda não foi gravado no banco.
 const PARAM_PADRAO: Record<string, number> = {
   [CHAVE_LOTE_PROFUNDIDADE]: 700,
-  [CHAVE_LOTE_ALTURA]: 600,
+  [CHAVE_LOTE_ALTURA]: 1000,
   [CHAVE_LOTE_ALTURA_CORPO_LINEA]: 100,
+  [CHAVES_CARENAGEM_ATE_1300.largura]: CARENAGEM_ATE_1300_INICIAL.largura,
+  [CHAVES_CARENAGEM_ATE_1300.profundidade]: CARENAGEM_ATE_1300_INICIAL.profundidade,
+  [CHAVES_CARENAGEM_ATE_1300.altura]: CARENAGEM_ATE_1300_INICIAL.altura,
+  [CHAVES_CARENAGEM_ACIMA_1300.largura]: CARENAGEM_ACIMA_1300_INICIAL.largura,
+  [CHAVES_CARENAGEM_ACIMA_1300.profundidade]: CARENAGEM_ACIMA_1300_INICIAL.profundidade,
+  [CHAVES_CARENAGEM_ACIMA_1300.altura]: CARENAGEM_ACIMA_1300_INICIAL.altura,
 };
 
 function ParametrosSection() {

@@ -2,6 +2,7 @@
 // que está nos dados do item — nada é inventado.
 
 import type { CoifaItemParams } from './coifa-viewer-from-item';
+import { rotuloPosicaoComando } from './coifa-furos';
 
 /** "Aço inox 304 escovado", "Aço carbono com pintura eletrostática"… */
 export function textoAcabamento(material: string | undefined, acabamento: 'escovado' | 'polido' | undefined): string | null {
@@ -40,9 +41,10 @@ export function especificacoesDaCoifa(p: CoifaItemParams, qtd: { lampadas: numbe
   if (qtd.botoes > 0) {
     partes.push(p.controle === 'botoes'
       ? (qtd.botoes !== 1 ? `${qtd.botoes} botões` : '1 botão')
-      : `${qtd.botoes} botoeira${qtd.botoes !== 1 ? 's' : ''}${p.modelo !== 'Tube' ? ' (5 botões)' : ''}`);
+      : `${qtd.botoes} botoeira${qtd.botoes !== 1 ? 's' : ''}`);
   }
   if (partes.length > 0) linhas.push(`Iluminação e comando: ${partes.join(' e ')}`);
+  if (qtd.botoes > 0 && p.modelo !== 'Tube') linhas.push(`Posição do comando: ${rotuloPosicaoComando(p.posicaoComando).toLowerCase().replace(' — ', ', ')}`);
 
   if (p.filtro && p.filtro !== 'nenhum') {
     const nome = p.filtro === 'aluminio' ? 'Filtro de alumínio' : `Filtro inercial ${p.filtro === 'inercial_304' ? '304' : '430'}`;

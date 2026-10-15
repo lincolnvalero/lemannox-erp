@@ -32,9 +32,35 @@ export const FURO_PADRAO = {
 /** Faixa da face de baixo reservada para as lâmpadas, em cada lado. */
 export const bandaLampadas = (profundidade: number) => Math.min(120, profundidade * 0.25);
 
+/**
+ * Onde ficam os botões/botoeira (o cliente define): na FRENTE da coifa (face
+ * da saia) ou EMBAIXO (face de baixo, junto à borda da frente), alinhados à
+ * esquerda, ao centro ou à direita.
+ */
+export type PosicaoComando =
+  | 'frente-esquerda' | 'frente-centro' | 'frente-direita'
+  | 'embaixo-esquerda' | 'embaixo-centro' | 'embaixo-direita';
+export const POSICOES_COMANDO: { value: PosicaoComando; label: string }[] = [
+  { value: 'frente-esquerda', label: 'Frente — esquerda' },
+  { value: 'frente-centro', label: 'Frente — centro' },
+  { value: 'frente-direita', label: 'Frente — direita' },
+  { value: 'embaixo-esquerda', label: 'Embaixo — esquerda' },
+  { value: 'embaixo-centro', label: 'Embaixo — centro' },
+  { value: 'embaixo-direita', label: 'Embaixo — direita' },
+];
+export const rotuloPosicaoComando = (p: PosicaoComando | undefined) =>
+  (POSICOES_COMANDO.find((o) => o.value === p) ?? POSICOES_COMANDO[1]).label;
+
+/** Folga lateral dos botões alinhados à esquerda/direita (a mesma do protótipo do Marcelo). */
+const MARGEM_LATERAL_COMANDO = 80;
+/** Faixa da borda da frente da face de baixo reservada ao comando "embaixo". */
+const FAIXA_COMANDO_EMBAIXO = 40;
+
 export interface FuroLampada { x: number; z: number }
-export interface FuroBotao { x: number; y: number }
-export interface PlacaBotoeira { x: number; y: number; largura: number; altura: number }
+/** Frente: usa x e y (altura). Embaixo: usa x e z (profundidade), y ≈ 0. */
+export interface FuroBotao { x: number; y?: number; z?: number }
+/** `altura` é a dimensão vertical (frente) ou a profundidade (embaixo) da placa. */
+export interface PlacaBotoeira { x: number; y?: number; z?: number; largura: number; altura: number }
 
 export interface PlanoFuros {
   lampadas: {
@@ -49,9 +75,13 @@ export interface PlanoFuros {
     diametro: number;
     espacamento: number;
     furos: FuroBotao[];
-    /** Só na botoeira: a placa onde os 5 botões ficam. */
+    /** Só na botoeira: a placa onde os botões ficam. */
     placas: PlacaBotoeira[];
+    lado: 'frente' | 'embaixo';
   };
+  /** Faixas (mm) da face de baixo, na frente e no fundo, que o filtro deve deixar livres. */
+  reservaFrente: number;
+  reservaFundo: number;
 }
 
 export interface EntradaFuros {
@@ -65,6 +95,8 @@ export interface EntradaFuros {
   tipoControle: TipoControle;
   /** Só vale para Parede. Padrão: frente. */
   posicaoLampadas?: PosicaoLampadas;
+  /** Padrão: frente-centro. */
+  posicaoComando?: PosicaoComando;
 }
 
 const MAX_FUROS = 50;
@@ -91,8 +123,13 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
     nFundos = 0;
   }
 
+  const [ladoComando, alinhamento] = (e.posicaoComando ?? 'frente-centro').split('-') as ['frente' | 'embaixo', 'esquerda' | 'centro' | 'direita'];
+  const comandoEmbaixo = ladoComando === 'embaixo' && !tube && e.qtdBotoes > 0;
+  // Comando embaixo ocupa a borda da frente — as lâmpadas da frente recuam.
+  const reservaComando = comandoEmbaixo ? FAIXA_COMANDO_EMBAIXO : 0;
+
   const banda = bandaLampadas(profundidade);
-  const zFileira = profundidade / 2 - banda / 2;
+  const zFileira = profundidade / 2 - reservaComando - banda / 2;
   // Largura útil de uma fileira: a da coifa; na Tube (redonda), 80% da corda.
   const larguraUtil = tube
     ? 2 * Math.sqrt(Math.max(0, (diametroTube / 2) ** 2 - zFileira * zFileira)) * 0.8
@@ -102,15 +139,25 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
 
   const fileira = (n: number, z: number): FuroLampada[] =>
     Array.from({ length: n }, (_, j) => ({ x: -larguraUtil / 2 + larguraUtil * (j + 0.5) / n, z }));
-  const furosLampada = [...fileira(nFrente, zFileira), ...fileira(nFundos, -zFileira)];
+  const furosLampada = [...fileira(nFrente, zFileira), ...fileira(nFundos, -(profundidade / 2 - banda / 2))];
 
-  // ── Botões / botoeira (face da frente, na saia) ───────────────────────────
+  // ── Botões / botoeira ─────────────────────────────────────────────────────
   const nBot = Math.min(MAX_FUROS, Math.max(0, Math.round(e.qtdBotoes)));
   const yBotao = Math.min(e.height, 60) / 2;
   const { botaoDiametro: dia, botaoEspacamento: esp, botoesPorBotoeira: porPlaca } = FURO_PADRAO;
   const furosBotao: FuroBotao[] = [];
   const placas: PlacaBotoeira[] = [];
   let escala = 1;
+
+  // Centro do conjunto (largura `total`) conforme o alinhamento escolhido.
+  const centroDoConjunto = (total: number) => {
+    const livre = Math.max(0, largura / 2 - total / 2 - 20);
+    if (alinhamento === 'esquerda') return -Math.min(livre, Math.max(0, largura / 2 - MARGEM_LATERAL_COMANDO - total / 2));
+    if (alinhamento === 'direita') return Math.min(livre, Math.max(0, largura / 2 - MARGEM_LATERAL_COMANDO - total / 2));
+    return 0;
+  };
+  const posicionar = (x: number, h: number): Pick<FuroBotao, 'y' | 'z'> =>
+    comandoEmbaixo ? { z: profundidade / 2 - 6 - h / 2, y: 0 } : { y: yBotao };
 
   if (nBot > 0 && !tube) {
     if (e.tipoControle === 'botoeira') {
@@ -119,27 +166,34 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
       const total = nBot * larguraPlaca + (nBot - 1) * FURO_PADRAO.botoeiraEntrePlacas;
       escala = Math.min(1, (largura * 0.9) / total);
       const lp = larguraPlaca * escala, ap = alturaPlaca * escala, gap = FURO_PADRAO.botoeiraEntrePlacas * escala;
-      const x0 = -(nBot * lp + (nBot - 1) * gap) / 2;
+      const totalEscalado = nBot * lp + (nBot - 1) * gap;
+      const x0 = centroDoConjunto(totalEscalado) - totalEscalado / 2;
       for (let i = 0; i < nBot; i++) {
         const cx = x0 + lp / 2 + i * (lp + gap);
-        placas.push({ x: cx, y: yBotao, largura: lp, altura: ap });
+        placas.push({ x: cx, largura: lp, altura: ap, ...posicionar(cx, ap) });
         const passo = (dia + esp) * escala;
-        for (let b = 0; b < porPlaca; b++) furosBotao.push({ x: cx + (b - (porPlaca - 1) / 2) * passo, y: yBotao });
+        for (let b = 0; b < porPlaca; b++) {
+          const bx = cx + (b - (porPlaca - 1) / 2) * passo;
+          furosBotao.push({ x: bx, ...posicionar(bx, ap) });
+        }
       }
     } else {
       const total = nBot * dia + (nBot - 1) * esp;
       escala = Math.min(1, (largura * 0.9) / total);
       const passo = (dia + esp) * escala;
-      for (let i = 0; i < nBot; i++) furosBotao.push({ x: (i - (nBot - 1) / 2) * passo, y: yBotao });
+      const totalEscalado = nBot * dia * escala + (nBot - 1) * esp * escala;
+      const x0 = centroDoConjunto(totalEscalado) - (nBot - 1) * passo / 2;
+      for (let i = 0; i < nBot; i++) furosBotao.push({ x: x0 + i * passo, ...posicionar(0, dia * escala) });
     }
   }
 
   return {
     lampadas: { diametro: diametroLampada, furos: furosLampada, nFrente, nFundos },
-    botoes: { tipo: e.tipoControle, diametro: dia * escala, espacamento: esp * escala, furos: furosBotao, placas },
+    botoes: { tipo: e.tipoControle, diametro: dia * escala, espacamento: esp * escala, furos: furosBotao, placas, lado: comandoEmbaixo ? 'embaixo' : 'frente' },
+    reservaFrente: nFrente > 0 ? banda + reservaComando : comandoEmbaixo ? reservaComando + 10 : 0,
+    reservaFundo: nFundos > 0 ? banda : 0,
   };
 }
-
 /** Texto curto dos furos, para mostrar na tela (ex: "2 furos Ø12 — botões"). */
 export function resumoFuros(plano: PlanoFuros): { lampadas: string | null; botoes: string | null } {
   const l = plano.lampadas;

@@ -5,7 +5,7 @@
 import type { QuoteItem, CoifaParamsSalvos } from './types';
 import type { CoifaViewer3DProps } from '@/components/dashboard/coifa-viewer-3d';
 import {
-  loteDefinido, LINHAS_TABELA,
+  loteDefinido, carenagemParaTabela, tetoParaTabela, LINHAS_TABELA,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA, formatarMedidaCoifa, type PadroesTabela,
 } from './coifa-padroes';
 
@@ -101,6 +101,7 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
         qtdBotoes: salvo.qtdBotoes,
         controle: salvo.controle,
         posicaoLampadas: salvo.posicaoLampadas,
+        posicaoComando: salvo.posicaoComando,
         acabamento: salvo.acabamento,
         exato: true,
       },
@@ -145,13 +146,20 @@ function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaI
       // Diâmetro fixo; a medida da tabela é a altura.
       return { ...comum, modelo: 'Tube', width: 500, depth: 500, height: medida };
     case 'Piramidal': {
-      const teto = contexto.padroes?.teto;
+      if (!contexto.padroes) return null;
+      const teto = tetoParaTabela(medida, contexto.padroes);
       if (!teto) return null;
-      return { ...comum, modelo: 'Piramidal', width: medida, depth: lote.profundidade, height: lote.altura, tetoWidth: teto.largura, tetoDepth: teto.profundidade };
+      // Na tabela a Piramidal sai com carenagem (mesma regra da Línea).
+      const car = carenagemParaTabela(medida, contexto.padroes);
+      return {
+        ...comum, modelo: 'Piramidal', width: medida, depth: lote.profundidade, height: lote.altura,
+        tetoWidth: teto.largura, tetoDepth: teto.profundidade,
+        carenagemWidth: car.largura, carenagemDepth: car.profundidade, carenagemHeight: car.altura,
+      };
     }
     case 'Linea': {
-      const car = contexto.padroes?.carenagemLinea;
-      if (!car) return null;
+      if (!contexto.padroes) return null;
+      const car = carenagemParaTabela(medida, contexto.padroes);
       return {
         ...comum, modelo: 'Linea', width: medida, depth: lote.profundidade, height: lote.alturaCorpoLinea,
         carenagemWidth: car.largura, carenagemDepth: car.profundidade, carenagemHeight: car.altura,

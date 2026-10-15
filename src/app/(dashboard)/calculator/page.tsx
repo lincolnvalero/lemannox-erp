@@ -34,20 +34,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCalculatorReferenceData, generatePriceTableCoifas, salvarPadroesTabela, contarAntigosCoifas } from './actions';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { getCalculatorReferenceData } from './actions';
+import { EmissaoTabelaCoifas } from '@/components/dashboard/emissao-tabela-coifas';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {
-  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
-  CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA, CARENAGEM_MIN, CARENAGEM_MAX,
-  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
-  padroesTabelaDefinidos, formatarMedidaCoifa, CHAVE_ITEM_PENDENTE_ORCAMENTO,
-} from '@/lib/coifa-padroes';
+import { formatarMedidaCoifa, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
-import { planejarFuros, resumoFuros } from '@/lib/coifa-furos';
+import { planejarFuros, resumoFuros, POSICOES_COMANDO } from '@/lib/coifa-furos';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, ListChecks, Box as BoxIcon, RotateCcw, FilePlus2, Download } from 'lucide-react';
+import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, Box as BoxIcon, RotateCcw, FilePlus2, Download } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const CoifaViewer3D = dynamic(
@@ -93,6 +88,9 @@ const formSchema = z.object({
   posicaoLampadas: z.enum(['frente', 'parede']),
   // Inox escovado ou polido (só muda o desenho e o texto do orçamento).
   acabamento: z.enum(['escovado', 'polido']),
+  // Piramidal: com ou sem carenagem. Posição dos botões/botoeira.
+  comCarenagem: z.boolean(),
+  posicaoComando: z.enum(['frente-esquerda', 'frente-centro', 'frente-direita', 'embaixo-esquerda', 'embaixo-centro', 'embaixo-direita']),
 });
 
 const MAX_KIT = 50;
@@ -110,7 +108,7 @@ const defaultValues: FormValues = {
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
-  controle: 'botoes', posicaoLampadas: 'frente', acabamento: 'escovado',
+  controle: 'botoes', posicaoLampadas: 'frente', acabamento: 'escovado', comCarenagem: true, posicaoComando: 'frente-centro',
 };
 
 export default function CostCalculatorPage() {
@@ -121,96 +119,6 @@ export default function CostCalculatorPage() {
   const [generating, setGenerating] = useState(false);
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
   const { toast } = useToast();
-
-  // Padrões da Tabela de Preços: teto da Piramidal e carenagem da Línea.
-  // São obrigatórios pra gerar a tabela (sem eles essas peças entrariam com
-  // custo zero), mas só são pedidos uma vez — depois ficam salvos e podem ser
-  // alterados pelo link no próprio card ou na Memória de Cálculos. Na
-  // Calculadora individual não há padrão: tudo é digitado.
-  const [padroesDialog, setPadroesDialog] = useState<null | 'gerar' | 'editar'>(null);
-  const [pad, setPad] = useState({ tetoL: '', tetoP: '', carL: '', carP: '', carA: '', loteP: '', loteA: '', loteC: '' });
-  const [salvandoPadroes, setSalvandoPadroes] = useState(false);
-  const padroesAtuais = ref ? padroesTabelaDefinidos(ref.parametros) : padroesTabelaDefinidos({});
-  const padroesCompletos = !!padroesAtuais.teto && !!padroesAtuais.carenagemLinea;
-
-  const abrirDialogoPadroes = (modo: 'gerar' | 'editar') => {
-    // Sugestões iniciais = exemplos do Levi (teto 500×500 da planilha; carenagem 320×300×1000).
-    setPad({
-      tetoL: String(padroesAtuais.teto?.largura ?? 500),
-      tetoP: String(padroesAtuais.teto?.profundidade ?? 500),
-      carL: String(padroesAtuais.carenagemLinea?.largura ?? 320),
-      carP: String(padroesAtuais.carenagemLinea?.profundidade ?? 300),
-      carA: String(padroesAtuais.carenagemLinea?.altura ?? 1000),
-      loteP: String(padroesAtuais.lote.profundidade),
-      loteA: String(padroesAtuais.lote.altura),
-      loteC: String(padroesAtuais.lote.alturaCorpoLinea),
-    });
-    setPadroesDialog(modo);
-  };
-
-  // Itens antigos de coifa no banco (a limpeza é opcional, nunca automática).
-  const [antigos, setAntigos] = useState<{ lxpxa: number; churrasqueira: number } | null>(null);
-  const [apagarAntigos, setApagarAntigos] = useState(false);
-  const [confirmarApagar, setConfirmarApagar] = useState(false);
-  useEffect(() => { contarAntigosCoifas().then(setAntigos); }, []);
-  const totalAntigos = (antigos?.lxpxa ?? 0) + (antigos?.churrasqueira ?? 0);
-
-  const gerarTabela = async (apagar: boolean) => {
-    setGenerating(true);
-    setGenerateSummary(null);
-    const result = await generatePriceTableCoifas({ apagarAntigos: apagar });
-    setGenerating(false);
-    if (result.success) {
-      const summary = `${result.created ?? 0} produto(s) criado(s), ${result.updated ?? 0} atualizado(s)${apagar ? `, ${result.removed ?? 0} antigo(s) removido(s)` : ''}.`;
-      setGenerateSummary(result.errors ? `${summary} ${result.errors.length} com erro — veja o console.` : summary);
-      if (result.errors) console.error('Erros na geração da tabela de preços:', result.errors);
-      toast({ title: 'Tabela de Preços gerada!', description: summary });
-      if (apagar) { setApagarAntigos(false); contarAntigosCoifas().then(setAntigos); }
-    } else if (result.precisaPadroesTabela) {
-      abrirDialogoPadroes('gerar');
-    } else {
-      toast({ variant: 'destructive', title: 'Erro ao gerar tabela', description: result.error });
-    }
-  };
-
-  const handleGeneratePriceTable = () => {
-    if (!padroesCompletos) { abrirDialogoPadroes('gerar'); return; }
-    if (apagarAntigos && totalAntigos > 0) { setConfirmarApagar(true); return; }
-    gerarTabela(false);
-  };
-
-  const salvarPadroes = async () => {
-    const n = (v: string) => Number(v);
-    const teto = { largura: n(pad.tetoL), profundidade: n(pad.tetoP) };
-    const carenagemLinea = { largura: n(pad.carL), profundidade: n(pad.carP), altura: n(pad.carA) };
-    setSalvandoPadroes(true);
-    const lote = { profundidade: n(pad.loteP), altura: n(pad.loteA), alturaCorpoLinea: n(pad.loteC) };
-    const result = await salvarPadroesTabela(teto, carenagemLinea, lote);
-    setSalvandoPadroes(false);
-    if (!result.success) {
-      toast({ variant: 'destructive', title: 'Padrões não salvos', description: result.error });
-      return;
-    }
-    const r = Math.round;
-    setRef(old => old ? {
-      ...old,
-      parametros: {
-        ...old.parametros,
-        [CHAVE_TETO_LARGURA]: r(teto.largura), [CHAVE_TETO_PROFUNDIDADE]: r(teto.profundidade),
-        [CHAVE_CARENAGEM_LINEA_LARGURA]: r(carenagemLinea.largura),
-        [CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]: r(carenagemLinea.profundidade),
-        [CHAVE_CARENAGEM_LINEA_ALTURA]: r(carenagemLinea.altura),
-        [CHAVE_LOTE_PROFUNDIDADE]: r(lote.profundidade), [CHAVE_LOTE_ALTURA]: r(lote.altura), [CHAVE_LOTE_ALTURA_CORPO_LINEA]: r(lote.alturaCorpoLinea),
-      },
-    } : old);
-    const modo = padroesDialog;
-    setPadroesDialog(null);
-    toast({ title: 'Padrões da tabela salvos' });
-    if (modo === 'gerar') {
-      if (apagarAntigos && totalAntigos > 0) setConfirmarApagar(true);
-      else gerarTabela(false);
-    }
-  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -265,6 +173,8 @@ export default function CostCalculatorPage() {
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
   const watchedAcabamento = watch('acabamento');
+  const watchedComCarenagem = watch('comCarenagem');
+  const watchedPosicaoComando = watch('posicaoComando');
   const tipoControle = tipoControleEfetivo({ modelo: watchedModelo, tipoAplicacao: watchedAplicacao, controle: watchedControle });
 
   // Quantidade padrão (da tabela de iluminação / regra da Tube) — pré-preenche
@@ -287,9 +197,9 @@ export default function CostCalculatorPage() {
     return resumoFuros(planejarFuros({
       modelo: watchedModelo, width: Number(watchedWidth) || 0, depth: Number(watchedDepth) || 0, height: Number(watchedHeight) || 0,
       mount: watchedInstalacao, qtdLampadas: qtdLampadasEfetiva, qtdBotoes: qtdBotoesEfetiva,
-      tipoControle, posicaoLampadas: watchedPosicaoLampadas,
+      tipoControle, posicaoLampadas: watchedPosicaoLampadas, posicaoComando: watchedPosicaoComando,
     }));
-  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas]);
+  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas, watchedPosicaoComando]);
   // Texto em edição dos campos do kit: permite apagar o número inteiro antes
   // de digitar outro (sem isso o campo "voltava" pro padrão a cada Backspace).
   const [kitRascunho, setKitRascunho] = useState<Partial<Record<'qtdLampadasManual' | 'qtdBotoesManual', string>>>({});
@@ -306,6 +216,8 @@ export default function CostCalculatorPage() {
   const isPiramidal = watchedModelo === 'Piramidal';
   const isLinea = watchedModelo === 'Linea';
   const isTube = watchedModelo === 'Tube';
+  // Línea é sempre com carenagem; Piramidal pode ser com ou sem.
+  const mostrarCarenagem = isLinea || (isPiramidal && watchedComCarenagem);
   const showColetor = watchedFiltro === 'inercial_430' || watchedFiltro === 'inercial_304';
 
   // A Tube não tem Largura/Profundidade — é cilíndrica, com diâmetro sempre
@@ -327,7 +239,9 @@ export default function CostCalculatorPage() {
         width: values.width, depth: values.depth, height: values.height,
         modelo: values.modelo,
         tetoWidth: values.tetoWidth, tetoDepth: values.tetoDepth,
-        carenagemWidth: values.carenagemWidth, carenagemDepth: values.carenagemDepth, carenagemHeight: values.carenagemHeight,
+        ...(values.modelo === 'Linea' || (values.modelo === 'Piramidal' && values.comCarenagem)
+          ? { carenagemWidth: values.carenagemWidth, carenagemDepth: values.carenagemDepth, carenagemHeight: values.carenagemHeight }
+          : {}),
         material: values.material,
         larguraPadrao: values.larguraPadrao,
         larguraPadraoCarenagem: values.larguraPadraoCarenagem || undefined,
@@ -342,12 +256,14 @@ export default function CostCalculatorPage() {
         qtdLampadasManual: values.qtdLampadasManual,
         qtdBotoesManual: values.qtdBotoesManual,
         controle: values.controle,
+        comCarenagem: values.modelo === 'Piramidal' ? values.comCarenagem : undefined,
       };
       const result = calculateCoifa(input, ref);
       setResults(result);
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
       setUltimoAcabamento(values.acabamento);
+      setUltimaPosicaoComando(values.posicaoComando);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
       } else {
@@ -384,6 +300,7 @@ export default function CostCalculatorPage() {
   const router = useRouter();
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
+  const [ultimaPosicaoComando, setUltimaPosicaoComando] = useState<NonNullable<CoifaParamsSalvos['posicaoComando']>>('frente-centro');
   const [ultimoAcabamento, setUltimoAcabamento] = useState<'escovado' | 'polido'>('escovado');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
@@ -408,6 +325,7 @@ export default function CostCalculatorPage() {
       qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
       acabamento: /inox/i.test(i.material) ? ultimoAcabamento : undefined,
+      posicaoComando: ultimaPosicaoComando,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -423,7 +341,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimoAcabamento]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimoAcabamento, ultimaPosicaoComando]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -520,9 +438,17 @@ export default function CostCalculatorPage() {
                   )}
                   {(isLinea || isPiramidal) && (
                     <div className="space-y-3 rounded-md border p-3 bg-muted/30">
-                      <p className="text-xs font-medium">
-                        Carenagem{isPiramidal ? ' (opcional — deixe em branco se não tiver)' : ''}
-                      </p>
+                      {isPiramidal ? (
+                        <FormField control={form.control} name="comCarenagem" render={({ field }) => (
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                            <FormLabel className="text-sm font-medium">Com carenagem</FormLabel>
+                          </FormItem>
+                        )} />
+                      ) : (
+                        <p className="text-xs font-medium">Carenagem</p>
+                      )}
+                      {mostrarCarenagem && (<>
                       <div className="grid grid-cols-3 gap-4">
                         <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
                         <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
@@ -538,6 +464,7 @@ export default function CostCalculatorPage() {
                           <FormDescription className="text-xs">Só preencha se a carenagem usar chapa de tamanho diferente do corpo.</FormDescription>
                         </FormItem>
                       )} />
+                      </>)}
                     </div>
                   )}
 
@@ -593,10 +520,24 @@ export default function CostCalculatorPage() {
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="botoes">2 botões</SelectItem>
-                            <SelectItem value="botoeira">Botoeira (5 botões)</SelectItem>
+                            <SelectItem value="botoeira">Botoeira</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription className="text-xs">Aparece no desenho e muda o item do Estoque usado no preço.</FormDescription>
+                      </FormItem>
+                    )} />
+                  )}
+                  {!isTube && (
+                    <FormField control={form.control} name="posicaoComando" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Posição {tipoControle === 'botoeira' ? 'da botoeira' : 'dos botões'}</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {POSICOES_COMANDO.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">O cliente define. Só muda o desenho — não altera o preço.</FormDescription>
                       </FormItem>
                     )} />
                   )}
@@ -755,55 +696,10 @@ export default function CostCalculatorPage() {
                 </CardFooter>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Emissão da Tabela de Preços</CardTitle>
-                  <CardDescription>
-                    Gera os produtos de Coifas de Cozinha e de Churrasqueira (Box de Parede, Box Ilha, Piramidal de Parede, Piramidal Ilha, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Produtos com a mesma categoria, modelo e medida são atualizados; os demais são criados. Nada é apagado, a menos que você marque a opção abaixo.
-                  </CardDescription>
-                  <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
-                    <p>
-                      Teto padrão da Piramidal:{' '}
-                      {padroesAtuais.teto
-                        ? <span className="font-medium text-foreground">{padroesAtuais.teto.largura} × {padroesAtuais.teto.profundidade} mm</span>
-                        : <span className="font-medium text-amber-600">não definido (será pedido ao gerar)</span>}
-                    </p>
-                    <p>
-                      Carenagem padrão da Línea:{' '}
-                      {padroesAtuais.carenagemLinea
-                        ? <span className="font-medium text-foreground">{padroesAtuais.carenagemLinea.largura} × {padroesAtuais.carenagemLinea.profundidade} × {padroesAtuais.carenagemLinea.altura} mm</span>
-                        : <span className="font-medium text-amber-600">não definida (será pedida ao gerar)</span>}
-                      {padroesCompletos && (
-                        <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoPadroes('editar')}>alterar</Button>
-                      )}
-                    </p>
-                    <p>
-                      Corpo: profundidade {padroesAtuais.lote.profundidade}, altura {padroesAtuais.lote.altura} mm (Línea: corpo de {padroesAtuais.lote.alturaCorpoLinea} mm).
-                      {!padroesCompletos ? '' : (
-                        <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoPadroes('editar')}>alterar</Button>
-                      )}
-                    </p>
-                    <p>Valem só para a tabela e para o desenho dos produtos dela nos orçamentos — na Calculadora você digita todas as medidas.</p>
-                  </div>
-                  {totalAntigos > 0 && (
-                    <label className="flex items-start gap-2 pt-2 text-xs cursor-pointer">
-                      <Checkbox checked={apagarAntigos} onCheckedChange={(v) => setApagarAntigos(v === true)} className="mt-0.5" />
-                      <span>
-                        Apagar também os itens antigos de coifa ao gerar:{' '}
-                        {antigos?.lxpxa ? `${antigos.lxpxa} em formato LxPxA (Cozinha)` : ''}
-                        {antigos?.lxpxa && antigos?.churrasqueira ? ' e ' : ''}
-                        {antigos?.churrasqueira ? `${antigos.churrasqueira} da lista antiga de Churrasqueira` : ''}.
-                      </span>
-                    </label>
-                  )}
-                </CardHeader>
-                <CardFooter className="flex flex-col items-stretch gap-2">
-                  <Button type="button" variant="secondary" disabled={generating} onClick={handleGeneratePriceTable}>
-                    {generating ? 'Gerando...' : 'Gerar Tabela de Preços — Coifas'}
-                  </Button>
-                  {generateSummary && <p className="text-xs text-muted-foreground text-center">{generateSummary}</p>}
-                </CardFooter>
-              </Card>
+              <EmissaoTabelaCoifas
+                parametros={ref?.parametros ?? {}}
+                onParametrosSalvos={(novos) => setRef((old) => (old ? { ...old, parametros: { ...old.parametros, ...novos } } : old))}
+              />
             </form>
           </Form>
         </ScrollArea>
@@ -831,15 +727,16 @@ export default function CostCalculatorPage() {
                   height={Number(watchedHeight) || 0}
                   tetoWidth={Number(watchedTetoWidth) || undefined}
                   tetoDepth={Number(watchedTetoDepth) || undefined}
-                  carenagemWidth={Number(watchedCarenagemWidth) || undefined}
-                  carenagemDepth={Number(watchedCarenagemDepth) || undefined}
-                  carenagemHeight={Number(watchedCarenagemHeight) || undefined}
+                  carenagemWidth={mostrarCarenagem ? Number(watchedCarenagemWidth) || undefined : undefined}
+                  carenagemDepth={mostrarCarenagem ? Number(watchedCarenagemDepth) || undefined : undefined}
+                  carenagemHeight={mostrarCarenagem ? Number(watchedCarenagemHeight) || undefined : undefined}
                   mount={watchedInstalacao}
                   qtdLampadas={qtdLampadasEfetiva}
                   qtdBotoes={qtdBotoesEfetiva}
                   controle={tipoControle}
                   posicaoLampadas={watchedPosicaoLampadas}
                   acabamento={watchedAcabamento}
+                  posicaoComando={watchedPosicaoComando}
                   material={watchedMaterial}
                   filtro={watchedFiltro}
                   coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}
@@ -935,95 +832,6 @@ export default function CostCalculatorPage() {
           </Card>
         </ScrollArea>
       </div>
-      <Dialog open={padroesDialog !== null} onOpenChange={(open) => { if (!open && !salvandoPadroes) setPadroesDialog(null); }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Medidas padrão da Tabela de Preços</DialogTitle>
-            <DialogDescription>
-              A tabela calcula todas as Piramidais e Línea de 1000 a 3000mm com estas medidas. Sem elas, a chapa do
-              teto e a carenagem não entram no custo e o preço sai abaixo do real. Informe uma vez — fica salvo (dá pra
-              mudar depois aqui ou na Memória de Cálculos). Na Calculadora, você continua digitando tudo.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Corpo das coifas (mm)</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="lote-prof" className="text-xs">Profundidade</Label>
-                  <Input id="lote-prof" type="number" value={pad.loteP} onChange={e => setPad(v => ({ ...v, loteP: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="lote-alt" className="text-xs">Altura Box/Piramidal</Label>
-                  <Input id="lote-alt" type="number" value={pad.loteA} onChange={e => setPad(v => ({ ...v, loteA: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="lote-corpo" className="text-xs">Corpo da Línea</Label>
-                  <Input id="lote-corpo" type="number" value={pad.loteC} onChange={e => setPad(v => ({ ...v, loteC: e.target.value }))} />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Valem para todas as medidas da tabela (1000 a 3000). Mudar a profundidade muda os preços.</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Teto da Piramidal (mm)</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="teto-largura" className="text-xs">Largura</Label>
-                  <Input id="teto-largura" type="number" min={TETO_MIN} max={TETO_MAX} value={pad.tetoL} onChange={e => setPad(v => ({ ...v, tetoL: e.target.value }))} autoFocus />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="teto-profundidade" className="text-xs">Profundidade</Label>
-                  <Input id="teto-profundidade" type="number" min={TETO_MIN} max={TETO_MAX} value={pad.tetoP} onChange={e => setPad(v => ({ ...v, tetoP: e.target.value }))} />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Carenagem da Línea (mm)</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="car-largura" className="text-xs">Largura</Label>
-                  <Input id="car-largura" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carL} onChange={e => setPad(v => ({ ...v, carL: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="car-profundidade" className="text-xs">Profundidade</Label>
-                  <Input id="car-profundidade" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carP} onChange={e => setPad(v => ({ ...v, carP: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="car-altura" className="text-xs">Altura</Label>
-                  <Input id="car-altura" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carA} onChange={e => setPad(v => ({ ...v, carA: e.target.value }))} />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Só a altura muda o preço; largura e profundidade são do desenho.</p>
-            </div>
-          </div>
-          {!padroesCompletos && (
-            <p className="text-xs text-muted-foreground">Valores sugeridos a partir dos exemplos do Levi (teto 500 × 500; carenagem 320 × 300 × 1000). Confirme ou ajuste.</p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={salvandoPadroes} onClick={() => setPadroesDialog(null)}>Cancelar</Button>
-            <Button type="button" disabled={salvandoPadroes} onClick={salvarPadroes}>
-              {salvandoPadroes ? 'Salvando...' : padroesDialog === 'gerar' ? 'Salvar e gerar tabela' : 'Salvar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <AlertDialog open={confirmarApagar} onOpenChange={setConfirmarApagar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Apagar os itens antigos de coifa?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Serão apagados {antigos?.lxpxa ?? 0} produto(s) de Cozinha em formato LxPxA e {antigos?.churrasqueira ?? 0} da lista antiga
-              de Churrasqueira, e em seguida a tabela é gerada. Não dá para desfazer. Orçamentos já feitos mantêm nome, medida e preço,
-              mas os itens escolhidos pelo catálogo perdem o vínculo com o produto: na Produção podem aparecer como &quot;Sem categoria&quot;
-              e o material deles deixa de poder ser trocado no orçamento.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => gerarTabela(true)}>Apagar e gerar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <Dialog open={orcDialog} onOpenChange={setOrcDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
