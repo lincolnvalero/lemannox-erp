@@ -15,7 +15,10 @@ import {
   getCalculatorReferenceData, updateParametrosGlobaisRows,
 } from '@/app/(dashboard)/calculator/actions';
 import type { MaoDeObraRow, IluminacaoRow } from '@/lib/types';
-import { CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE } from '@/lib/coifa-padroes';
+import {
+  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE,
+  CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA,
+} from '@/lib/coifa-padroes';
 
 // ── Mão de Obra ──────────────────────────────────────────────────────────
 
@@ -305,6 +308,7 @@ const GRUPOS_PARAMETROS: { titulo: string; chaves: string[] }[] = [
   { titulo: 'Friso decorativo', chaves: ['preco_friso_por_cm'] },
   { titulo: 'Filtro inercial (fórmula: constante ÷ 0,7 × L×P ÷ 1.000.000)', chaves: ['filtro_constante_430', 'filtro_constante_304', 'filtro_constante_aluminio', 'filtro_coletor_gordura_por_cm'] },
   { titulo: 'Tabela de Preços — teto padrão da Piramidal (mm)', chaves: [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE] },
+  { titulo: 'Tabela de Preços — carenagem padrão da Línea (mm)', chaves: [CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA] },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
@@ -317,6 +321,9 @@ const PARAM_LABELS: Record<string, string> = {
   filtro_coletor_gordura_por_cm: 'Coletor de gordura — acréscimo por cm de largura (R$)',
   [CHAVE_TETO_LARGURA]: 'Largura do teto (mm)',
   [CHAVE_TETO_PROFUNDIDADE]: 'Profundidade do teto (mm)',
+  [CHAVE_CARENAGEM_LINEA_LARGURA]: 'Largura da carenagem (mm)',
+  [CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]: 'Profundidade da carenagem (mm)',
+  [CHAVE_CARENAGEM_LINEA_ALTURA]: 'Altura da carenagem (mm) — é a que muda o preço',
 };
 
 function ParametrosSection() {

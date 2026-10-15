@@ -65,6 +65,7 @@ import { CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 // itens (concluído/entregue), o id e as medidas da coifa vindas da Calculadora.
 const quoteItemSchema = z.object({
   productId: z.string(),
+  category: z.string().optional(),
   name: z.string().min(1, 'A descrição é obrigatória.'),
   measurement: z.string(),
   quantity: z.coerce.number().min(0.01, 'Quantidade deve ser maior que 0.'),
@@ -502,6 +503,9 @@ export default function QuoteEditorPage() {
             const tax = total * 0.045;
             append({
                 productId: product.id,
+                // Guarda a categoria no próprio item: a Produção e os relatórios
+                // não dependem mais do produto continuar no catálogo.
+                category: product.category,
                 name: product.model,
                 measurement: product.measurement,
                 quantity: 1,

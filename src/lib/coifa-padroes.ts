@@ -11,8 +11,29 @@ export const LOTE_ALTURA = 600;
  * no preço da Línea — só deixa o desenho realista.
  */
 export const LOTE_ALTURA_CORPO_LINEA = 100;
-/** Altura da carenagem da Línea na tabela (essa entra no preço). */
-export const LOTE_ALTURA_CARENAGEM = 600;
+
+/**
+ * Linhas da Tabela de Preços (modelo + instalação → nome do produto). É a
+ * lista que o gerador usa e que o orçamento usa para reconhecer um produto
+ * gerado pela tabela e desenhá-lo.
+ */
+export type ModeloCoifaTabela = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
+export type LinhaTabela = { modelo: ModeloCoifaTabela; instalacao: 'Parede' | 'Ilha'; modelLabel: string };
+export const LINHAS_TABELA: LinhaTabela[] = [
+  { modelo: 'Box', instalacao: 'Parede', modelLabel: 'Box de Parede' },
+  { modelo: 'Box', instalacao: 'Ilha', modelLabel: 'Box Ilha' },
+  { modelo: 'Piramidal', instalacao: 'Parede', modelLabel: 'Piramidal de Parede' },
+  { modelo: 'Piramidal', instalacao: 'Ilha', modelLabel: 'Piramidal Ilha' },
+  { modelo: 'Linea', instalacao: 'Parede', modelLabel: 'Línea' },
+  { modelo: 'Tube', instalacao: 'Parede', modelLabel: 'Tube' },
+];
+export const CATEGORIA_COIFA_COZINHA = 'Coifa de Cozinha';
+export const CATEGORIA_COIFA_CHURRASQUEIRA = 'Coifa de Churrasqueira';
+
+/** Texto da coluna "Medida" de uma coifa calculada na Calculadora. */
+export function formatarMedidaCoifa(modelo: ModeloCoifaTabela, width: number, depth: number, height: number): string {
+  return modelo === 'Tube' ? `Ø500 x ${height}mm` : `${width}x${depth}x${height}mm`;
+}
 
 /** Chaves em parametros_globais do teto padrão da Piramidal na tabela. */
 export const CHAVE_TETO_LARGURA = 'piramidal_teto_largura_padrao';
@@ -21,6 +42,17 @@ export const CHAVE_TETO_PROFUNDIDADE = 'piramidal_teto_profundidade_padrao';
 /** Faixa aceita para o teto padrão (mm) — evita digitação absurda. */
 export const TETO_MIN = 100;
 export const TETO_MAX = 2000;
+
+/**
+ * Carenagem padrão da Línea na Tabela de Preços (L × P × A, mm). Só a altura
+ * entra no preço; largura e profundidade são do desenho. Na Calculadora
+ * individual não há padrão — tudo é digitado.
+ */
+export const CHAVE_CARENAGEM_LINEA_LARGURA = 'linea_carenagem_largura_padrao';
+export const CHAVE_CARENAGEM_LINEA_PROFUNDIDADE = 'linea_carenagem_profundidade_padrao';
+export const CHAVE_CARENAGEM_LINEA_ALTURA = 'linea_carenagem_altura_padrao';
+export const CARENAGEM_MIN = 100;
+export const CARENAGEM_MAX = 3000;
 
 /**
  * Chave da sessionStorage usada para levar a coifa calculada da Calculadora
@@ -34,4 +66,25 @@ export function tetoPadraoDefinido(parametros: Record<string, number | undefined
   const profundidade = Number(parametros[CHAVE_TETO_PROFUNDIDADE]);
   if (!(largura >= TETO_MIN && largura <= TETO_MAX) || !(profundidade >= TETO_MIN && profundidade <= TETO_MAX)) return null;
   return { largura, profundidade };
+}
+
+const dentro = (v: number, min: number, max: number) => v >= min && v <= max;
+
+export function carenagemLineaPadraoDefinida(
+  parametros: Record<string, number | undefined>,
+): { largura: number; profundidade: number; altura: number } | null {
+  const largura = Number(parametros[CHAVE_CARENAGEM_LINEA_LARGURA]);
+  const profundidade = Number(parametros[CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]);
+  const altura = Number(parametros[CHAVE_CARENAGEM_LINEA_ALTURA]);
+  if (!dentro(largura, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(profundidade, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(altura, CARENAGEM_MIN, CARENAGEM_MAX)) return null;
+  return { largura, profundidade, altura };
+}
+
+/** Todos os padrões que a Tabela de Preços precisa antes de ser gerada. */
+export type PadroesTabela = {
+  teto: { largura: number; profundidade: number } | null;
+  carenagemLinea: { largura: number; profundidade: number; altura: number } | null;
+};
+export function padroesTabelaDefinidos(parametros: Record<string, number | undefined>): PadroesTabela {
+  return { teto: tetoPadraoDefinido(parametros), carenagemLinea: carenagemLineaPadraoDefinida(parametros) };
 }

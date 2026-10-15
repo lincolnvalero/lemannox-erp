@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Quote, IluminacaoRow } from "@/lib/types";
+import { getProducts } from "@/app/(dashboard)/products/actions";
 import { getNfeSettings } from "@/app/actions/nfe";
-import { getIluminacao, getTetoPadraoPiramidal } from "@/app/(dashboard)/calculator/actions";
+import { getIluminacao, getPadroesTabela } from "@/app/(dashboard)/calculator/actions";
 import dynamic from "next/dynamic";
 import type { CoifaViewer3DHandle } from "@/components/dashboard/coifa-viewer-3d";
 
@@ -13,7 +14,8 @@ const CoifaViewer3D = dynamic(
   () => import("@/components/dashboard/coifa-viewer-3d").then((m) => m.CoifaViewer3D),
   { ssr: false, loading: () => <div className="h-[280px] rounded bg-gray-100 animate-pulse" /> },
 );
-import { coifaParamsFromQuoteItem, type CoifaItemParams } from "@/lib/coifa-viewer-from-item";
+import { coifaParamsFromQuoteItem, type CoifaItemParams, type ProdutoCatalogo } from "@/lib/coifa-viewer-from-item";
+import { LINHAS_TABELA, type PadroesTabela } from "@/lib/coifa-padroes";
 import { kitIluminacaoPadrao } from "@/lib/coifa-calculator";
 
 interface Props {
@@ -48,42 +50,57 @@ export function QuotePreview({ quote }: Props) {
     });
   }, []);
 
-  // Coifas do orçamento que dá pra desenhar em 3D (uma por modelo+medida, sem
+  // Itens de catálogo só são desenhados se o produto ainda existir e bater com
+  // o item (modelo e medida) — essa é a verificação que impede um desenho
+  // diferente do que está escrito no orçamento. Por isso buscamos os produtos
+  // e os padrões da tabela, mas só quando o orçamento tem algum item que pode
+  // ser de coifa da tabela.
+  const temCandidatoCatalogo = useMemo(
+    () => quote.items.some((i) => !i.coifaParams && i.productId && LINHAS_TABELA.some((l) => l.modelLabel === (i.name ?? "").trim())),
+    [quote.items],
+  );
+  const [produtos, setProdutos] = useState<Map<string, ProdutoCatalogo> | null>(null);
+  const [padroes, setPadroes] = useState<PadroesTabela | null>(null);
+  useEffect(() => {
+    if (!temCandidatoCatalogo) return;
+    getProducts().then((r) => {
+      if (r.success && r.products) {
+        setProdutos(new Map(r.products.map((p) => [p.id, { category: p.category, model: p.model, measurement: p.measurement }])));
+      }
+    });
+    getPadroesTabela().then(setPadroes);
+  }, [temCandidatoCatalogo]);
+
+  // Coifas do orçamento que dá pra desenhar em 3D (uma por item distinto, sem
   // repetir — cada visualizador abre um contexto WebGL, que o navegador limita).
+  // Item que não passa na verificação fica sem desenho (melhor nada que errado).
   const coifas = useMemo(() => {
     const unicos = new Map<string, { key: string; label: string; params: CoifaItemParams }>();
     quote.items.forEach((item) => {
-      const params = coifaParamsFromQuoteItem(item);
+      const params = coifaParamsFromQuoteItem(item, { produtos, padroes });
       if (!params) return;
       // Item da Calculadora: chave pelas medidas exatas (dois itens com o
       // mesmo nome podem ter tetos/carenagens diferentes).
-      const key = params.exato ? JSON.stringify(item.coifaParams) : `${item.name}|${item.measurement}`;
+      const key = params.exato ? JSON.stringify(item.coifaParams) : `${item.productId}|${item.name}|${item.measurement}`;
       if (!unicos.has(key)) {
         unicos.set(key, { key, label: [item.name, item.measurement].filter(Boolean).join(" – "), params });
       }
     });
     return Array.from(unicos.values());
-  }, [quote.items]);
+  }, [quote.items, produtos, padroes]);
   // Cada desenho abre um contexto WebGL e o navegador limita (~16). Acima do
   // limite, os demais itens continuam no orçamento, só sem o desenho.
   const MAX_DESENHOS = 8;
   const coifasDesenhadas = coifas.slice(0, MAX_DESENHOS);
 
-  // Itens de catálogo não guardam o kit nem o teto: buscamos a tabela de
-  // iluminação (quantidade de lâmpadas) e o teto padrão da Piramidal (o
-  // mesmo usado no preço da Tabela de Preços). Itens da Calculadora já trazem tudo.
+  // Itens de catálogo não guardam o kit: buscamos a tabela de iluminação para
+  // saber a quantidade padrão de lâmpadas. Itens da Calculadora já trazem tudo.
   const [iluminacao, setIluminacao] = useState<IluminacaoRow[]>([]);
-  const [tetoPadrao, setTetoPadrao] = useState<{ largura: number; profundidade: number } | null>(null);
   const precisaReferencia = coifas.some((c) => !c.params.exato);
-  const temPiramidalCatalogo = coifas.some((c) => !c.params.exato && c.params.modelo === "Piramidal");
   useEffect(() => {
     if (!precisaReferencia) return;
     getIluminacao().then((r) => { if (r.success && r.rows) setIluminacao(r.rows); });
   }, [precisaReferencia]);
-  useEffect(() => {
-    if (!temPiramidalCatalogo) return;
-    getTetoPadraoPiramidal().then(setTetoPadrao);
-  }, [temPiramidalCatalogo]);
 
   // Na impressão (botão do sistema ou Ctrl+P), o canvas 3D é trocado por uma
   // imagem tirada do ângulo atual — canvas WebGL não sai confiável no PDF.
@@ -227,9 +244,6 @@ export function QuotePreview({ quote }: Props) {
                       { modelo: viewerParams.modelo, width: viewerParams.width, tipoAplicacao, tipoInstalacao: viewerParams.mount, controle: viewerParams.controle },
                       { tabelaIluminacao: iluminacao },
                     );
-                const teto = !exato && viewerParams.modelo === "Piramidal" && tetoPadrao
-                  ? { tetoWidth: tetoPadrao.largura, tetoDepth: tetoPadrao.profundidade }
-                  : {};
                 return (
                   <figure key={c.key} className="coifa-figure border border-gray-200 rounded p-2">
                     <div className="no-print">
@@ -239,7 +253,6 @@ export function QuotePreview({ quote }: Props) {
                         embedded
                         onViewChange={() => atualizarImagem(c.key)}
                         {...viewerParams}
-                        {...teto}
                         qtdLampadas={kit?.qtdLampadas}
                         qtdBotoes={kit?.qtdBotoes}
                       />

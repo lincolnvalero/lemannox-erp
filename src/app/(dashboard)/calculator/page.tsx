@@ -34,9 +34,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCalculatorReferenceData, generatePriceTableCoifas, salvarTetoPadraoPiramidal } from './actions';
+import { getCalculatorReferenceData, generatePriceTableCoifas, salvarPadroesTabela, contarAntigosCoifas } from './actions';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX, tetoPadraoDefinido, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
+import {
+  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
+  CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA, CARENAGEM_MIN, CARENAGEM_MAX,
+  padroesTabelaDefinidos, formatarMedidaCoifa, CHAVE_ITEM_PENDENTE_ORCAMENTO,
+} from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { planejarFuros, resumoFuros } from '@/lib/coifa-furos';
 import { useToast } from '@/hooks/use-toast';
@@ -114,58 +119,89 @@ export default function CostCalculatorPage() {
   const [generateSummary, setGenerateSummary] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Teto padrão da Piramidal: obrigatório pra gerar a Tabela de Preços, mas
-  // só é pedido uma vez (quando ainda não existe) — depois fica salvo e pode
-  // ser alterado pelo link no próprio card ou na Memória de Cálculos.
-  const [tetoDialog, setTetoDialog] = useState<null | 'gerar' | 'editar'>(null);
-  const [tetoLargura, setTetoLargura] = useState('');
-  const [tetoProfundidade, setTetoProfundidade] = useState('');
-  const [salvandoTeto, setSalvandoTeto] = useState(false);
-  const tetoAtual = ref ? tetoPadraoDefinido(ref.parametros) : null;
+  // Padrões da Tabela de Preços: teto da Piramidal e carenagem da Línea.
+  // São obrigatórios pra gerar a tabela (sem eles essas peças entrariam com
+  // custo zero), mas só são pedidos uma vez — depois ficam salvos e podem ser
+  // alterados pelo link no próprio card ou na Memória de Cálculos. Na
+  // Calculadora individual não há padrão: tudo é digitado.
+  const [padroesDialog, setPadroesDialog] = useState<null | 'gerar' | 'editar'>(null);
+  const [pad, setPad] = useState({ tetoL: '', tetoP: '', carL: '', carP: '', carA: '' });
+  const [salvandoPadroes, setSalvandoPadroes] = useState(false);
+  const padroesAtuais = ref ? padroesTabelaDefinidos(ref.parametros) : { teto: null, carenagemLinea: null };
+  const padroesCompletos = !!padroesAtuais.teto && !!padroesAtuais.carenagemLinea;
 
-  const abrirDialogoTeto = (modo: 'gerar' | 'editar') => {
-    // Sugestão inicial = exemplo da planilha original (Piramidal 1200 com teto 500×500).
-    setTetoLargura(String(tetoAtual?.largura ?? 500));
-    setTetoProfundidade(String(tetoAtual?.profundidade ?? 500));
-    setTetoDialog(modo);
+  const abrirDialogoPadroes = (modo: 'gerar' | 'editar') => {
+    // Sugestões iniciais = exemplos do Levi (teto 500×500 da planilha; carenagem 320×300×1000).
+    setPad({
+      tetoL: String(padroesAtuais.teto?.largura ?? 500),
+      tetoP: String(padroesAtuais.teto?.profundidade ?? 500),
+      carL: String(padroesAtuais.carenagemLinea?.largura ?? 320),
+      carP: String(padroesAtuais.carenagemLinea?.profundidade ?? 300),
+      carA: String(padroesAtuais.carenagemLinea?.altura ?? 1000),
+    });
+    setPadroesDialog(modo);
   };
 
-  const gerarTabela = async () => {
+  // Itens antigos de coifa no banco (a limpeza é opcional, nunca automática).
+  const [antigos, setAntigos] = useState<{ lxpxa: number; churrasqueira: number } | null>(null);
+  const [apagarAntigos, setApagarAntigos] = useState(false);
+  const [confirmarApagar, setConfirmarApagar] = useState(false);
+  useEffect(() => { contarAntigosCoifas().then(setAntigos); }, []);
+  const totalAntigos = (antigos?.lxpxa ?? 0) + (antigos?.churrasqueira ?? 0);
+
+  const gerarTabela = async (apagar: boolean) => {
     setGenerating(true);
     setGenerateSummary(null);
-    const result = await generatePriceTableCoifas();
+    const result = await generatePriceTableCoifas({ apagarAntigos: apagar });
     setGenerating(false);
     if (result.success) {
-      const summary = `${result.created ?? 0} produto(s) criado(s), ${result.updated ?? 0} atualizado(s), ${result.removed ?? 0} antigo(s) removido(s).`;
+      const summary = `${result.created ?? 0} produto(s) criado(s), ${result.updated ?? 0} atualizado(s)${apagar ? `, ${result.removed ?? 0} antigo(s) removido(s)` : ''}.`;
       setGenerateSummary(result.errors ? `${summary} ${result.errors.length} com erro — veja o console.` : summary);
       if (result.errors) console.error('Erros na geração da tabela de preços:', result.errors);
       toast({ title: 'Tabela de Preços gerada!', description: summary });
-    } else if (result.precisaTetoPadrao) {
-      abrirDialogoTeto('gerar');
+      if (apagar) { setApagarAntigos(false); contarAntigosCoifas().then(setAntigos); }
+    } else if (result.precisaPadroesTabela) {
+      abrirDialogoPadroes('gerar');
     } else {
       toast({ variant: 'destructive', title: 'Erro ao gerar tabela', description: result.error });
     }
   };
 
   const handleGeneratePriceTable = () => {
-    if (!tetoAtual) { abrirDialogoTeto('gerar'); return; }
-    gerarTabela();
+    if (!padroesCompletos) { abrirDialogoPadroes('gerar'); return; }
+    if (apagarAntigos && totalAntigos > 0) { setConfirmarApagar(true); return; }
+    gerarTabela(false);
   };
 
-  const salvarTeto = async () => {
-    const largura = Number(tetoLargura), profundidade = Number(tetoProfundidade);
-    setSalvandoTeto(true);
-    const result = await salvarTetoPadraoPiramidal(largura, profundidade);
-    setSalvandoTeto(false);
+  const salvarPadroes = async () => {
+    const n = (v: string) => Number(v);
+    const teto = { largura: n(pad.tetoL), profundidade: n(pad.tetoP) };
+    const carenagemLinea = { largura: n(pad.carL), profundidade: n(pad.carP), altura: n(pad.carA) };
+    setSalvandoPadroes(true);
+    const result = await salvarPadroesTabela(teto, carenagemLinea);
+    setSalvandoPadroes(false);
     if (!result.success) {
-      toast({ variant: 'destructive', title: 'Teto não salvo', description: result.error });
+      toast({ variant: 'destructive', title: 'Padrões não salvos', description: result.error });
       return;
     }
-    setRef(r => r ? { ...r, parametros: { ...r.parametros, [CHAVE_TETO_LARGURA]: Math.round(largura), [CHAVE_TETO_PROFUNDIDADE]: Math.round(profundidade) } } : r);
-    const modo = tetoDialog;
-    setTetoDialog(null);
-    toast({ title: 'Teto padrão salvo', description: `${Math.round(largura)} × ${Math.round(profundidade)} mm` });
-    if (modo === 'gerar') gerarTabela();
+    const r = Math.round;
+    setRef(old => old ? {
+      ...old,
+      parametros: {
+        ...old.parametros,
+        [CHAVE_TETO_LARGURA]: r(teto.largura), [CHAVE_TETO_PROFUNDIDADE]: r(teto.profundidade),
+        [CHAVE_CARENAGEM_LINEA_LARGURA]: r(carenagemLinea.largura),
+        [CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]: r(carenagemLinea.profundidade),
+        [CHAVE_CARENAGEM_LINEA_ALTURA]: r(carenagemLinea.altura),
+      },
+    } : old);
+    const modo = padroesDialog;
+    setPadroesDialog(null);
+    toast({ title: 'Padrões da tabela salvos' });
+    if (modo === 'gerar') {
+      if (apagarAntigos && totalAntigos > 0) setConfirmarApagar(true);
+      else gerarTabela(false);
+    }
   };
 
   const form = useForm<FormValues>({
@@ -350,7 +386,7 @@ export default function CostCalculatorPage() {
     const partes = results.descricaoAuto.split(', ');
     const nome = (partes.length > 1 ? partes.slice(0, -1) : partes).join(', ').replace('Coifa Linea', 'Coifa Línea')
       + (i.tipoInstalacao === 'Ilha' ? ', instalação em Ilha' : '');
-    const medida = i.modelo === 'Tube' ? `Ø500 x ${i.height}mm` : `${i.width}x${i.depth}x${i.height}mm`;
+    const medida = formatarMedidaCoifa(i.modelo, i.width, i.depth, i.height);
     const coifaParams: CoifaParamsSalvos = {
       modelo: i.modelo, width: i.width, depth: i.depth, height: i.height,
       tetoWidth: i.tetoWidth, tetoDepth: i.tetoDepth,
@@ -695,17 +731,37 @@ export default function CostCalculatorPage() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Emissão da Tabela de Preços</CardTitle>
                   <CardDescription>
-                    Gera os produtos de Coifas de Cozinha e de Churrasqueira (Box de Parede, Box Ilha, Piramidal de Parede, Piramidal Ilha, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Substitui os valores antigos dessas coifas: os itens em formato LxPxA são removidos e a lista de Churrasqueira é refeita.
+                    Gera os produtos de Coifas de Cozinha e de Churrasqueira (Box de Parede, Box Ilha, Piramidal de Parede, Piramidal Ilha, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo. Produtos com a mesma categoria, modelo e medida são atualizados; os demais são criados. Nada é apagado, a menos que você marque a opção abaixo.
                   </CardDescription>
-                  <p className="text-xs text-muted-foreground pt-1">
-                    Teto padrão da Piramidal:{' '}
-                    {tetoAtual
-                      ? <span className="font-medium text-foreground">{tetoAtual.largura} × {tetoAtual.profundidade} mm</span>
-                      : <span className="font-medium text-amber-600">não definido (será pedido ao gerar)</span>}
-                    {tetoAtual && (
-                      <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoTeto('editar')}>alterar</Button>
-                    )}
-                  </p>
+                  <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
+                    <p>
+                      Teto padrão da Piramidal:{' '}
+                      {padroesAtuais.teto
+                        ? <span className="font-medium text-foreground">{padroesAtuais.teto.largura} × {padroesAtuais.teto.profundidade} mm</span>
+                        : <span className="font-medium text-amber-600">não definido (será pedido ao gerar)</span>}
+                    </p>
+                    <p>
+                      Carenagem padrão da Línea:{' '}
+                      {padroesAtuais.carenagemLinea
+                        ? <span className="font-medium text-foreground">{padroesAtuais.carenagemLinea.largura} × {padroesAtuais.carenagemLinea.profundidade} × {padroesAtuais.carenagemLinea.altura} mm</span>
+                        : <span className="font-medium text-amber-600">não definida (será pedida ao gerar)</span>}
+                      {padroesCompletos && (
+                        <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoPadroes('editar')}>alterar</Button>
+                      )}
+                    </p>
+                    <p>Valem só para a tabela — na Calculadora você digita todas as medidas.</p>
+                  </div>
+                  {totalAntigos > 0 && (
+                    <label className="flex items-start gap-2 pt-2 text-xs cursor-pointer">
+                      <Checkbox checked={apagarAntigos} onCheckedChange={(v) => setApagarAntigos(v === true)} className="mt-0.5" />
+                      <span>
+                        Apagar também os itens antigos de coifa ao gerar:{' '}
+                        {antigos?.lxpxa ? `${antigos.lxpxa} em formato LxPxA (Cozinha)` : ''}
+                        {antigos?.lxpxa && antigos?.churrasqueira ? ' e ' : ''}
+                        {antigos?.churrasqueira ? `${antigos.churrasqueira} da lista antiga de Churrasqueira` : ''}.
+                      </span>
+                    </label>
+                  )}
                 </CardHeader>
                 <CardFooter className="flex flex-col items-stretch gap-2">
                   <Button type="button" variant="secondary" disabled={generating} onClick={handleGeneratePriceTable}>
@@ -844,37 +900,77 @@ export default function CostCalculatorPage() {
           </Card>
         </ScrollArea>
       </div>
-      <Dialog open={tetoDialog !== null} onOpenChange={(open) => { if (!open && !salvandoTeto) setTetoDialog(null); }}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={padroesDialog !== null} onOpenChange={(open) => { if (!open && !salvandoPadroes) setPadroesDialog(null); }}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Teto padrão da Piramidal</DialogTitle>
+            <DialogTitle>Medidas padrão da Tabela de Preços</DialogTitle>
             <DialogDescription>
-              A Tabela de Preços calcula todas as Piramidais de 1000 a 3000mm com um teto padrão. Sem ele, a chapa do
-              teto não entra no custo e o preço sai abaixo do real. Informe uma vez — fica salvo (dá pra mudar depois
-              aqui ou na Memória de Cálculos).
+              A tabela calcula todas as Piramidais e Línea de 1000 a 3000mm com estas medidas. Sem elas, a chapa do
+              teto e a carenagem não entram no custo e o preço sai abaixo do real. Informe uma vez — fica salvo (dá pra
+              mudar depois aqui ou na Memória de Cálculos). Na Calculadora, você continua digitando tudo.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="teto-largura">Largura do teto (mm)</Label>
-              <Input id="teto-largura" type="number" min={TETO_MIN} max={TETO_MAX} value={tetoLargura} onChange={e => setTetoLargura(e.target.value)} autoFocus />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Teto da Piramidal (mm)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="teto-largura" className="text-xs">Largura</Label>
+                  <Input id="teto-largura" type="number" min={TETO_MIN} max={TETO_MAX} value={pad.tetoL} onChange={e => setPad(v => ({ ...v, tetoL: e.target.value }))} autoFocus />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="teto-profundidade" className="text-xs">Profundidade</Label>
+                  <Input id="teto-profundidade" type="number" min={TETO_MIN} max={TETO_MAX} value={pad.tetoP} onChange={e => setPad(v => ({ ...v, tetoP: e.target.value }))} />
+                </div>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="teto-profundidade">Profundidade do teto (mm)</Label>
-              <Input id="teto-profundidade" type="number" min={TETO_MIN} max={TETO_MAX} value={tetoProfundidade} onChange={e => setTetoProfundidade(e.target.value)} />
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Carenagem da Línea (mm)</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="car-largura" className="text-xs">Largura</Label>
+                  <Input id="car-largura" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carL} onChange={e => setPad(v => ({ ...v, carL: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="car-profundidade" className="text-xs">Profundidade</Label>
+                  <Input id="car-profundidade" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carP} onChange={e => setPad(v => ({ ...v, carP: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="car-altura" className="text-xs">Altura</Label>
+                  <Input id="car-altura" type="number" min={CARENAGEM_MIN} max={CARENAGEM_MAX} value={pad.carA} onChange={e => setPad(v => ({ ...v, carA: e.target.value }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Só a altura muda o preço; largura e profundidade são do desenho.</p>
             </div>
           </div>
-          {!tetoAtual && (
-            <p className="text-xs text-muted-foreground">Sugestão preenchida: 500 × 500 mm, o exemplo da planilha original. Confirme ou ajuste.</p>
+          {!padroesCompletos && (
+            <p className="text-xs text-muted-foreground">Valores sugeridos a partir dos exemplos do Levi (teto 500 × 500; carenagem 320 × 300 × 1000). Confirme ou ajuste.</p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={salvandoTeto} onClick={() => setTetoDialog(null)}>Cancelar</Button>
-            <Button type="button" disabled={salvandoTeto} onClick={salvarTeto}>
-              {salvandoTeto ? 'Salvando...' : tetoDialog === 'gerar' ? 'Salvar e gerar tabela' : 'Salvar'}
+            <Button type="button" variant="outline" disabled={salvandoPadroes} onClick={() => setPadroesDialog(null)}>Cancelar</Button>
+            <Button type="button" disabled={salvandoPadroes} onClick={salvarPadroes}>
+              {salvandoPadroes ? 'Salvando...' : padroesDialog === 'gerar' ? 'Salvar e gerar tabela' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={confirmarApagar} onOpenChange={setConfirmarApagar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar os itens antigos de coifa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Serão apagados {antigos?.lxpxa ?? 0} produto(s) de Cozinha em formato LxPxA e {antigos?.churrasqueira ?? 0} da lista antiga
+              de Churrasqueira, e em seguida a tabela é gerada. Não dá para desfazer. Orçamentos já feitos mantêm nome, medida e preço,
+              mas os itens escolhidos pelo catálogo perdem o vínculo com o produto: na Produção podem aparecer como &quot;Sem categoria&quot;
+              e o material deles deixa de poder ser trocado no orçamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => gerarTabela(true)}>Apagar e gerar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog open={orcDialog} onOpenChange={setOrcDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
