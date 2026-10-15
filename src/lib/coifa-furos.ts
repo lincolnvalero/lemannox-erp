@@ -71,8 +71,9 @@ const MAX_FUROS = 50;
 
 export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const tube = e.modelo === 'Tube';
-  const largura = tube ? 500 : e.width;
-  const profundidade = tube ? 500 : e.depth;
+  const diametroTube = e.width > 0 ? e.width : 500;
+  const largura = tube ? diametroTube : e.width;
+  const profundidade = tube ? diametroTube : e.depth;
 
   // ── Lâmpadas ──────────────────────────────────────────────────────────────
   const nLamp = Math.min(MAX_FUROS, Math.max(0, Math.round(e.qtdLampadas)));
@@ -94,7 +95,7 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const zFileira = profundidade / 2 - banda / 2;
   // Largura útil de uma fileira: a da coifa; na Tube (redonda), 80% da corda.
   const larguraUtil = tube
-    ? 2 * Math.sqrt(Math.max(0, 250 * 250 - zFileira * zFileira)) * 0.8
+    ? 2 * Math.sqrt(Math.max(0, (diametroTube / 2) ** 2 - zFileira * zFileira)) * 0.8
     : largura;
   const maiorFileira = Math.max(nFrente, nFundos, 1);
   const diametroLampada = Math.max(10, Math.min(FURO_PADRAO.lampadaDiametro, larguraUtil / (maiorFileira * 1.5), banda * 0.8));

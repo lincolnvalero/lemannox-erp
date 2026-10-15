@@ -480,7 +480,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     };
 
     const { modelo, depth } = props;
-    const width = modelo === 'Tube' ? 500 : props.width;
+    // Tube: `width` é o diâmetro (500mm quando vem da Calculadora; itens antigos podem ter outro).
+    const width = modelo === 'Tube' ? (props.width > 0 ? props.width : 500) : props.width;
     const height = Math.max(1, props.height);
     const gap = Math.max(width, depth, height) * 0.12;
 
@@ -496,7 +497,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
 
     if (modelo === 'Tube') {
-      const radius = 250; // diâmetro fixo 500mm
+      const radius = width / 2;
       const geo = new THREE.CylinderGeometry(radius, radius, height, 48);
       geo.translate(0, height / 2, 0);
       // Grupos do CylinderGeometry: 0 = lateral (corpo), 1 = topo, 2 = base (tampas).
@@ -509,7 +510,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       modelGroup.add(edgesTube);
       s.edgesObj = edgesTube;
       addDimLine([V(-radius, 0, radius), V(radius, 0, radius)]);
-      addLabel(V(0, -gap * 0.15, radius + gap * 0.2), 'Ø 500');
+      addLabel(V(0, -gap * 0.15, radius + gap * 0.2), `Ø ${fmt(width)}`);
       addDimLine([V(radius, 0, 0), V(radius, height, 0)]);
       addLabel(V(radius + gap * 0.3, height / 2, 0), 'Altura ' + fmt(height));
       // Frisos da Tube: anéis em volta do corpo, na parte de baixo.
