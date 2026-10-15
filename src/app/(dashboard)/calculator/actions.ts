@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase-server';
 import type { CalculatorReferenceData, IluminacaoRow, MaoDeObraRow, ParametrosGlobais, RawMaterial } from '@/lib/types';
 import { getMaterials } from '@/app/(dashboard)/materials/actions';
 import {
-  LOTE_PROFUNDIDADE, LOTE_ALTURA, LOTE_ALTURA_CORPO_LINEA, LINHAS_TABELA,
+  LINHAS_TABELA,
+  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
+  LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA,
   CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
   CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA, CARENAGEM_MIN, CARENAGEM_MAX,
@@ -141,7 +143,7 @@ export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean
     // Sem teto (Piramidal) e sem carenagem (Línea), o custo dessas peças
     // entraria como zero e a tabela sairia abaixo do real — por isso são
     // obrigatórios (checado aqui também, não só na tela).
-    const { teto, carenagemLinea } = padroesTabelaDefinidos(ref.parametros);
+    const { teto, carenagemLinea, lote } = padroesTabelaDefinidos(ref.parametros);
     if (!teto || !carenagemLinea) {
       return { success: false, precisaPadroesTabela: true, error: 'Defina o teto padrão da Piramidal e a carenagem padrão da Línea antes de gerar a tabela.' };
     }
@@ -170,8 +172,8 @@ export async function generatePriceTableCoifas(opcoes: { apagarAntigos?: boolean
               const chapaPadrao = chapaPadraoParaLote(medida);
               const result = calculateCoifa({
                 width: medida,
-                depth: LOTE_PROFUNDIDADE,
-                height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? LOTE_ALTURA_CORPO_LINEA : LOTE_ALTURA,
+                depth: lote.profundidade,
+                height: linha.modelo === 'Tube' ? medida : linha.modelo === 'Linea' ? lote.alturaCorpoLinea : lote.altura,
                 modelo: linha.modelo,
                 tetoWidth: linha.modelo === 'Piramidal' ? teto.largura : undefined,
                 tetoDepth: linha.modelo === 'Piramidal' ? teto.profundidade : undefined,
@@ -263,13 +265,14 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
       .in('chave', [
         CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE,
         CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA,
+        CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
       ]);
     if (error) throw error;
     const params: Record<string, number> = {};
     for (const r of data ?? []) params[r.chave] = Number(r.valor);
     return padroesTabelaDefinidos(params);
   } catch {
-    return { teto: null, carenagemLinea: null };
+    return padroesTabelaDefinidos({});
   }
 }
 
@@ -277,6 +280,7 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
 export async function salvarPadroesTabela(
   teto: { largura: number; profundidade: number },
   carenagemLinea: { largura: number; profundidade: number; altura: number },
+  lote: { profundidade: number; altura: number; alturaCorpoLinea: number },
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const dentro = (v: number, min: number, max: number) => Number.isFinite(v) && v >= min && v <= max;
@@ -286,8 +290,14 @@ export async function salvarPadroesTabela(
     if (!dentro(carenagemLinea.largura, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(carenagemLinea.profundidade, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(carenagemLinea.altura, CARENAGEM_MIN, CARENAGEM_MAX)) {
       return { success: false, error: `Carenagem da Línea: informe largura, profundidade e altura entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };
     }
+    if (!dentro(lote.profundidade, LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX) || !dentro(lote.altura, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX) || !dentro(lote.alturaCorpoLinea, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX)) {
+      return { success: false, error: `Corpo: profundidade ${LOTE_PROFUNDIDADE_MIN}–${LOTE_PROFUNDIDADE_MAX}, altura ${LOTE_ALTURA_MIN}–${LOTE_ALTURA_MAX} e corpo da Línea ${LOTE_CORPO_LINEA_MIN}–${LOTE_CORPO_LINEA_MAX} mm.` };
+    }
     const supabase = await createClient();
     const { error } = await supabase.from('parametros_globais').upsert([
+      { chave: CHAVE_LOTE_PROFUNDIDADE, valor: Math.round(lote.profundidade), descricao: 'Tabela de Preços — profundidade padrão das coifas (mm)' },
+      { chave: CHAVE_LOTE_ALTURA, valor: Math.round(lote.altura), descricao: 'Tabela de Preços — altura padrão de Box e Piramidal (mm)' },
+      { chave: CHAVE_LOTE_ALTURA_CORPO_LINEA, valor: Math.round(lote.alturaCorpoLinea), descricao: 'Tabela de Preços — altura do corpo da Línea (mm)' },
       { chave: CHAVE_TETO_LARGURA, valor: Math.round(teto.largura), descricao: 'Piramidal — largura do teto usada na Tabela de Preços (mm)' },
       { chave: CHAVE_TETO_PROFUNDIDADE, valor: Math.round(teto.profundidade), descricao: 'Piramidal — profundidade do teto usada na Tabela de Preços (mm)' },
       { chave: CHAVE_CARENAGEM_LINEA_LARGURA, valor: Math.round(carenagemLinea.largura), descricao: 'Línea — largura da carenagem usada na Tabela de Preços (mm)' },
@@ -406,6 +416,16 @@ export async function updateParametrosGlobaisRows(rows: { chave: string; valor: 
     const chavesCarenagem = [CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA];
     if (rows.some(r => chavesTeto.includes(r.chave) && !(r.valor >= TETO_MIN && r.valor <= TETO_MAX))) {
       return { success: false, error: `O teto padrão da Piramidal deve ficar entre ${TETO_MIN} e ${TETO_MAX} mm.` };
+    }
+    const faixasLote: Record<string, [number, number]> = {
+      [CHAVE_LOTE_PROFUNDIDADE]: [LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX],
+      [CHAVE_LOTE_ALTURA]: [LOTE_ALTURA_MIN, LOTE_ALTURA_MAX],
+      [CHAVE_LOTE_ALTURA_CORPO_LINEA]: [LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX],
+    };
+    const loteInvalido = rows.find(r => faixasLote[r.chave] && !(r.valor >= faixasLote[r.chave][0] && r.valor <= faixasLote[r.chave][1]));
+    if (loteInvalido) {
+      const [min, max] = faixasLote[loteInvalido.chave];
+      return { success: false, error: `Valor fora da faixa permitida (${min} a ${max} mm).` };
     }
     if (rows.some(r => chavesCarenagem.includes(r.chave) && !(r.valor >= CARENAGEM_MIN && r.valor <= CARENAGEM_MAX))) {
       return { success: false, error: `A carenagem padrão da Línea deve ficar entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };

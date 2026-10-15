@@ -2,7 +2,12 @@
 // usadas pelo gerador (preço) e pelo desenho 3D dos itens de catálogo no
 // orçamento — se mudarem aqui, os dois continuam batendo.
 
-/** Profundidade usada para todos os modelos (exceto Tube) na tabela. */
+/**
+ * Valores iniciais das medidas do corpo na Tabela de Preços — o usuário pode
+ * trocá-los (ver `loteDefinido` e a janela "Medidas padrão da Tabela").
+ *
+ * Profundidade usada para todos os modelos (exceto Tube) na tabela.
+ */
 export const LOTE_PROFUNDIDADE = 700;
 /** Altura usada para Box e Piramidal na tabela. */
 export const LOTE_ALTURA = 600;
@@ -11,6 +16,16 @@ export const LOTE_ALTURA = 600;
  * no preço da Línea — só deixa o desenho realista.
  */
 export const LOTE_ALTURA_CORPO_LINEA = 100;
+
+export const CHAVE_LOTE_PROFUNDIDADE = 'tabela_profundidade_padrao';
+export const CHAVE_LOTE_ALTURA = 'tabela_altura_padrao';
+export const CHAVE_LOTE_ALTURA_CORPO_LINEA = 'linea_corpo_altura_padrao';
+export const LOTE_PROFUNDIDADE_MIN = 300, LOTE_PROFUNDIDADE_MAX = 1500;
+export const LOTE_ALTURA_MIN = 100, LOTE_ALTURA_MAX = 2000;
+export const LOTE_CORPO_LINEA_MIN = 50, LOTE_CORPO_LINEA_MAX = 400;
+
+/** Medidas do corpo usadas na tabela (e no desenho dos produtos dela). */
+export type LoteTabela = { profundidade: number; altura: number; alturaCorpoLinea: number };
 
 /**
  * Linhas da Tabela de Preços (modelo + instalação → nome do produto). É a
@@ -84,7 +99,22 @@ export function carenagemLineaPadraoDefinida(
 export type PadroesTabela = {
   teto: { largura: number; profundidade: number } | null;
   carenagemLinea: { largura: number; profundidade: number; altura: number } | null;
+  /** Sempre definido: se o usuário nunca alterou, valem os valores iniciais. */
+  lote: LoteTabela;
 };
+
+const valorOu = (v: unknown, min: number, max: number, padrao: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= min && n <= max ? n : padrao;
+};
+export function loteDefinido(parametros: Record<string, number | undefined>): LoteTabela {
+  return {
+    profundidade: valorOu(parametros[CHAVE_LOTE_PROFUNDIDADE], LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_PROFUNDIDADE),
+    altura: valorOu(parametros[CHAVE_LOTE_ALTURA], LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_ALTURA),
+    alturaCorpoLinea: valorOu(parametros[CHAVE_LOTE_ALTURA_CORPO_LINEA], LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX, LOTE_ALTURA_CORPO_LINEA),
+  };
+}
+
 export function padroesTabelaDefinidos(parametros: Record<string, number | undefined>): PadroesTabela {
-  return { teto: tetoPadraoDefinido(parametros), carenagemLinea: carenagemLineaPadraoDefinida(parametros) };
+  return { teto: tetoPadraoDefinido(parametros), carenagemLinea: carenagemLineaPadraoDefinida(parametros), lote: loteDefinido(parametros) };
 }

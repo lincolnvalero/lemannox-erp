@@ -43,6 +43,8 @@ export interface CoifaViewer3DProps {
   controle?: TipoControle;
   /** Instalação em Parede: lâmpadas na frente (padrão) ou junto à parede. Na Ilha, metade/metade. */
   posicaoLampadas?: PosicaoLampadas;
+  /** Inox escovado (padrão) ou polido/brilhante. Carbono é sempre pintado. */
+  acabamento?: 'escovado' | 'polido';
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
   material?: string;
   filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
@@ -138,13 +140,68 @@ function makeEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   tex.dispose(); pm.dispose();
   return env;
 }
+// ESCALA_TEXTURA: um "ladrilho" da textura de aço escovado a cada 250mm.
+const ESCALA_TEXTURA = 250;
+
 function geomFromQuads(quads: number[][][]): THREE.BufferGeometry {
   const pos: number[] = [];
-  quads.forEach(q => [0, 1, 2, 0, 2, 3].forEach(i => pos.push(...q[i])));
+  const uv: number[] = [];
+  quads.forEach(q => {
+    // Mapeamento plano pelo eixo dominante da normal: as "escovadas" ficam
+    // sempre na horizontal (u = eixo horizontal da face), como no aço real.
+    const [a, b, c] = q;
+    const n = [
+      (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+      (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+      (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+    ].map(Math.abs);
+    const eixo = n[0] >= n[1] && n[0] >= n[2] ? 0 : n[1] >= n[2] ? 1 : 2;
+    [0, 1, 2, 0, 2, 3].forEach(i => {
+      const p = q[i];
+      pos.push(...p);
+      uv.push(...(eixo === 0 ? [p[2], p[1]] : eixo === 1 ? [p[0], p[2]] : [p[0], p[1]]).map(v => v / ESCALA_TEXTURA));
+    });
+  });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
   return g;
+}
+
+// Textura de aço escovado (fios finos na horizontal), gerada por código.
+function makeEscovadoTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, 256, 256);
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let y = 0; y < 256; y++) {
+    const l = 120 + Math.floor(rnd() * 90);
+    g.fillStyle = `rgb(${l},${l},${l})`; g.fillRect(0, y, 256, 1);
+  }
+  // Fios mais longos/claros por cima, pra quebrar a regularidade.
+  for (let i = 0; i < 140; i++) {
+    const l = 150 + Math.floor(rnd() * 100);
+    g.fillStyle = `rgba(${l},${l},${l},0.35)`;
+    g.fillRect(Math.floor(rnd() * 256), Math.floor(rnd() * 256), 20 + Math.floor(rnd() * 120), 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+// Fundo em degradê claro (mais "vitrine" que o cinza chapado).
+function makeFundoTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+  const g = c.getContext('2d')!;
+  const grd = g.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, '#ffffff'); grd.addColorStop(1, '#dde2e8');
+  g.fillStyle = grd; g.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 type MateriaisCasca = {
@@ -211,6 +268,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     coletorMat: THREE.MeshStandardMaterial;
     hullMeshes: THREE.Mesh[];
     carbono: boolean;
+    escovadoTex: THREE.Texture;
     edgeMat: THREE.LineBasicMaterial;
     dimMat: THREE.LineBasicMaterial;
     lampMat: THREE.MeshStandardMaterial;
@@ -231,7 +289,9 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     if (!host || !labelsEl) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf3f4f6);
+    const fundoTex = makeFundoTexture();
+    const escovadoTex = makeEscovadoTexture();
+    scene.background = fundoTex;
     const persp = new THREE.PerspectiveCamera(40, 1, 10, 100000);
     const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -50000, 50000);
     // Sem WebGL (aceleração desligada, acesso remoto, GPU bloqueada) o
@@ -278,7 +338,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
 
     sceneRef.current = {
       scene, persp, ortho, camera: persp, renderer, modelGroup, dimGroup,
-      metalMat, carbonoMat, chapa22Mat, chapa24Mat, frisoMat, filtroMat, coletorMat, hullMeshes: [], carbono: false,
+      metalMat, carbonoMat, chapa22Mat, chapa24Mat, frisoMat, filtroMat, coletorMat, hullMeshes: [], carbono: false, escovadoTex,
       edgeMat, dimMat, lampMat, btnMat, edgesObj: null, labels: [],
       theta: 0.65, phi: 1.15, radius: 2000, target: new THREE.Vector3(0, 300, 0),
       animId: 0, pending: false, ptrs: new Map(), show, ativo: false,
@@ -437,7 +497,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       modelGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
       dimGroup.traverse(n => { const m = n as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
       [metalMat, carbonoMat, chapa22Mat, chapa24Mat, frisoMat, filtroMat, coletorMat, btnMat, lampMat, edgeMat, dimMat].forEach(m => m.dispose());
-      envTexture.dispose();
+      envTexture.dispose(); fundoTex.dispose(); escovadoTex.dispose();
       renderer.dispose();
       // Libera o contexto WebGL na hora — o navegador só aceita ~16 abertos,
       // e a prévia do orçamento monta/desmonta os visualizadores ao trocar de aba.
@@ -493,6 +553,15 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const partes: Record<Grupo, Quad[]> = { '22': [], '24': [], base: [] };
     s.hullMeshes = [];
     s.carbono = /carbono/i.test(props.material ?? '');
+    // Inox: escovado (fios finos, reflexo difuso) ou polido (espelhado).
+    if (props.acabamento === 'polido') {
+      metalMat.color.setHex(0xdde1e6); metalMat.metalness = 1; metalMat.roughness = 0.12; metalMat.envMapIntensity = 1.35;
+      metalMat.roughnessMap = null; metalMat.bumpMap = null;
+    } else {
+      metalMat.color.setHex(0xc6cbd2); metalMat.metalness = 0.95; metalMat.roughness = 0.62; metalMat.envMapIntensity = 1.1;
+      metalMat.roughnessMap = s.escovadoTex; metalMat.bumpMap = s.escovadoTex; metalMat.bumpScale = 0.35;
+    }
+    metalMat.needsUpdate = true;
     const todas: Quad[] = [];
     let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
 
@@ -500,6 +569,9 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       const radius = width / 2;
       const geo = new THREE.CylinderGeometry(radius, radius, height, 48);
       geo.translate(0, height / 2, 0);
+      // Textura de aço escovado em escala real (u = volta do cilindro, v = altura).
+      const uvT = geo.attributes.uv as THREE.BufferAttribute;
+      for (let i = 0; i < uvT.count; i++) uvT.setXY(i, uvT.getX(i) * Math.PI * width / ESCALA_TEXTURA, uvT.getY(i) * height / ESCALA_TEXTURA);
       // Grupos do CylinderGeometry: 0 = lateral (corpo), 1 = topo, 2 = base (tampas).
       const tube = new THREE.Mesh(geo, metalMat);
       tube.userData.tube = true;
@@ -714,7 +786,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.material, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.material, props.acabamento, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 

@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { CheckCircle2, AlertTriangle, ImageOff, Pencil, Wand2 } from 'lucide-react';
 import type { CoifaParamsSalvos, QuoteItem } from '@/lib/types';
-import { avaliarDesenhoDoItem, sugerirDadosDoItem, type AvaliacaoDesenho } from '@/lib/coifa-viewer-from-item';
+import { avaliarDesenhoDoItem, sugerirDadosDoItem, type AvaliacaoDesenho, type CoifaItemParams } from '@/lib/coifa-viewer-from-item';
+import { formatarMedidaCoifa } from '@/lib/coifa-padroes';
 import { useContextoDesenho } from '@/components/dashboard/use-contexto-desenho';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,8 +88,10 @@ export function CoifaImagensPanel({ items, onChangeItem }: Props) {
                     <Button type="button" size="sm" onClick={() => setEditando(index)}><Wand2 className="mr-1.5 h-3.5 w-3.5" />Informar dados e gerar imagem</Button>
                     <Button type="button" size="sm" variant="ghost" onClick={() => onChangeItem(index, { semDesenho: true })}>Não precisa</Button>
                   </>
-                ) : av.situacao === 'com-imagem' && av.origem === 'manual' ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => setEditando(index)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Editar desenho</Button>
+                ) : av.situacao === 'com-imagem' ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setEditando(index)}>
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />{av.origem === 'manual' ? 'Editar desenho' : 'Personalizar medidas'}
+                  </Button>
                 ) : null}
               </div>
             </div>
@@ -99,9 +102,12 @@ export function CoifaImagensPanel({ items, onChangeItem }: Props) {
       {editando !== null && items[editando] && (
         <DefinirDesenhoDialog
           item={items[editando]}
+          atual={linhas.find((l) => l.index === editando)?.av}
           onClose={() => setEditando(null)}
-          onSave={(params) => {
-            onChangeItem(editando, { coifaParams: { ...params, manual: true }, semDesenho: false });
+          onSave={(params, atualizarMedida) => {
+            const patch: Partial<QuoteItem> = { coifaParams: { ...params, manual: true }, semDesenho: false };
+            if (atualizarMedida) patch.measurement = formatarMedidaCoifa(params.modelo, params.width, params.depth, params.height);
+            onChangeItem(editando, patch);
             setEditando(null);
           }}
         />
@@ -122,6 +128,7 @@ type Form = {
   lamp: string; bot: string;
   controle: 'botoes' | 'botoeira';
   posLamp: 'frente' | 'parede';
+  acabamento: 'escovado' | 'polido';
   filtro: NonNullable<CoifaParamsSalvos['filtro']>;
   coletor: NonNullable<CoifaParamsSalvos['coletor']>;
   frisoF: boolean; frisoLD: boolean; frisoLE: boolean; frisoLinhas: string;
@@ -129,8 +136,20 @@ type Form = {
 
 const txt = (v: number | undefined) => (v && v > 0 ? String(v) : '');
 
-function formInicial(item: QuoteItem): Form {
-  const base: Partial<CoifaParamsSalvos> = item.coifaParams ?? sugerirDadosDoItem(item);
+// Parâmetros de um desenho já existente → valores do formulário.
+function salvosDeParams(p: CoifaItemParams): Partial<CoifaParamsSalvos> {
+  return {
+    modelo: p.modelo, width: p.width, depth: p.depth, height: p.height,
+    tetoWidth: p.tetoWidth, tetoDepth: p.tetoDepth,
+    carenagemWidth: p.carenagemWidth, carenagemDepth: p.carenagemDepth, carenagemHeight: p.carenagemHeight,
+    tipoInstalacao: p.mount, tipoAplicacao: p.tipoAplicacao, material: p.material,
+    filtro: p.filtro, coletor: p.coletor, frisoFrente: p.frisoFrente, frisoLD: p.frisoLD, frisoLE: p.frisoLE, frisoLinhas: p.frisoLinhas,
+    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, acabamento: p.acabamento,
+  };
+}
+
+function formInicial(item: QuoteItem, atual?: AvaliacaoDesenho): Form {
+  const base: Partial<CoifaParamsSalvos> = atual?.params ? salvosDeParams(atual.params) : (item.coifaParams ?? sugerirDadosDoItem(item));
   return {
     modelo: base.modelo ?? '',
     mount: base.tipoInstalacao ?? 'Parede',
@@ -141,6 +160,7 @@ function formInicial(item: QuoteItem): Form {
     lamp: String(base.qtdLampadas ?? 0), bot: String(base.qtdBotoes ?? 0),
     controle: base.controle ?? 'botoeira',
     posLamp: base.posicaoLampadas ?? 'frente',
+    acabamento: base.acabamento ?? 'escovado',
     filtro: base.filtro ?? 'nenhum',
     coletor: base.coletor ?? 'nenhum',
     frisoF: !!base.frisoFrente, frisoLD: !!base.frisoLD, frisoLE: !!base.frisoLE, frisoLinhas: String(base.frisoLinhas ?? 1),
@@ -177,6 +197,7 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
     width: L, depth: tube ? L : P, height: A,
     tipoAplicacao: f.aplicacao, tipoInstalacao: f.mount, material,
     qtdLampadas: lamp, qtdBotoes: bot, controle: f.controle, posicaoLampadas: f.posLamp,
+    acabamento: /inox/i.test(material) ? f.acabamento : undefined,
     filtro: f.filtro, coletor: f.filtro === 'nenhum' ? 'nenhum' : f.coletor,
     frisoFrente: f.frisoF, frisoLD: f.frisoLD, frisoLE: f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
   };
@@ -189,9 +210,11 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
   return { params, erros: [] };
 }
 
-function DefinirDesenhoDialog({ item, onClose, onSave }: { item: QuoteItem; onClose: () => void; onSave: (p: CoifaParamsSalvos) => void }) {
-  const [f, setF] = useState<Form>(() => formInicial(item));
-  useEffect(() => { setF(formInicial(item)); }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteItem; atual?: AvaliacaoDesenho; onClose: () => void; onSave: (p: CoifaParamsSalvos, atualizarMedida: boolean) => void }) {
+  const [f, setF] = useState<Form>(() => formInicial(item, atual));
+  const [atualizarMedida, setAtualizarMedida] = useState(true);
+  // Itens de catálogo não guardam o kit: o usuário precisa confirmar lâmpadas e comando.
+  const kitDesconhecido = atual?.params ? atual.params.qtdLampadas === undefined : false;
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((o) => ({ ...o, [k]: v }));
   const { params, erros } = useMemo(() => montarParametros(f, item.material), [f, item.material]);
   const tube = f.modelo === 'Tube';
@@ -206,7 +229,7 @@ function DefinirDesenhoDialog({ item, onClose, onSave }: { item: QuoteItem; onCl
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Informar dados e gerar a imagem</DialogTitle>
+          <DialogTitle>{atual?.params ? 'Personalizar medidas e imagem' : 'Informar dados e gerar a imagem'}</DialogTitle>
           <DialogDescription>
             {item.name}{item.measurement ? ` — ${item.measurement}` : ''}. Preencha as medidas reais; o desenho é gerado exatamente com o que você informar
             e só vale para este item (material: {item.material || 'não informado'}).
@@ -312,6 +335,15 @@ function DefinirDesenhoDialog({ item, onClose, onSave }: { item: QuoteItem; onCl
               </div>
             )}
 
+            {/inox/i.test(item.material) && (
+              <div className="space-y-1">
+                <Label className="text-xs">Acabamento do inox</Label>
+                <Select value={f.acabamento} onValueChange={(v) => set('acabamento', v as Form['acabamento'])}>
+                  <SelectTrigger className="w-60"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="escovado">Escovado</SelectItem><SelectItem value="polido">Polido (brilhante)</SelectItem></SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
               <span className="text-xs font-medium">Frisos:</span>
               {([['frisoF', 'Frente'], ['frisoLD', 'Lat. direita'], ['frisoLE', 'Lat. esquerda']] as const).map(([k, rot]) => (
@@ -338,7 +370,7 @@ function DefinirDesenhoDialog({ item, onClose, onSave }: { item: QuoteItem; onCl
                 mount={params.tipoInstalacao}
                 qtdLampadas={params.qtdLampadas} qtdBotoes={params.qtdBotoes}
                 controle={params.controle} posicaoLampadas={params.posicaoLampadas}
-                material={params.material}
+                material={params.material} acabamento={params.acabamento}
                 filtro={params.filtro} coletor={params.coletor}
                 frisoFrente={params.frisoFrente} frisoLD={params.frisoLD} frisoLE={params.frisoLE} frisoLinhas={params.frisoLinhas}
               />
@@ -349,12 +381,19 @@ function DefinirDesenhoDialog({ item, onClose, onSave }: { item: QuoteItem; onCl
               </div>
             )}
             <p className="text-xs text-muted-foreground">A prévia mostra exatamente o que será salvo no orçamento.</p>
+            {kitDesconhecido && (
+              <p className="text-xs text-amber-700 dark:text-amber-500">Este item vem do catálogo e não guarda a quantidade de lâmpadas e botões — confira esses campos.</p>
+            )}
+            <label className="flex items-start gap-2 text-xs cursor-pointer">
+              <Checkbox checked={atualizarMedida} onCheckedChange={(v) => setAtualizarMedida(v === true)} className="mt-0.5" />
+              <span>Atualizar a coluna Medida do item com estas medidas. <strong>O preço não é recalculado</strong> — ajuste o valor unitário ou recalcule na Calculadora se o tamanho mudou.</span>
+            </label>
           </div>
         </div>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button type="button" disabled={!params} onClick={() => params && onSave(params)}>
+          <Button type="button" disabled={!params} onClick={() => params && onSave(params, atualizarMedida)}>
             <Wand2 className="mr-1.5 h-4 w-4" />Gerar imagem
           </Button>
         </DialogFooter>

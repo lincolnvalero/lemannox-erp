@@ -5,7 +5,7 @@
 import type { QuoteItem, CoifaParamsSalvos } from './types';
 import type { CoifaViewer3DProps } from '@/components/dashboard/coifa-viewer-3d';
 import {
-  LOTE_PROFUNDIDADE, LOTE_ALTURA, LOTE_ALTURA_CORPO_LINEA, LINHAS_TABELA,
+  loteDefinido, LINHAS_TABELA,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA, formatarMedidaCoifa, type PadroesTabela,
 } from './coifa-padroes';
 
@@ -101,6 +101,7 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
         qtdBotoes: salvo.qtdBotoes,
         controle: salvo.controle,
         posicaoLampadas: salvo.posicaoLampadas,
+        acabamento: salvo.acabamento,
         exato: true,
       },
     };
@@ -138,6 +139,7 @@ function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaI
     controle: tipoAplicacao === 'Churrasqueira' ? 'botoes' : 'botoeira',
   } as const;
 
+  const lote = contexto.padroes?.lote ?? loteDefinido({});
   switch (linha.modelo) {
     case 'Tube':
       // Diâmetro fixo; a medida da tabela é a altura.
@@ -145,18 +147,18 @@ function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaI
     case 'Piramidal': {
       const teto = contexto.padroes?.teto;
       if (!teto) return null;
-      return { ...comum, modelo: 'Piramidal', width: medida, depth: LOTE_PROFUNDIDADE, height: LOTE_ALTURA, tetoWidth: teto.largura, tetoDepth: teto.profundidade };
+      return { ...comum, modelo: 'Piramidal', width: medida, depth: lote.profundidade, height: lote.altura, tetoWidth: teto.largura, tetoDepth: teto.profundidade };
     }
     case 'Linea': {
       const car = contexto.padroes?.carenagemLinea;
       if (!car) return null;
       return {
-        ...comum, modelo: 'Linea', width: medida, depth: LOTE_PROFUNDIDADE, height: LOTE_ALTURA_CORPO_LINEA,
+        ...comum, modelo: 'Linea', width: medida, depth: lote.profundidade, height: lote.alturaCorpoLinea,
         carenagemWidth: car.largura, carenagemDepth: car.profundidade, carenagemHeight: car.altura,
       };
     }
     default:
-      return { ...comum, modelo: 'Box', width: medida, depth: LOTE_PROFUNDIDADE, height: LOTE_ALTURA };
+      return { ...comum, modelo: 'Box', width: medida, depth: lote.profundidade, height: lote.altura };
   }
 }
 

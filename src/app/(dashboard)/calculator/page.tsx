@@ -40,6 +40,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import {
   CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
   CHAVE_CARENAGEM_LINEA_LARGURA, CHAVE_CARENAGEM_LINEA_PROFUNDIDADE, CHAVE_CARENAGEM_LINEA_ALTURA, CARENAGEM_MIN, CARENAGEM_MAX,
+  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
   padroesTabelaDefinidos, formatarMedidaCoifa, CHAVE_ITEM_PENDENTE_ORCAMENTO,
 } from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
@@ -90,6 +91,8 @@ const formSchema = z.object({
   // Churrasqueira: botões avulsos ou botoeira. Parede: onde ficam as lâmpadas.
   controle: z.enum(['botoes', 'botoeira']),
   posicaoLampadas: z.enum(['frente', 'parede']),
+  // Inox escovado ou polido (só muda o desenho e o texto do orçamento).
+  acabamento: z.enum(['escovado', 'polido']),
 });
 
 const MAX_KIT = 50;
@@ -107,7 +110,7 @@ const defaultValues: FormValues = {
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
-  controle: 'botoes', posicaoLampadas: 'frente',
+  controle: 'botoes', posicaoLampadas: 'frente', acabamento: 'escovado',
 };
 
 export default function CostCalculatorPage() {
@@ -125,9 +128,9 @@ export default function CostCalculatorPage() {
   // alterados pelo link no próprio card ou na Memória de Cálculos. Na
   // Calculadora individual não há padrão: tudo é digitado.
   const [padroesDialog, setPadroesDialog] = useState<null | 'gerar' | 'editar'>(null);
-  const [pad, setPad] = useState({ tetoL: '', tetoP: '', carL: '', carP: '', carA: '' });
+  const [pad, setPad] = useState({ tetoL: '', tetoP: '', carL: '', carP: '', carA: '', loteP: '', loteA: '', loteC: '' });
   const [salvandoPadroes, setSalvandoPadroes] = useState(false);
-  const padroesAtuais = ref ? padroesTabelaDefinidos(ref.parametros) : { teto: null, carenagemLinea: null };
+  const padroesAtuais = ref ? padroesTabelaDefinidos(ref.parametros) : padroesTabelaDefinidos({});
   const padroesCompletos = !!padroesAtuais.teto && !!padroesAtuais.carenagemLinea;
 
   const abrirDialogoPadroes = (modo: 'gerar' | 'editar') => {
@@ -138,6 +141,9 @@ export default function CostCalculatorPage() {
       carL: String(padroesAtuais.carenagemLinea?.largura ?? 320),
       carP: String(padroesAtuais.carenagemLinea?.profundidade ?? 300),
       carA: String(padroesAtuais.carenagemLinea?.altura ?? 1000),
+      loteP: String(padroesAtuais.lote.profundidade),
+      loteA: String(padroesAtuais.lote.altura),
+      loteC: String(padroesAtuais.lote.alturaCorpoLinea),
     });
     setPadroesDialog(modo);
   };
@@ -178,7 +184,8 @@ export default function CostCalculatorPage() {
     const teto = { largura: n(pad.tetoL), profundidade: n(pad.tetoP) };
     const carenagemLinea = { largura: n(pad.carL), profundidade: n(pad.carP), altura: n(pad.carA) };
     setSalvandoPadroes(true);
-    const result = await salvarPadroesTabela(teto, carenagemLinea);
+    const lote = { profundidade: n(pad.loteP), altura: n(pad.loteA), alturaCorpoLinea: n(pad.loteC) };
+    const result = await salvarPadroesTabela(teto, carenagemLinea, lote);
     setSalvandoPadroes(false);
     if (!result.success) {
       toast({ variant: 'destructive', title: 'Padrões não salvos', description: result.error });
@@ -193,6 +200,7 @@ export default function CostCalculatorPage() {
         [CHAVE_CARENAGEM_LINEA_LARGURA]: r(carenagemLinea.largura),
         [CHAVE_CARENAGEM_LINEA_PROFUNDIDADE]: r(carenagemLinea.profundidade),
         [CHAVE_CARENAGEM_LINEA_ALTURA]: r(carenagemLinea.altura),
+        [CHAVE_LOTE_PROFUNDIDADE]: r(lote.profundidade), [CHAVE_LOTE_ALTURA]: r(lote.altura), [CHAVE_LOTE_ALTURA_CORPO_LINEA]: r(lote.alturaCorpoLinea),
       },
     } : old);
     const modo = padroesDialog;
@@ -256,6 +264,7 @@ export default function CostCalculatorPage() {
   const watchedBotoesManual = watch('qtdBotoesManual');
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
+  const watchedAcabamento = watch('acabamento');
   const tipoControle = tipoControleEfetivo({ modelo: watchedModelo, tipoAplicacao: watchedAplicacao, controle: watchedControle });
 
   // Quantidade padrão (da tabela de iluminação / regra da Tube) — pré-preenche
@@ -338,6 +347,7 @@ export default function CostCalculatorPage() {
       setResults(result);
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
+      setUltimoAcabamento(values.acabamento);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
       } else {
@@ -374,6 +384,7 @@ export default function CostCalculatorPage() {
   const router = useRouter();
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
+  const [ultimoAcabamento, setUltimoAcabamento] = useState<'escovado' | 'polido'>('escovado');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
   const [orcDestino, setOrcDestino] = useState<string>('novo');
@@ -396,6 +407,7 @@ export default function CostCalculatorPage() {
       frisoFrente: i.frisoFrente, frisoLD: i.frisoLD, frisoLE: i.frisoLE, frisoLinhas: i.frisoLinhas,
       qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
+      acabamento: /inox/i.test(i.material) ? ultimoAcabamento : undefined,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -411,7 +423,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput, ultimaPosicaoLampadas]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimoAcabamento]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -552,6 +564,22 @@ export default function CostCalculatorPage() {
                       </FormItem>
                     )} />
                   </div>
+
+                  {/inox/i.test(watchedMaterial) && (
+                    <FormField control={form.control} name="acabamento" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Acabamento do inox</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="escovado">Escovado</SelectItem>
+                            <SelectItem value="polido">Polido (brilhante)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Aparece no desenho e no texto do orçamento — não muda o preço.</FormDescription>
+                      </FormItem>
+                    )} />
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
@@ -749,7 +777,13 @@ export default function CostCalculatorPage() {
                         <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoPadroes('editar')}>alterar</Button>
                       )}
                     </p>
-                    <p>Valem só para a tabela — na Calculadora você digita todas as medidas.</p>
+                    <p>
+                      Corpo: profundidade {padroesAtuais.lote.profundidade}, altura {padroesAtuais.lote.altura} mm (Línea: corpo de {padroesAtuais.lote.alturaCorpoLinea} mm).
+                      {!padroesCompletos ? '' : (
+                        <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogoPadroes('editar')}>alterar</Button>
+                      )}
+                    </p>
+                    <p>Valem só para a tabela e para o desenho dos produtos dela nos orçamentos — na Calculadora você digita todas as medidas.</p>
                   </div>
                   {totalAntigos > 0 && (
                     <label className="flex items-start gap-2 pt-2 text-xs cursor-pointer">
@@ -805,6 +839,7 @@ export default function CostCalculatorPage() {
                   qtdBotoes={qtdBotoesEfetiva}
                   controle={tipoControle}
                   posicaoLampadas={watchedPosicaoLampadas}
+                  acabamento={watchedAcabamento}
                   material={watchedMaterial}
                   filtro={watchedFiltro}
                   coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}
@@ -911,6 +946,24 @@ export default function CostCalculatorPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Corpo das coifas (mm)</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lote-prof" className="text-xs">Profundidade</Label>
+                  <Input id="lote-prof" type="number" value={pad.loteP} onChange={e => setPad(v => ({ ...v, loteP: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lote-alt" className="text-xs">Altura Box/Piramidal</Label>
+                  <Input id="lote-alt" type="number" value={pad.loteA} onChange={e => setPad(v => ({ ...v, loteA: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lote-corpo" className="text-xs">Corpo da Línea</Label>
+                  <Input id="lote-corpo" type="number" value={pad.loteC} onChange={e => setPad(v => ({ ...v, loteC: e.target.value }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Valem para todas as medidas da tabela (1000 a 3000). Mudar a profundidade muda os preços.</p>
+            </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Teto da Piramidal (mm)</p>
               <div className="grid grid-cols-2 gap-4">

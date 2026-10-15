@@ -16,6 +16,7 @@ const CoifaViewer3D = dynamic(
 import { coifaParamsFromQuoteItem, type CoifaItemParams } from "@/lib/coifa-viewer-from-item";
 import { useContextoDesenho } from "@/components/dashboard/use-contexto-desenho";
 import { kitIluminacaoPadrao } from "@/lib/coifa-calculator";
+import { especificacoesDaCoifa } from "@/lib/coifa-textos";
 
 interface Props {
   quote: Quote;
@@ -247,7 +248,14 @@ export function QuotePreview({ quote }: Props) {
                       alt={c.label}
                       className="print-only w-full rounded"
                     />
-                    <figcaption className="text-xs text-gray-600 mt-1 text-center">{c.label}</figcaption>
+                    <figcaption className="mt-2 text-center">
+                      <p className="text-[11px] font-semibold text-gray-800 leading-snug">{c.label}</p>
+                      <ul className="mt-1 space-y-0.5 text-[10px] leading-snug text-gray-600">
+                        {especificacoesDaCoifa(c.params, { lampadas: kit?.qtdLampadas ?? 0, botoes: kit?.qtdBotoes ?? 0 }).map((linha) => (
+                          <li key={linha}>{linha}</li>
+                        ))}
+                      </ul>
+                    </figcaption>
                   </figure>
                 );
               })}

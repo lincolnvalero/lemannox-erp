@@ -72,6 +72,8 @@ export type CoifaParamsSalvos = {
   controle?: 'botoes' | 'botoeira';
   /** Parede: lâmpadas na frente (padrão) ou junto à parede. */
   posicaoLampadas?: 'frente' | 'parede';
+  /** Acabamento do inox: escovado (padrão) ou polido/brilhante. Só muda o desenho e o texto — não o preço. */
+  acabamento?: 'escovado' | 'polido';
   /**
    * true quando o desenho foi definido à mão pelo usuário no orçamento (item
    * sem dados suficientes). Nesse caso o desenho vale exatamente o que foi
