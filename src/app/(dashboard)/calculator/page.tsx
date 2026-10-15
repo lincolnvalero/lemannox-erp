@@ -476,9 +476,9 @@ export default function CostCalculatorPage() {
                         Carenagem{isPiramidal ? ' (opcional — deixe em branco se não tiver)' : ''}
                       </p>
                       <div className="grid grid-cols-3 gap-4">
-                        <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
-                        <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
-                        <FormField control={form.control} name="carenagemHeight" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Carenagem — Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                        <FormField control={form.control} name="carenagemWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                        <FormField control={form.control} name="carenagemDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                        <FormField control={form.control} name="carenagemHeight" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Altura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
                       </div>
                       <FormField control={form.control} name="larguraPadraoCarenagem" render={({ field }) => (
                         <FormItem>
