@@ -46,7 +46,7 @@ import { Save, Trash2, X, PlusCircle, Printer, RotateCcw, Check, Loader2 } from 
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import type { Customer, Product, Quote } from '@/lib/types';
+import type { Customer, Product, Quote, QuoteItem } from '@/lib/types';
 import { getCustomers } from '@/app/(dashboard)/customers/actions';
 import { getProducts } from '@/app/(dashboard)/products/actions';
 import { upsertQuote } from '@/app/(dashboard)/quotes/actions';
@@ -55,6 +55,7 @@ import { cn, formatCurrency } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { QuotePreview } from '@/components/dashboard/quote-preview';
+import { CoifaImagensPanel } from '@/components/dashboard/coifa-imagens-panel';
 import { OsEditor } from '@/components/dashboard/os-editor';
 import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups } from '@/lib/product-groups';
 import { CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
@@ -957,6 +958,10 @@ export default function QuoteEditorPage() {
                         )}
                         </CardContent>
                     </Card>
+                    <CoifaImagensPanel
+                      items={watchedItems as unknown as QuoteItem[]}
+                      onChangeItem={(index, patch) => update(index, { ...getValues(`items.${index}`), ...patch } as QuoteFormValues['items'][number])}
+                    />
                     <Card>
                       <CardHeader>
                         <CardTitle>3. Resumo Financeiro e Observações</CardTitle>

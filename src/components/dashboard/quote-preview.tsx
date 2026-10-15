@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Quote, IluminacaoRow } from "@/lib/types";
-import { getProducts } from "@/app/(dashboard)/products/actions";
 import { getNfeSettings } from "@/app/actions/nfe";
-import { getIluminacao, getPadroesTabela } from "@/app/(dashboard)/calculator/actions";
+import { getIluminacao } from "@/app/(dashboard)/calculator/actions";
 import dynamic from "next/dynamic";
 import type { CoifaViewer3DHandle } from "@/components/dashboard/coifa-viewer-3d";
 
@@ -14,8 +13,8 @@ const CoifaViewer3D = dynamic(
   () => import("@/components/dashboard/coifa-viewer-3d").then((m) => m.CoifaViewer3D),
   { ssr: false, loading: () => <div className="h-[280px] rounded bg-gray-100 animate-pulse" /> },
 );
-import { coifaParamsFromQuoteItem, type CoifaItemParams, type ProdutoCatalogo } from "@/lib/coifa-viewer-from-item";
-import { LINHAS_TABELA, type PadroesTabela } from "@/lib/coifa-padroes";
+import { coifaParamsFromQuoteItem, type CoifaItemParams } from "@/lib/coifa-viewer-from-item";
+import { useContextoDesenho } from "@/components/dashboard/use-contexto-desenho";
 import { kitIluminacaoPadrao } from "@/lib/coifa-calculator";
 
 interface Props {
@@ -52,24 +51,9 @@ export function QuotePreview({ quote }: Props) {
 
   // Itens de catálogo só são desenhados se o produto ainda existir e bater com
   // o item (modelo e medida) — essa é a verificação que impede um desenho
-  // diferente do que está escrito no orçamento. Por isso buscamos os produtos
-  // e os padrões da tabela, mas só quando o orçamento tem algum item que pode
-  // ser de coifa da tabela.
-  const temCandidatoCatalogo = useMemo(
-    () => quote.items.some((i) => !i.coifaParams && i.productId && LINHAS_TABELA.some((l) => l.modelLabel === (i.name ?? "").trim())),
-    [quote.items],
-  );
-  const [produtos, setProdutos] = useState<Map<string, ProdutoCatalogo> | null>(null);
-  const [padroes, setPadroes] = useState<PadroesTabela | null>(null);
-  useEffect(() => {
-    if (!temCandidatoCatalogo) return;
-    getProducts().then((r) => {
-      if (r.success && r.products) {
-        setProdutos(new Map(r.products.map((p) => [p.id, { category: p.category, model: p.model, measurement: p.measurement }])));
-      }
-    });
-    getPadroesTabela().then(setPadroes);
-  }, [temCandidatoCatalogo]);
+  // diferente do que está escrito no orçamento.
+  const contextoDesenho = useContextoDesenho(quote.items);
+  const { produtos, padroes } = contextoDesenho;
 
   // Coifas do orçamento que dá pra desenhar em 3D (uma por item distinto, sem
   // repetir — cada visualizador abre um contexto WebGL, que o navegador limita).

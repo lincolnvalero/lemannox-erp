@@ -72,6 +72,12 @@ export type CoifaParamsSalvos = {
   controle?: 'botoes' | 'botoeira';
   /** Parede: lâmpadas na frente (padrão) ou junto à parede. */
   posicaoLampadas?: 'frente' | 'parede';
+  /**
+   * true quando o desenho foi definido à mão pelo usuário no orçamento (item
+   * sem dados suficientes). Nesse caso o desenho vale exatamente o que foi
+   * digitado, sem a checagem contra a coluna Medida.
+   */
+  manual?: boolean;
 };
 
 export type QuoteItem = {
@@ -88,6 +94,8 @@ export type QuoteItem = {
   notes?: string;
   productionStatus?: ProductionStatus;
   coifaParams?: CoifaParamsSalvos;
+  /** O usuário marcou que este item não precisa de imagem (ex: não é coifa). */
+  semDesenho?: boolean;
 };
 
 export type Quote = {
