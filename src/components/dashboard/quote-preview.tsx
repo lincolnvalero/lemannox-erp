@@ -211,7 +211,37 @@ export function QuotePreview({ quote }: Props) {
           </table>
         </section>
 
-        {/* Visualização 3D das coifas */}
+        {/* Totais */}
+        <div className="flex justify-end mb-6">
+          <div className="w-72 text-sm space-y-1">
+            <div className="flex justify-between py-1 border-b border-gray-200">
+              <span className="text-gray-600">Valor da Mercadoria</span>
+              <span>{formatCurrency(merchandise)}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-gray-200">
+              <span className="text-orange-700 font-medium">Impostos (4,5% Simples Nacional)</span>
+              <span className="text-orange-700">{formatCurrency(taxTotal)}</span>
+            </div>
+            {freight > 0 && (
+              <div className="flex justify-between py-1 border-b border-gray-200">
+                <span className="text-gray-600">Frete</span>
+                <span>{formatCurrency(freight)}</span>
+              </div>
+            )}
+            {discount > 0 && (
+              <div className="flex justify-between py-1 border-b border-gray-200">
+                <span className="text-gray-600">Desconto</span>
+                <span className="text-red-600">- {formatCurrency(discount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between py-2 font-bold text-base border-t-2 border-gray-800">
+              <span>TOTAL</span>
+              <span>{formatCurrency(grandTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Visualização 3D das coifas — depois do fechamento dos valores (pedido do Levi, 16/10) */}
         {coifas.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Visualização</h2>
@@ -268,36 +298,6 @@ export function QuotePreview({ quote }: Props) {
             <p className="text-[10px] text-gray-400 mt-2">Imagem ilustrativa. Medidas e acabamento conforme a descrição de cada item.</p>
           </section>
         )}
-
-        {/* Totais */}
-        <div className="flex justify-end mb-6">
-          <div className="w-72 text-sm space-y-1">
-            <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-600">Valor da Mercadoria</span>
-              <span>{formatCurrency(merchandise)}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-orange-700 font-medium">Impostos (4,5% Simples Nacional)</span>
-              <span className="text-orange-700">{formatCurrency(taxTotal)}</span>
-            </div>
-            {freight > 0 && (
-              <div className="flex justify-between py-1 border-b border-gray-200">
-                <span className="text-gray-600">Frete</span>
-                <span>{formatCurrency(freight)}</span>
-              </div>
-            )}
-            {discount > 0 && (
-              <div className="flex justify-between py-1 border-b border-gray-200">
-                <span className="text-gray-600">Desconto</span>
-                <span className="text-red-600">- {formatCurrency(discount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between py-2 font-bold text-base border-t-2 border-gray-800">
-              <span>TOTAL</span>
-              <span>{formatCurrency(grandTotal)}</span>
-            </div>
-          </div>
-        </div>
 
         {/* Condições */}
         {(quote.paymentTerms || quote.deliveryTime || quote.expiryDate || quote.notes) && (

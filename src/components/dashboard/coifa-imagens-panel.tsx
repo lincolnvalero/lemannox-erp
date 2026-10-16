@@ -76,7 +76,10 @@ export function CoifaImagensPanel({ items, onChangeItem }: Props) {
                 {item.semDesenho ? (
                   <p className="text-xs text-muted-foreground flex items-center gap-1"><ImageOff className="h-3.5 w-3.5" />Marcado como &quot;não precisa de imagem&quot;.</p>
                 ) : av.situacao === 'com-imagem' ? (
-                  <p className="text-xs text-green-700 dark:text-green-500 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Com imagem — {ORIGEM[av.origem]}.</p>
+                  <>
+                    <p className="text-xs text-green-700 dark:text-green-500 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Com imagem — {ORIGEM[av.origem]}.</p>
+                    {av.aviso && <p className="text-xs text-amber-700 dark:text-amber-500 flex items-start gap-1"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />{av.aviso}</p>}
+                  </>
                 ) : av.situacao === 'sem-imagem' ? (
                   <p className="text-xs text-amber-700 dark:text-amber-500 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />Sem imagem: {av.motivo}</p>
                 ) : null}
@@ -130,7 +133,6 @@ type Form = {
   controle: 'botoes' | 'botoeira';
   posLamp: 'frente' | 'parede';
   posCmd: PosicaoComando;
-  acabamento: 'escovado' | 'polido';
   filtro: NonNullable<CoifaParamsSalvos['filtro']>;
   coletor: NonNullable<CoifaParamsSalvos['coletor']>;
   frisoF: boolean; frisoLD: boolean; frisoLE: boolean; frisoLinhas: string;
@@ -146,7 +148,7 @@ function salvosDeParams(p: CoifaItemParams): Partial<CoifaParamsSalvos> {
     carenagemWidth: p.carenagemWidth, carenagemDepth: p.carenagemDepth, carenagemHeight: p.carenagemHeight,
     tipoInstalacao: p.mount, tipoAplicacao: p.tipoAplicacao, material: p.material,
     filtro: p.filtro, coletor: p.coletor, frisoFrente: p.frisoFrente, frisoLD: p.frisoLD, frisoLE: p.frisoLE, frisoLinhas: p.frisoLinhas,
-    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, posicaoComando: p.posicaoComando, acabamento: p.acabamento,
+    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, posicaoComando: p.posicaoComando,
   };
 }
 
@@ -163,7 +165,6 @@ function formInicial(item: QuoteItem, atual?: AvaliacaoDesenho): Form {
     controle: base.controle ?? 'botoeira',
     posLamp: base.posicaoLampadas ?? 'frente',
     posCmd: base.posicaoComando ?? 'frente-centro',
-    acabamento: base.acabamento ?? 'escovado',
     filtro: base.filtro ?? 'nenhum',
     coletor: base.coletor ?? 'nenhum',
     frisoF: !!base.frisoFrente, frisoLD: !!base.frisoLD, frisoLE: !!base.frisoLE, frisoLinhas: String(base.frisoLinhas ?? 1),
@@ -200,7 +201,6 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
     width: L, depth: tube ? L : P, height: A,
     tipoAplicacao: f.aplicacao, tipoInstalacao: f.mount, material,
     qtdLampadas: lamp, qtdBotoes: bot, controle: f.controle, posicaoLampadas: f.posLamp, posicaoComando: f.posCmd,
-    acabamento: /inox/i.test(material) ? f.acabamento : undefined,
     filtro: f.filtro, coletor: f.filtro === 'nenhum' ? 'nenhum' : f.coletor,
     frisoFrente: f.frisoF, frisoLD: f.frisoLD, frisoLE: f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
   };
@@ -348,15 +348,6 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
               </div>
             )}
 
-            {/inox/i.test(item.material) && (
-              <div className="space-y-1">
-                <Label className="text-xs">Acabamento do inox</Label>
-                <Select value={f.acabamento} onValueChange={(v) => set('acabamento', v as Form['acabamento'])}>
-                  <SelectTrigger className="w-60"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="escovado">Escovado</SelectItem><SelectItem value="polido">Polido (brilhante)</SelectItem></SelectContent>
-                </Select>
-              </div>
-            )}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
               <span className="text-xs font-medium">Frisos:</span>
               {([['frisoF', 'Frente'], ['frisoLD', 'Lat. direita'], ['frisoLE', 'Lat. esquerda']] as const).map(([k, rot]) => (
@@ -383,7 +374,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 mount={params.tipoInstalacao}
                 qtdLampadas={params.qtdLampadas} qtdBotoes={params.qtdBotoes}
                 controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando}
-                material={params.material} acabamento={params.acabamento}
+                material={params.material}
                 filtro={params.filtro} coletor={params.coletor}
                 frisoFrente={params.frisoFrente} frisoLD={params.frisoLD} frisoLE={params.frisoLE} frisoLinhas={params.frisoLinhas}
               />

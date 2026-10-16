@@ -45,8 +45,6 @@ export interface CoifaViewer3DProps {
   posicaoLampadas?: PosicaoLampadas;
   /** Onde ficam os botões/botoeira: frente ou embaixo × esquerda/centro/direita. Padrão: frente-centro. */
   posicaoComando?: PosicaoComando;
-  /** Inox escovado (padrão) ou polido/brilhante. Carbono é sempre pintado. */
-  acabamento?: 'escovado' | 'polido';
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
   material?: string;
   filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
@@ -110,6 +108,25 @@ function secao(b: Rect, t: Rect, y: number): Rect {
 // Faixa horizontal (friso) numa face, entre as alturas ya e yb.
 function faixa(b: Rect, t: Rect, face: 'front' | 'right' | 'left', ya: number, yb: number): Quad {
   return shellFaces(secao(b, t, ya), secao(b, t, yb))[face];
+}
+
+// Tampa horizontal (teto) com um recorte retangular — o vão onde a carenagem
+// se encaixa. Devolve as faixas que sobram em volta do recorte (a Línea tem o
+// teto igual a L×P, com o recorte ao centro na Ilha e no fundo na Parede).
+function tampaComRecorte(t: Rect, corte: Rect): Quad[] {
+  const c = {
+    x0: Math.max(t.x0, corte.x0), x1: Math.min(t.x1, corte.x1),
+    z0: Math.max(t.z0, corte.z0), z1: Math.min(t.z1, corte.z1),
+  };
+  const y = t.y;
+  const faixa = (x0: number, x1: number, z0: number, z1: number): Quad[] =>
+    x1 - x0 > 0.5 && z1 - z0 > 0.5 ? [[[x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0]]] : [];
+  return [
+    ...faixa(t.x0, t.x1, c.z1, t.z1),       // frente
+    ...faixa(t.x0, t.x1, t.z0, c.z0),       // fundo
+    ...faixa(t.x0, c.x0, c.z0, c.z1),       // esquerda
+    ...faixa(c.x1, t.x1, c.z0, c.z1),       // direita
+  ];
 }
 
 // Cores do modo "Chapas" — as mesmas da legenda.
@@ -239,7 +256,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<{ request: () => void; fitView: (animate?: boolean) => void; viewTo: (name: string) => void } | null>(null);
-  const [show, setShow] = useState<ShowState>({ dims: true, edges: true, xray: false, ortho: false, chapas: false, furos: false });
+  // No orçamento (embutido) as cotas começam desligadas: elas cobrem detalhes das peças e as medidas já estão escritas abaixo da imagem.
+  const [show, setShow] = useState<ShowState>({ dims: !props.embedded, edges: true, xray: false, ortho: false, chapas: false, furos: false });
   const [estreito, setEstreito] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [webglIndisponivel, setWebglIndisponivel] = useState(false);
@@ -327,7 +345,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const carbonoMat = new THREE.MeshStandardMaterial({ color: 0x4b525c, metalness: 0.25, roughness: 0.6, ...offset });
     const chapa22Mat = new THREE.MeshStandardMaterial({ color: COR_CHAPA_22, metalness: 0.35, roughness: 0.45, ...offset });
     const chapa24Mat = new THREE.MeshStandardMaterial({ color: COR_CHAPA_24, metalness: 0.35, roughness: 0.45, ...offset });
-    const frisoMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide });
+    // Friso brilhante (aço polido) em contraste com o corpo escovado.
+    const frisoMat = new THREE.MeshStandardMaterial({ color: 0xeef1f5, metalness: 1, roughness: 0.08, envMapIntensity: 1.5, side: THREE.DoubleSide });
     const filtroMat = new THREE.MeshStandardMaterial({ color: 0x9aa1aa, metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide });
     const coletorMat = new THREE.MeshStandardMaterial({ color: 0x7c848f, metalness: 0.7, roughness: 0.4 });
     const btnMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, metalness: 0.3, roughness: 0.6 });
@@ -529,7 +548,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
 
     const addLabel = (pos: THREE.Vector3, text: string, furos = false) => {
       const el = document.createElement('div');
-      el.className = 'absolute -translate-x-1/2 -translate-y-1/2 bg-white/90 text-orange-900 border border-orange-600 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap pointer-events-none';
+      el.className = 'absolute -translate-x-1/2 -translate-y-1/2 bg-white/80 text-orange-900 border border-orange-600/70 rounded px-1 py-px text-[10px] font-semibold whitespace-nowrap pointer-events-none';
       el.textContent = text;
       labelsEl.appendChild(el);
       s.labels.push({ el, pos, furos });
@@ -555,14 +574,10 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const partes: Record<Grupo, Quad[]> = { '22': [], '24': [], base: [] };
     s.hullMeshes = [];
     s.carbono = /carbono/i.test(props.material ?? '');
-    // Inox: escovado (fios finos, reflexo difuso) ou polido (espelhado).
-    if (props.acabamento === 'polido') {
-      metalMat.color.setHex(0xdde1e6); metalMat.metalness = 1; metalMat.roughness = 0.12; metalMat.envMapIntensity = 1.35;
-      metalMat.roughnessMap = null; metalMat.bumpMap = null;
-    } else {
-      metalMat.color.setHex(0xc6cbd2); metalMat.metalness = 0.95; metalMat.roughness = 0.62; metalMat.envMapIntensity = 1.1;
-      metalMat.roughnessMap = s.escovadoTex; metalMat.bumpMap = s.escovadoTex; metalMat.bumpScale = 0.35;
-    }
+    // Inox sempre escovado (a fábrica não faz coifa de inox brilhante): fios
+    // finos e reflexo difuso. Só os frisos são brilhantes.
+    metalMat.color.setHex(0xc6cbd2); metalMat.metalness = 0.95; metalMat.roughness = 0.62; metalMat.envMapIntensity = 1.1;
+    metalMat.roughnessMap = s.escovadoTex; metalMat.bumpMap = s.escovadoTex; metalMat.bumpScale = 0.35;
     metalMat.needsUpdate = true;
     const todas: Quad[] = [];
     let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
@@ -605,7 +620,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         const zc = props.mount === 'Parede' ? -(depth / 2 - td / 2) : 0;
         corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(tw, td, 0, zc, height);
         const f = shellFaces(corpoBase, corpoTopo);
-        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back, f.top); partes.base.push(f.bottom);
+        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back); partes.base.push(f.bottom);
         // Carenagem opcional sobre o teto (mesma regra da Línea). Sem medida
         // própria, acompanha o teto — é o duto subindo dele. Na Parede encosta
         // no fundo; na Ilha fica centralizada: o teto da Piramidal tem 3 águas
@@ -617,6 +632,10 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         if (ch > 0) {
           const c = shellFaces(rect(cw, cd, 0, zcCar, height), rect(cw, cd, 0, zcCar, height + ch));
           partes['24'].push(c.front, c.back, c.right, c.left, c.top);
+          // O teto fica aberto onde a carenagem se encaixa.
+          partes['24'].push(...tampaComRecorte(corpoTopo, rect(cw, cd, 0, zcCar, height)));
+        } else {
+          partes['24'].push(f.top);
         }
         addDimLabelsBoxLike(width, depth, height, tw, td, zc);
         if (ch > 0) addLabel(V(0, height + ch / 2, zcCar), `Carenagem ${fmt(cw)}×${fmt(cd)}×${fmt(ch)}`);
@@ -626,7 +645,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         // estéticas (não entram no cálculo de preço, só a altura entra).
         corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(width, depth, 0, 0, height);
         const f = shellFaces(corpoBase, corpoTopo);
-        partes['22'].push(f.front, f.back, f.right, f.left, f.top); partes.base.push(f.bottom);
+        partes['22'].push(f.front, f.back, f.right, f.left); partes.base.push(f.bottom);
         const cw = props.carenagemWidth && props.carenagemWidth > 0 ? props.carenagemWidth : width * 0.5;
         const cd = props.carenagemDepth && props.carenagemDepth > 0 ? props.carenagemDepth : depth * 0.5;
         const ch = props.carenagemHeight && props.carenagemHeight > 0 ? props.carenagemHeight : 0;
@@ -634,6 +653,11 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         if (ch > 0) {
           const c = shellFaces(rect(cw, cd, 0, zc, height), rect(cw, cd, 0, zc, height + ch));
           partes['24'].push(c.front, c.back, c.right, c.left, c.top);
+          // Teto da Línea = L×P, com o recorte onde a carenagem se encaixa
+          // (ao centro na Ilha, no fundo na Parede).
+          partes['22'].push(...tampaComRecorte(corpoTopo, rect(cw, cd, 0, zc, height)));
+        } else {
+          partes['22'].push(f.top);
         }
         addDimLabelsLinea(width, depth, height, ch, cw, cd, zc);
       } else {
@@ -804,7 +828,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.material, props.acabamento, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.material, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 

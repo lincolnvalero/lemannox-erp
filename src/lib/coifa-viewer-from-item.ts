@@ -22,7 +22,7 @@ type ItemAvaliavel = Pick<QuoteItem, 'name' | 'measurement' | 'material' | 'prod
 export type ContextoDesenho = { produtos: Map<string, ProdutoCatalogo> | null; padroes: PadroesTabela | null };
 
 export type AvaliacaoDesenho =
-  | { situacao: 'com-imagem'; params: CoifaItemParams; origem: 'calculadora' | 'manual' | 'tabela' | 'texto' }
+  | { situacao: 'com-imagem'; params: CoifaItemParams; origem: 'calculadora' | 'manual' | 'tabela' | 'texto'; aviso?: string }
   | { situacao: 'sem-imagem'; params: null; motivo: string }
   | { situacao: 'nao-coifa'; params: null };
 
@@ -102,7 +102,6 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
         controle: salvo.controle,
         posicaoLampadas: salvo.posicaoLampadas,
         posicaoComando: salvo.posicaoComando,
-        acabamento: salvo.acabamento,
         exato: true,
       },
     };
@@ -111,7 +110,13 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
   const daTabela = desenhoDaTabela(item, contexto);
   if (daTabela) return { situacao: 'com-imagem', params: daTabela, origem: 'tabela' };
   const doTexto = desenhoPelasMedidasEscritas(item);
-  if (doTexto.params) return { situacao: 'com-imagem', params: doTexto.params, origem: 'texto' };
+  if (doTexto.params) {
+    return {
+      situacao: 'com-imagem', params: doTexto.params, origem: 'texto',
+      // O texto cita friso mas não diz onde ele fica: o desenho sai sem friso, e o usuário é avisado.
+      aviso: doTexto.citaFriso ? 'O texto do item cita friso, mas não diz em quais lados — o desenho sai sem friso. Use "Personalizar medidas" para marcar onde ele fica.' : undefined,
+    };
+  }
   if (!ehItemDeCoifa(item, contexto)) return { situacao: 'nao-coifa', params: null };
   return { situacao: 'sem-imagem', params: null, motivo: doTexto.motivo };
 }
@@ -147,8 +152,7 @@ function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaI
       return { ...comum, modelo: 'Tube', width: 500, depth: 500, height: medida };
     case 'Piramidal': {
       if (!contexto.padroes) return null;
-      const teto = tetoParaTabela(medida, contexto.padroes);
-      if (!teto) return null;
+      const teto = tetoParaTabela(medida);
       // Na tabela a Piramidal sai com carenagem (mesma regra da Línea).
       const car = carenagemParaTabela(medida, contexto.padroes);
       return {
@@ -219,6 +223,7 @@ function lerTextoDoItem(item: Pick<QuoteItem, 'name' | 'measurement' | 'category
     controle: (botoeira ? 'botoeira' : 'botoes') as 'botoes' | 'botoeira',
     filtro,
     coletor,
+    citaFriso: /\bfrisos?\b/.test(nome),
   };
 }
 
@@ -242,7 +247,7 @@ export function sugerirDadosDoItem(item: Pick<QuoteItem, 'name' | 'measurement' 
 
 function desenhoPelasMedidasEscritas(
   item: Pick<QuoteItem, 'name' | 'measurement' | 'material' | 'category'>,
-): { params: CoifaItemParams; motivo?: undefined } | { params: null; motivo: string } {
+): { params: CoifaItemParams; motivo?: undefined; citaFriso: boolean } | { params: null; motivo: string; citaFriso?: undefined } {
   const t = lerTextoDoItem(item);
   if (t.modelos.length !== 1) {
     return { params: null, motivo: 'Não consegui identificar o modelo (Box, Piramidal, Línea ou Tube) pelo nome do item.' };
@@ -263,11 +268,11 @@ function desenhoPelasMedidasEscritas(
     if (medidas.valores.length !== 2 || !(medidas.valores[0] >= 200 && medidas.valores[0] <= 1500)) {
       return { params: null, motivo: 'Para a Tube, a medida precisa ser "diâmetro x altura" (ex: Ø500x2000).' };
     }
-    return { params: { ...comum, modelo: 'Tube', width: medidas.valores[0], depth: medidas.valores[0], height: medidas.valores[1] } };
+    return { params: { ...comum, modelo: 'Tube', width: medidas.valores[0], depth: medidas.valores[0], height: medidas.valores[1] }, citaFriso: t.citaFriso };
   }
   if (medidas.valores.length !== 3 || medidas.comDiametro) {
     return { params: null, motivo: 'Para a Box, a medida precisa ser "largura x profundidade x altura" (ex: 1300x650x670).' };
   }
   const [width, depth, height] = medidas.valores;
-  return { params: { ...comum, modelo: 'Box', width, depth, height, filtro: t.filtro, coletor: t.coletor } };
+  return { params: { ...comum, modelo: 'Box', width, depth, height, filtro: t.filtro, coletor: t.coletor }, citaFriso: t.citaFriso };
 }

@@ -86,8 +86,6 @@ const formSchema = z.object({
   // Churrasqueira: botões avulsos ou botoeira. Parede: onde ficam as lâmpadas.
   controle: z.enum(['botoes', 'botoeira']),
   posicaoLampadas: z.enum(['frente', 'parede']),
-  // Inox escovado ou polido (só muda o desenho e o texto do orçamento).
-  acabamento: z.enum(['escovado', 'polido']),
   // Piramidal: com ou sem carenagem. Posição dos botões/botoeira.
   comCarenagem: z.boolean(),
   posicaoComando: z.enum(['frente-esquerda', 'frente-centro', 'frente-direita', 'embaixo-esquerda', 'embaixo-centro', 'embaixo-direita']),
@@ -108,7 +106,7 @@ const defaultValues: FormValues = {
   frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
-  controle: 'botoes', posicaoLampadas: 'frente', acabamento: 'escovado', comCarenagem: true, posicaoComando: 'frente-centro',
+  controle: 'botoes', posicaoLampadas: 'frente', comCarenagem: true, posicaoComando: 'frente-centro',
 };
 
 export default function CostCalculatorPage() {
@@ -172,7 +170,6 @@ export default function CostCalculatorPage() {
   const watchedBotoesManual = watch('qtdBotoesManual');
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
-  const watchedAcabamento = watch('acabamento');
   const watchedComCarenagem = watch('comCarenagem');
   const watchedPosicaoComando = watch('posicaoComando');
   const tipoControle = tipoControleEfetivo({ modelo: watchedModelo, tipoAplicacao: watchedAplicacao, controle: watchedControle });
@@ -262,7 +259,6 @@ export default function CostCalculatorPage() {
       setResults(result);
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
-      setUltimoAcabamento(values.acabamento);
       setUltimaPosicaoComando(values.posicaoComando);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
@@ -301,7 +297,6 @@ export default function CostCalculatorPage() {
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
   const [ultimaPosicaoComando, setUltimaPosicaoComando] = useState<NonNullable<CoifaParamsSalvos['posicaoComando']>>('frente-centro');
-  const [ultimoAcabamento, setUltimoAcabamento] = useState<'escovado' | 'polido'>('escovado');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
   const [orcDestino, setOrcDestino] = useState<string>('novo');
@@ -324,7 +319,6 @@ export default function CostCalculatorPage() {
       frisoFrente: i.frisoFrente, frisoLD: i.frisoLD, frisoLE: i.frisoLE, frisoLinhas: i.frisoLinhas,
       qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
-      acabamento: /inox/i.test(i.material) ? ultimoAcabamento : undefined,
       posicaoComando: ultimaPosicaoComando,
     };
     return {
@@ -341,7 +335,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimoAcabamento, ultimaPosicaoComando]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimaPosicaoComando]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -491,22 +485,6 @@ export default function CostCalculatorPage() {
                       </FormItem>
                     )} />
                   </div>
-
-                  {/inox/i.test(watchedMaterial) && (
-                    <FormField control={form.control} name="acabamento" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Acabamento do inox</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="escovado">Escovado</SelectItem>
-                            <SelectItem value="polido">Polido (brilhante)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription className="text-xs">Aparece no desenho e no texto do orçamento — não muda o preço.</FormDescription>
-                      </FormItem>
-                    )} />
-                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
@@ -735,7 +713,6 @@ export default function CostCalculatorPage() {
                   qtdBotoes={qtdBotoesEfetiva}
                   controle={tipoControle}
                   posicaoLampadas={watchedPosicaoLampadas}
-                  acabamento={watchedAcabamento}
                   posicaoComando={watchedPosicaoComando}
                   material={watchedMaterial}
                   filtro={watchedFiltro}

@@ -17,15 +17,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useRole } from '@/lib/role-context';
 import { generatePriceTableCoifas, salvarPadroesTabela, contarAntigosCoifas } from '@/app/(dashboard)/calculator/actions';
 import {
-  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
   CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_MIN, CARENAGEM_MAX,
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
-  LIMITE_FAIXA_TABELA, padroesTabelaDefinidos,
+  LIMITE_FAIXA_TABELA, TETO_ATE_1300, padroesTabelaDefinidos,
 } from '@/lib/coifa-padroes';
 
 type Campos = {
   loteP: string; loteA: string; loteC: string;
-  tetoL: string; tetoP: string;
   c1L: string; c1P: string; c1A: string;
   c2L: string; c2P: string; c2A: string;
 };
@@ -40,10 +38,9 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
   const role = useRole();
   const { toast } = useToast();
   const padroes = padroesTabelaDefinidos(parametros);
-  const tetoDefinido = !!padroes.tetoAcima1300;
 
-  const [dialogo, setDialogo] = useState<null | 'gerar' | 'editar'>(null);
-  const [c, setC] = useState<Campos>({ loteP: '', loteA: '', loteC: '', tetoL: '', tetoP: '', c1L: '', c1P: '', c1A: '', c2L: '', c2P: '', c2A: '' });
+  const [dialogo, setDialogo] = useState<boolean>(false);
+  const [c, setC] = useState<Campos>({ loteP: '', loteA: '', loteC: '', c1L: '', c1P: '', c1A: '', c2L: '', c2P: '', c2A: '' });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const [arquivar, setArquivar] = useState(true);
@@ -64,15 +61,13 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
     );
   }
 
-  const abrirDialogo = (modo: 'gerar' | 'editar') => {
+  const abrirDialogo = () => {
     setC({
       loteP: String(padroes.lote.profundidade), loteA: String(padroes.lote.altura), loteC: String(padroes.lote.alturaCorpoLinea),
-      // Sem regra definida pelo Levi para o teto acima de 1300: sugestão = 500 × 350 (profundidade igual à da regra até 1300). Ele confirma.
-      tetoL: String(padroes.tetoAcima1300?.largura ?? 500), tetoP: String(padroes.tetoAcima1300?.profundidade ?? 350),
       c1L: String(padroes.carenagemAte1300.largura), c1P: String(padroes.carenagemAte1300.profundidade), c1A: String(padroes.carenagemAte1300.altura),
       c2L: String(padroes.carenagemAcima1300.largura), c2P: String(padroes.carenagemAcima1300.profundidade), c2A: String(padroes.carenagemAcima1300.altura),
     });
-    setDialogo(modo);
+    setDialogo(true);
   };
 
   const pedirConfirmacao = () => setConfirmar(true);
@@ -89,26 +84,19 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
       if (r.errors) console.error('Erros na geração da tabela de preços:', r.errors);
       toast({ title: 'Tabela de Preços gerada!', description: texto });
       contarAntigosCoifas().then(setAntigos);
-    } else if (r.precisaPadroesTabela) {
-      abrirDialogo('gerar');
     } else {
       toast({ variant: 'destructive', title: 'Erro ao gerar tabela', description: r.error });
     }
   };
 
-  const onClickGerar = () => {
-    if (!tetoDefinido) { abrirDialogo('gerar'); return; }
-    pedirConfirmacao();
-  };
 
   const salvar = async () => {
     const n = Number;
-    const teto = { largura: n(c.tetoL), profundidade: n(c.tetoP) };
     const car1 = { largura: n(c.c1L), profundidade: n(c.c1P), altura: n(c.c1A) };
     const car2 = { largura: n(c.c2L), profundidade: n(c.c2P), altura: n(c.c2A) };
     const lote = { profundidade: n(c.loteP), altura: n(c.loteA), alturaCorpoLinea: n(c.loteC) };
     setSalvando(true);
-    const r = await salvarPadroesTabela(teto, car1, car2, lote);
+    const r = await salvarPadroesTabela(car1, car2, lote);
     setSalvando(false);
     if (!r.success) {
       toast({ variant: 'destructive', title: 'Padrões não salvos', description: r.error });
@@ -116,15 +104,12 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
     }
     const k = Math.round;
     onParametrosSalvos({
-      [CHAVE_TETO_LARGURA]: k(teto.largura), [CHAVE_TETO_PROFUNDIDADE]: k(teto.profundidade),
       [CHAVES_CARENAGEM_ATE_1300.largura]: k(car1.largura), [CHAVES_CARENAGEM_ATE_1300.profundidade]: k(car1.profundidade), [CHAVES_CARENAGEM_ATE_1300.altura]: k(car1.altura),
       [CHAVES_CARENAGEM_ACIMA_1300.largura]: k(car2.largura), [CHAVES_CARENAGEM_ACIMA_1300.profundidade]: k(car2.profundidade), [CHAVES_CARENAGEM_ACIMA_1300.altura]: k(car2.altura),
       [CHAVE_LOTE_PROFUNDIDADE]: k(lote.profundidade), [CHAVE_LOTE_ALTURA]: k(lote.altura), [CHAVE_LOTE_ALTURA_CORPO_LINEA]: k(lote.alturaCorpoLinea),
     });
-    const modo = dialogo;
-    setDialogo(null);
+    setDialogo(false);
     toast({ title: 'Padrões da tabela salvos' });
-    if (modo === 'gerar') pedirConfirmacao();
   };
 
   const campo = (rotulo: string, k: keyof Campos, min?: number, max?: number) => (
@@ -146,32 +131,27 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
           <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
             <p>Corpo: profundidade {padroes.lote.profundidade}, altura {padroes.lote.altura} mm (Línea: corpo de {padroes.lote.alturaCorpoLinea} mm).</p>
             <p>Carenagem (Línea e Piramidal): até {LIMITE_FAIXA_TABELA} → {padroes.carenagemAte1300.largura}×{padroes.carenagemAte1300.profundidade}×{padroes.carenagemAte1300.altura}; acima → {padroes.carenagemAcima1300.largura}×{padroes.carenagemAcima1300.profundidade}×{padroes.carenagemAcima1300.altura} mm.</p>
-            <p>
-              Teto da Piramidal: até {LIMITE_FAIXA_TABELA} → 1/3 da largura × 350; acima →{' '}
-              {padroes.tetoAcima1300
-                ? <span className="font-medium text-foreground">{padroes.tetoAcima1300.largura} × {padroes.tetoAcima1300.profundidade} mm</span>
-                : <span className="font-medium text-amber-600">não definido (será pedido ao gerar)</span>}
-              <Button type="button" variant="link" className="h-auto p-0 pl-2 text-xs" onClick={() => abrirDialogo('editar')}>alterar padrões</Button>
-            </p>
+            <p>Teto da Piramidal: até {LIMITE_FAIXA_TABELA} → {TETO_ATE_1300.largura}×{TETO_ATE_1300.profundidade}; acima → 1/3 da largura × 350 mm (regra fixa).</p>
+            <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={abrirDialogo}>alterar padrões</Button>
             <p>Valem só para a tabela e para o desenho dos produtos dela nos orçamentos — na Calculadora você digita todas as medidas.</p>
           </div>
         </CardHeader>
         <CardContent className="hidden" />
         <CardFooter className="flex flex-col items-stretch gap-2">
-          <Button type="button" variant="secondary" disabled={gerando} onClick={onClickGerar}>
+          <Button type="button" variant="secondary" disabled={gerando} onClick={pedirConfirmacao}>
             {gerando ? 'Gerando...' : 'Gerar Tabela de Preços — Coifas'}
           </Button>
           {resumo && <p className="text-xs text-muted-foreground text-center">{resumo}</p>}
         </CardFooter>
       </Card>
 
-      <Dialog open={dialogo !== null} onOpenChange={(o) => { if (!o && !salvando) setDialogo(null); }}>
+      <Dialog open={dialogo} onOpenChange={(o) => { if (!o && !salvando) setDialogo(false); }}>
         <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Medidas padrão da Tabela de Preços</DialogTitle>
             <DialogDescription>
-              Valem para todas as medidas da tabela (1000 a 3000). Sem o teto das Piramidais acima de {LIMITE_FAIXA_TABELA}mm o preço delas sairia abaixo do real.
-              Fica salvo — dá pra mudar depois aqui ou na Memória de Cálculos. Na Calculadora, você continua digitando tudo.
+              Valem para todas as medidas da tabela (1000 a 3000). Ficam salvos — dá pra mudar depois aqui ou na Memória de Cálculos.
+              Na Calculadora, você continua digitando tudo.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -187,15 +167,10 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
               <div className="grid grid-cols-3 gap-3">{campo('Largura', 'c2L', CARENAGEM_MIN, CARENAGEM_MAX)}{campo('Profundidade', 'c2P', CARENAGEM_MIN, CARENAGEM_MAX)}{campo('Altura', 'c2A', CARENAGEM_MIN, CARENAGEM_MAX)}</div>
               <p className="text-xs text-muted-foreground">Só a altura muda o preço; largura e profundidade são do desenho.</p>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Teto da Piramidal acima de {LIMITE_FAIXA_TABELA} (mm)</p>
-              <div className="grid grid-cols-2 gap-3">{campo('Largura', 'tetoL', TETO_MIN, TETO_MAX)}{campo('Profundidade', 'tetoP', TETO_MIN, TETO_MAX)}</div>
-              <p className="text-xs text-muted-foreground">Até {LIMITE_FAIXA_TABELA} o teto é 1/3 da largura × 350 mm. {!tetoDefinido ? 'Valor sugerido — o Levi ainda não definiu a regra acima de 1300; confirme ou ajuste.' : ''}</p>
-            </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={salvando} onClick={() => setDialogo(null)}>Cancelar</Button>
-            <Button type="button" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : dialogo === 'gerar' ? 'Salvar e continuar' : 'Salvar'}</Button>
+            <Button type="button" variant="outline" disabled={salvando} onClick={() => setDialogo(false)}>Cancelar</Button>
+            <Button type="button" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

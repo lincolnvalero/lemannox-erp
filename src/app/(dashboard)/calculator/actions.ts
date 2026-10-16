@@ -10,7 +10,6 @@ import {
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
   LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA,
-  CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE, TETO_MIN, TETO_MAX,
   CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_MIN, CARENAGEM_MAX,
   padroesTabelaDefinidos, carenagemParaTabela, tetoParaTabela, type PadroesTabela, type MedidasCarenagem,
 } from '@/lib/coifa-padroes';
@@ -139,8 +138,6 @@ export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boole
   archived?: number;
   errors?: string[];
   error?: string;
-  /** true quando falta definir o teto das Piramidais acima de 1300mm antes de gerar. */
-  precisaPadroesTabela?: boolean;
 }> {
   try {
     const supabase = await createClient();
@@ -153,15 +150,8 @@ export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boole
     }
     const ref = refResult.data;
 
-    // Piramidais acima de 1300mm precisam do teto informado (a regra do Levi
-    // cobre só até 1300): sem ele o custo do teto entraria como zero e o preço
-    // sairia abaixo do real — por isso é obrigatório (checado aqui também, não
-    // só na tela).
     const padroes = padroesTabelaDefinidos(ref.parametros);
     const { lote } = padroes;
-    if (!padroes.tetoAcima1300) {
-      return { success: false, precisaPadroesTabela: true, error: 'Defina o teto padrão das Piramidais acima de 1300mm antes de gerar a tabela.' };
-    }
 
     const { calculateCoifa } = await import('@/lib/coifa-calculator');
 
@@ -185,7 +175,7 @@ export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boole
               // ALTURA. A Piramidal usa o teto padrão e não leva carenagem na
               // tabela (na Calculadora, tudo é digitado).
               const chapaPadrao = chapaPadraoParaLote(medida);
-              const teto = linha.modelo === 'Piramidal' ? tetoParaTabela(medida, padroes) : null;
+              const teto = linha.modelo === 'Piramidal' ? tetoParaTabela(medida) : null;
               // Línea e Piramidal levem carenagem na tabela (mesma regra por faixa de largura).
               const carenagem = linha.modelo === 'Linea' || linha.modelo === 'Piramidal' ? carenagemParaTabela(medida, padroes) : null;
               const result = calculateCoifa({
@@ -280,7 +270,6 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
       .from('parametros_globais')
       .select('chave, valor')
       .in('chave', [
-        CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE,
         ...Object.values(CHAVES_CARENAGEM_ATE_1300), ...Object.values(CHAVES_CARENAGEM_ACIMA_1300),
         CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
       ]);
@@ -295,7 +284,6 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
 
 // Salva os padrões usados na geração da Tabela de Preços.
 export async function salvarPadroesTabela(
-  tetoAcima1300: { largura: number; profundidade: number },
   carenagemAte1300: MedidasCarenagem,
   carenagemAcima1300: MedidasCarenagem,
   lote: { profundidade: number; altura: number; alturaCorpoLinea: number },
@@ -304,9 +292,6 @@ export async function salvarPadroesTabela(
     const supabase = await createClient();
     if (!(await usuarioEhAdmin(supabase))) return { success: false, error: 'Somente administradores podem alterar os padrões da tabela.' };
     const dentro = (v: number, min: number, max: number) => Number.isFinite(v) && v >= min && v <= max;
-    if (!dentro(tetoAcima1300.largura, TETO_MIN, TETO_MAX) || !dentro(tetoAcima1300.profundidade, TETO_MIN, TETO_MAX)) {
-      return { success: false, error: `Teto: informe largura e profundidade entre ${TETO_MIN} e ${TETO_MAX} mm.` };
-    }
     for (const c of [carenagemAte1300, carenagemAcima1300]) {
       if (!dentro(c.largura, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(c.profundidade, CARENAGEM_MIN, CARENAGEM_MAX) || !dentro(c.altura, CARENAGEM_MIN, CARENAGEM_MAX)) {
         return { success: false, error: `Carenagem: informe largura, profundidade e altura entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };
@@ -324,8 +309,6 @@ export async function salvarPadroesTabela(
       { chave: CHAVE_LOTE_PROFUNDIDADE, valor: Math.round(lote.profundidade), descricao: 'Tabela de Preços — profundidade padrão das coifas (mm)' },
       { chave: CHAVE_LOTE_ALTURA, valor: Math.round(lote.altura), descricao: 'Tabela de Preços — altura padrão de Box e Piramidal (mm)' },
       { chave: CHAVE_LOTE_ALTURA_CORPO_LINEA, valor: Math.round(lote.alturaCorpoLinea), descricao: 'Tabela de Preços — altura do corpo da Línea (mm)' },
-      { chave: CHAVE_TETO_LARGURA, valor: Math.round(tetoAcima1300.largura), descricao: 'Piramidal acima de 1300 — largura do teto usada na Tabela de Preços (mm)' },
-      { chave: CHAVE_TETO_PROFUNDIDADE, valor: Math.round(tetoAcima1300.profundidade), descricao: 'Piramidal acima de 1300 — profundidade do teto usada na Tabela de Preços (mm)' },
       ...car('até 1300', CHAVES_CARENAGEM_ATE_1300, carenagemAte1300),
       ...car('acima de 1300', CHAVES_CARENAGEM_ACIMA_1300, carenagemAcima1300),
     ], { onConflict: 'chave' });
@@ -437,11 +420,7 @@ export async function updateIluminacaoRows(rows: IluminacaoRowUpdate[]): Promise
 // alterações" único usado no resto da tela de Memória).
 export async function updateParametrosGlobaisRows(rows: { chave: string; valor: number }[]): Promise<{ success: boolean; error?: string }> {
   try {
-    const chavesTeto = [CHAVE_TETO_LARGURA, CHAVE_TETO_PROFUNDIDADE];
     const chavesCarenagem: string[] = [...Object.values(CHAVES_CARENAGEM_ATE_1300), ...Object.values(CHAVES_CARENAGEM_ACIMA_1300)];
-    if (rows.some(r => chavesTeto.includes(r.chave) && !(r.valor >= TETO_MIN && r.valor <= TETO_MAX))) {
-      return { success: false, error: `O teto padrão da Piramidal deve ficar entre ${TETO_MIN} e ${TETO_MAX} mm.` };
-    }
     const faixasLote: Record<string, [number, number]> = {
       [CHAVE_LOTE_PROFUNDIDADE]: [LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX],
       [CHAVE_LOTE_ALTURA]: [LOTE_ALTURA_MIN, LOTE_ALTURA_MAX],

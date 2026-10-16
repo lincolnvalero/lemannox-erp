@@ -74,8 +74,6 @@ export type CoifaParamsSalvos = {
   posicaoLampadas?: 'frente' | 'parede';
   /** Posição dos botões/botoeira (frente ou embaixo × esquerda/centro/direita). Ausente = frente-centro. */
   posicaoComando?: 'frente-esquerda' | 'frente-centro' | 'frente-direita' | 'embaixo-esquerda' | 'embaixo-centro' | 'embaixo-direita';
-  /** Acabamento do inox: escovado (padrão) ou polido/brilhante. Só muda o desenho e o texto — não o preço. */
-  acabamento?: 'escovado' | 'polido';
   /**
    * true quando o desenho foi definido à mão pelo usuário no orçamento (item
    * sem dados suficientes). Nesse caso o desenho vale exatamente o que foi
