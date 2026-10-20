@@ -20,12 +20,16 @@ export const LOTE_ALTURA_CORPO_LINEA = 100;
 export const CHAVE_LOTE_PROFUNDIDADE = 'tabela_profundidade_padrao';
 export const CHAVE_LOTE_ALTURA = 'tabela_altura_padrao';
 export const CHAVE_LOTE_ALTURA_CORPO_LINEA = 'linea_corpo_altura_padrao';
+export const CHAVE_LOTE_PAINEL_PIRAMIDAL = 'piramidal_painel_altura_padrao';
 export const LOTE_PROFUNDIDADE_MIN = 300, LOTE_PROFUNDIDADE_MAX = 1500;
 export const LOTE_ALTURA_MIN = 100, LOTE_ALTURA_MAX = 2000;
 export const LOTE_CORPO_LINEA_MIN = 50, LOTE_CORPO_LINEA_MAX = 400;
+/** Painel vertical da frente da Piramidal (onde ficam botoeira/botões): 80–100mm (Levi, 21/10). 0 = sem painel. */
+export const LOTE_PAINEL_PIRAMIDAL = 100;
+export const PAINEL_PIRAMIDAL_MIN = 0, PAINEL_PIRAMIDAL_MAX = 300;
 
 /** Medidas do corpo usadas na tabela (e no desenho dos produtos dela). */
-export type LoteTabela = { profundidade: number; altura: number; alturaCorpoLinea: number };
+export type LoteTabela = { profundidade: number; altura: number; alturaCorpoLinea: number; alturaPainelPiramidal: number };
 
 /**
  * Linhas da Tabela de Preços (modelo + instalação → nome do produto). É a
@@ -122,6 +126,7 @@ export function loteDefinido(parametros: Record<string, number | undefined>): Lo
     profundidade: valorOu(parametros[CHAVE_LOTE_PROFUNDIDADE], LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_PROFUNDIDADE),
     altura: valorOu(parametros[CHAVE_LOTE_ALTURA], LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_ALTURA),
     alturaCorpoLinea: valorOu(parametros[CHAVE_LOTE_ALTURA_CORPO_LINEA], LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX, LOTE_ALTURA_CORPO_LINEA),
+    alturaPainelPiramidal: valorOu(parametros[CHAVE_LOTE_PAINEL_PIRAMIDAL], PAINEL_PIRAMIDAL_MIN, PAINEL_PIRAMIDAL_MAX, LOTE_PAINEL_PIRAMIDAL),
   };
 }
 

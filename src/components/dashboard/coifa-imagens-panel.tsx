@@ -127,7 +127,7 @@ type Form = {
   mount: 'Parede' | 'Ilha';
   aplicacao: 'Cozinha' | 'Churrasqueira';
   L: string; P: string; A: string;
-  tetoL: string; tetoP: string;
+  tetoL: string; tetoP: string; painel: string;
   carL: string; carP: string; carA: string;
   lamp: string; bot: string;
   controle: 'botoes' | 'botoeira';
@@ -148,7 +148,7 @@ function salvosDeParams(p: CoifaItemParams): Partial<CoifaParamsSalvos> {
     carenagemWidth: p.carenagemWidth, carenagemDepth: p.carenagemDepth, carenagemHeight: p.carenagemHeight,
     tipoInstalacao: p.mount, tipoAplicacao: p.tipoAplicacao, material: p.material,
     filtro: p.filtro, coletor: p.coletor, frisoFrente: p.frisoFrente, frisoLD: p.frisoLD, frisoLE: p.frisoLE, frisoLinhas: p.frisoLinhas,
-    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, posicaoComando: p.posicaoComando,
+    qtdLampadas: p.qtdLampadas, qtdBotoes: p.qtdBotoes, controle: p.controle, posicaoLampadas: p.posicaoLampadas, posicaoComando: p.posicaoComando, alturaPainel: p.alturaPainel,
   };
 }
 
@@ -159,7 +159,7 @@ function formInicial(item: QuoteItem, atual?: AvaliacaoDesenho): Form {
     mount: base.tipoInstalacao ?? 'Parede',
     aplicacao: base.tipoAplicacao ?? 'Cozinha',
     L: txt(base.modelo === 'Tube' && !base.width ? 500 : base.width), P: txt(base.depth), A: txt(base.height),
-    tetoL: txt(base.tetoWidth), tetoP: txt(base.tetoDepth),
+    tetoL: txt(base.tetoWidth), tetoP: txt(base.tetoDepth), painel: base.alturaPainel === undefined ? '' : String(base.alturaPainel),
     carL: txt(base.carenagemWidth), carP: txt(base.carenagemDepth), carA: txt(base.carenagemHeight),
     lamp: String(base.qtdLampadas ?? 0), bot: String(base.qtdBotoes ?? 0),
     controle: base.controle ?? 'botoeira',
@@ -204,7 +204,11 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
     filtro: f.filtro, coletor: f.filtro === 'nenhum' ? 'nenhum' : f.coletor,
     frisoFrente: f.frisoF, frisoLD: f.frisoLD, frisoLE: f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
   };
-  if (f.modelo === 'Piramidal') { params.tetoWidth = tetoL; params.tetoDepth = tetoP; }
+  if (f.modelo === 'Piramidal') {
+    params.tetoWidth = tetoL; params.tetoDepth = tetoP;
+    const painel = num(f.painel);
+    if (Number.isFinite(painel) && painel > 0) params.alturaPainel = painel;
+  }
   if ((f.modelo === 'Piramidal' || f.modelo === 'Linea') && Number.isFinite(carA)) {
     params.carenagemHeight = carA;
     params.carenagemWidth = Number.isFinite(carL) ? carL : tetoL;
@@ -280,6 +284,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
               <div className="space-y-1.5 rounded-md border p-2.5">
                 <p className="text-xs font-medium">Teto</p>
                 <div className="grid grid-cols-2 gap-3">{campo('Largura', 'tetoL')}{campo('Profundidade', 'tetoP')}</div>
+                {campo('Painel da frente — altura (0/vazio = sem painel)', 'painel', 'ex: 100')}
               </div>
             )}
             {(f.modelo === 'Piramidal' || f.modelo === 'Linea') && (
@@ -373,7 +378,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 carenagemWidth={params.carenagemWidth} carenagemDepth={params.carenagemDepth} carenagemHeight={params.carenagemHeight}
                 mount={params.tipoInstalacao}
                 qtdLampadas={params.qtdLampadas} qtdBotoes={params.qtdBotoes}
-                controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando}
+                controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando} alturaPainel={params.alturaPainel}
                 material={params.material}
                 filtro={params.filtro} coletor={params.coletor}
                 frisoFrente={params.frisoFrente} frisoLD={params.frisoLD} frisoLE={params.frisoLE} frisoLinhas={params.frisoLinhas}

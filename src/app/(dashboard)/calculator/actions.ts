@@ -7,7 +7,7 @@ import { getMaterials } from '@/app/(dashboard)/materials/actions';
 import { GRUPO_ARQUIVO } from '@/lib/product-groups';
 import {
   LINHAS_TABELA, arredondarPrecoTabela,
-  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
+  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL, PAINEL_PIRAMIDAL_MIN, PAINEL_PIRAMIDAL_MAX,
   LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA,
   CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_MIN, CARENAGEM_MAX,
@@ -283,7 +283,7 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
       .select('chave, valor')
       .in('chave', [
         ...Object.values(CHAVES_CARENAGEM_ATE_1300), ...Object.values(CHAVES_CARENAGEM_ACIMA_1300),
-        CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
+        CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL,
       ]);
     if (error) throw error;
     const params: Record<string, number> = {};
@@ -298,7 +298,7 @@ export async function getPadroesTabela(): Promise<PadroesTabela> {
 export async function salvarPadroesTabela(
   carenagemAte1300: MedidasCarenagem,
   carenagemAcima1300: MedidasCarenagem,
-  lote: { profundidade: number; altura: number; alturaCorpoLinea: number },
+  lote: { profundidade: number; altura: number; alturaCorpoLinea: number; alturaPainelPiramidal: number },
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient();
@@ -309,8 +309,8 @@ export async function salvarPadroesTabela(
         return { success: false, error: `Carenagem: informe largura, profundidade e altura entre ${CARENAGEM_MIN} e ${CARENAGEM_MAX} mm.` };
       }
     }
-    if (!dentro(lote.profundidade, LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX) || !dentro(lote.altura, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX) || !dentro(lote.alturaCorpoLinea, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX)) {
-      return { success: false, error: `Corpo: profundidade ${LOTE_PROFUNDIDADE_MIN}–${LOTE_PROFUNDIDADE_MAX}, altura ${LOTE_ALTURA_MIN}–${LOTE_ALTURA_MAX} e corpo da Línea ${LOTE_CORPO_LINEA_MIN}–${LOTE_CORPO_LINEA_MAX} mm.` };
+    if (!dentro(lote.profundidade, LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX) || !dentro(lote.altura, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX) || !dentro(lote.alturaCorpoLinea, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX) || !dentro(lote.alturaPainelPiramidal, PAINEL_PIRAMIDAL_MIN, PAINEL_PIRAMIDAL_MAX)) {
+      return { success: false, error: `Corpo: profundidade ${LOTE_PROFUNDIDADE_MIN}–${LOTE_PROFUNDIDADE_MAX}, altura ${LOTE_ALTURA_MIN}–${LOTE_ALTURA_MAX} corpo da Línea ${LOTE_CORPO_LINEA_MIN}–${LOTE_CORPO_LINEA_MAX} e painel da Piramidal ${PAINEL_PIRAMIDAL_MIN}–${PAINEL_PIRAMIDAL_MAX} mm.` };
     }
     const car = (faixa: string, chaves: typeof CHAVES_CARENAGEM_ATE_1300, c: MedidasCarenagem) => [
       { chave: chaves.largura, valor: Math.round(c.largura), descricao: `Carenagem ${faixa} — largura usada na Tabela de Preços (mm)` },
@@ -320,6 +320,7 @@ export async function salvarPadroesTabela(
     const { error } = await supabase.from('parametros_globais').upsert([
       { chave: CHAVE_LOTE_PROFUNDIDADE, valor: Math.round(lote.profundidade), descricao: 'Tabela de Preços — profundidade padrão das coifas (mm)' },
       { chave: CHAVE_LOTE_ALTURA, valor: Math.round(lote.altura), descricao: 'Tabela de Preços — altura padrão de Box e Piramidal (mm)' },
+      { chave: CHAVE_LOTE_PAINEL_PIRAMIDAL, valor: Math.round(lote.alturaPainelPiramidal), descricao: 'Piramidal — altura do painel vertical da frente (mm)' },
       { chave: CHAVE_LOTE_ALTURA_CORPO_LINEA, valor: Math.round(lote.alturaCorpoLinea), descricao: 'Tabela de Preços — altura do corpo da Línea (mm)' },
       ...car('até 1300', CHAVES_CARENAGEM_ATE_1300, carenagemAte1300),
       ...car('acima de 1300', CHAVES_CARENAGEM_ACIMA_1300, carenagemAcima1300),
@@ -437,6 +438,7 @@ export async function updateParametrosGlobaisRows(rows: { chave: string; valor: 
       [CHAVE_LOTE_PROFUNDIDADE]: [LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX],
       [CHAVE_LOTE_ALTURA]: [LOTE_ALTURA_MIN, LOTE_ALTURA_MAX],
       [CHAVE_LOTE_ALTURA_CORPO_LINEA]: [LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX],
+      [CHAVE_LOTE_PAINEL_PIRAMIDAL]: [PAINEL_PIRAMIDAL_MIN, PAINEL_PIRAMIDAL_MAX],
     };
     const loteInvalido = rows.find(r => faixasLote[r.chave] && !(r.valor >= faixasLote[r.chave][0] && r.valor <= faixasLote[r.chave][1]));
     if (loteInvalido) {

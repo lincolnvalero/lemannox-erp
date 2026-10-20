@@ -97,6 +97,8 @@ export interface EntradaFuros {
   posicaoLampadas?: PosicaoLampadas;
   /** Padrão: frente-centro. */
   posicaoComando?: PosicaoComando;
+  /** Piramidal: altura do painel vertical da frente — o comando fica nele, na metade da altura. */
+  alturaPainel?: number;
 }
 
 const MAX_FUROS = 50;
@@ -144,7 +146,11 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   // ── Botões / botoeira ─────────────────────────────────────────────────────
   const nBot = Math.min(MAX_FUROS, Math.max(0, Math.round(e.qtdBotoes)));
   // Na Piramidal a frente é inclinada e a borda de baixo é só uma quina: o painel fica mais acima (≈80mm) pra aparecer.
-  const yBotao = Math.min(e.height, e.modelo === 'Piramidal' ? 160 : 60) / 2;
+  // Piramidal com painel vertical: o comando fica no meio do painel. Sem painel
+  // a frente é inclinada e a borda de baixo é só uma quina: ≈80mm acima dela.
+  const yBotao = e.modelo === 'Piramidal' && (e.alturaPainel ?? 0) > 0
+    ? e.alturaPainel! / 2
+    : Math.min(e.height, e.modelo === 'Piramidal' ? 160 : 60) / 2;
   const { botaoDiametro: dia, botaoEspacamento: esp, botoesPorBotoeira: porPlaca } = FURO_PADRAO;
   const furosBotao: FuroBotao[] = [];
   const placas: PlacaBotoeira[] = [];

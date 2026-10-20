@@ -18,12 +18,12 @@ import { useRole } from '@/lib/role-context';
 import { generatePriceTableCoifas, salvarPadroesTabela, contarAntigosCoifas } from '@/app/(dashboard)/calculator/actions';
 import {
   CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_MIN, CARENAGEM_MAX,
-  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
+  CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL,
   LIMITE_FAIXA_TABELA, TETO_ATE_1300, padroesTabelaDefinidos,
 } from '@/lib/coifa-padroes';
 
 type Campos = {
-  loteP: string; loteA: string; loteC: string;
+  loteP: string; loteA: string; loteC: string; loteN: string;
   c1L: string; c1P: string; c1A: string;
   c2L: string; c2P: string; c2A: string;
 };
@@ -40,7 +40,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
   const padroes = padroesTabelaDefinidos(parametros);
 
   const [dialogo, setDialogo] = useState<boolean>(false);
-  const [c, setC] = useState<Campos>({ loteP: '', loteA: '', loteC: '', c1L: '', c1P: '', c1A: '', c2L: '', c2P: '', c2A: '' });
+  const [c, setC] = useState<Campos>({ loteP: '', loteA: '', loteC: '', loteN: '', c1L: '', c1P: '', c1A: '', c2L: '', c2P: '', c2A: '' });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const [arquivar, setArquivar] = useState(true);
@@ -64,7 +64,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
 
   const abrirDialogo = () => {
     setC({
-      loteP: String(padroes.lote.profundidade), loteA: String(padroes.lote.altura), loteC: String(padroes.lote.alturaCorpoLinea),
+      loteP: String(padroes.lote.profundidade), loteA: String(padroes.lote.altura), loteC: String(padroes.lote.alturaCorpoLinea), loteN: String(padroes.lote.alturaPainelPiramidal),
       c1L: String(padroes.carenagemAte1300.largura), c1P: String(padroes.carenagemAte1300.profundidade), c1A: String(padroes.carenagemAte1300.altura),
       c2L: String(padroes.carenagemAcima1300.largura), c2P: String(padroes.carenagemAcima1300.profundidade), c2A: String(padroes.carenagemAcima1300.altura),
     });
@@ -97,7 +97,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
     const n = Number;
     const car1 = { largura: n(c.c1L), profundidade: n(c.c1P), altura: n(c.c1A) };
     const car2 = { largura: n(c.c2L), profundidade: n(c.c2P), altura: n(c.c2A) };
-    const lote = { profundidade: n(c.loteP), altura: n(c.loteA), alturaCorpoLinea: n(c.loteC) };
+    const lote = { profundidade: n(c.loteP), altura: n(c.loteA), alturaCorpoLinea: n(c.loteC), alturaPainelPiramidal: n(c.loteN) };
     setSalvando(true);
     const r = await salvarPadroesTabela(car1, car2, lote);
     setSalvando(false);
@@ -109,7 +109,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
     onParametrosSalvos({
       [CHAVES_CARENAGEM_ATE_1300.largura]: k(car1.largura), [CHAVES_CARENAGEM_ATE_1300.profundidade]: k(car1.profundidade), [CHAVES_CARENAGEM_ATE_1300.altura]: k(car1.altura),
       [CHAVES_CARENAGEM_ACIMA_1300.largura]: k(car2.largura), [CHAVES_CARENAGEM_ACIMA_1300.profundidade]: k(car2.profundidade), [CHAVES_CARENAGEM_ACIMA_1300.altura]: k(car2.altura),
-      [CHAVE_LOTE_PROFUNDIDADE]: k(lote.profundidade), [CHAVE_LOTE_ALTURA]: k(lote.altura), [CHAVE_LOTE_ALTURA_CORPO_LINEA]: k(lote.alturaCorpoLinea),
+      [CHAVE_LOTE_PROFUNDIDADE]: k(lote.profundidade), [CHAVE_LOTE_ALTURA]: k(lote.altura), [CHAVE_LOTE_ALTURA_CORPO_LINEA]: k(lote.alturaCorpoLinea), [CHAVE_LOTE_PAINEL_PIRAMIDAL]: k(lote.alturaPainelPiramidal),
     });
     setDialogo(false);
     toast({ title: 'Padrões da tabela salvos' });
@@ -132,7 +132,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
             Produtos com a mesma categoria, modelo e medida são atualizados; os demais são criados. Pede confirmação antes de gerar.
           </CardDescription>
           <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
-            <p>Corpo: profundidade {padroes.lote.profundidade}, altura {padroes.lote.altura} mm (Línea: corpo de {padroes.lote.alturaCorpoLinea} mm).</p>
+            <p>Corpo: profundidade {padroes.lote.profundidade}, altura {padroes.lote.altura} mm (Línea: corpo de {padroes.lote.alturaCorpoLinea} mm; Piramidal: painel vertical de {padroes.lote.alturaPainelPiramidal} mm).</p>
             <p>Carenagem (Línea e Piramidal): até {LIMITE_FAIXA_TABELA} → {padroes.carenagemAte1300.largura}×{padroes.carenagemAte1300.profundidade}×{padroes.carenagemAte1300.altura}; acima → {padroes.carenagemAcima1300.largura}×{padroes.carenagemAcima1300.profundidade}×{padroes.carenagemAcima1300.altura} mm.</p>
             <p>Teto da Piramidal: até {LIMITE_FAIXA_TABELA} → {TETO_ATE_1300.largura}×{TETO_ATE_1300.profundidade}; acima → 1/3 da largura × 350 mm (regra fixa).</p>
             <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={abrirDialogo}>alterar padrões</Button>
@@ -167,7 +167,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
           <div className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm font-medium">Corpo das coifas (mm)</p>
-              <div className="grid grid-cols-3 gap-3">{campo('Profundidade', 'loteP')}{campo('Altura Box/Piramidal', 'loteA')}{campo('Corpo da Línea', 'loteC')}</div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{campo('Profundidade', 'loteP')}{campo('Altura Box/Piramidal', 'loteA')}{campo('Corpo da Línea', 'loteC')}{campo('Painel da Piramidal', 'loteN')}</div>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Carenagem (Línea e Piramidal) — largura × profundidade × altura (mm)</p>

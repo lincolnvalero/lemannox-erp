@@ -62,6 +62,7 @@ const formSchema = z.object({
   depth: numField.pipe(z.number().min(1, 'Profundidade é obrigatória')),
   height: numField.pipe(z.number().min(1, 'Altura é obrigatória')),
   modelo: z.enum(['Box', 'Piramidal', 'Linea', 'Tube']),
+  alturaPainel: numField.optional(),
   tetoWidth: numField.optional(),
   tetoDepth: numField.optional(),
   carenagemWidth: numField.optional(),
@@ -98,6 +99,7 @@ type FormValues = z.infer<typeof formSchema>;
 const defaultValues: FormValues = {
   width: 0, depth: 0, height: 0,
   modelo: 'Box',
+  alturaPainel: 100,
   tetoWidth: 0, tetoDepth: 0,
   carenagemWidth: 0, carenagemDepth: 0, carenagemHeight: 0,
   material: '', larguraPadrao: 0, larguraPadraoCarenagem: 0,
@@ -171,6 +173,7 @@ export default function CostCalculatorPage() {
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
   const watchedComCarenagem = watch('comCarenagem');
+  const watchedAlturaPainel = watch('alturaPainel');
   const watchedPosicaoComando = watch('posicaoComando');
   const tipoControle = tipoControleEfetivo({ modelo: watchedModelo, tipoAplicacao: watchedAplicacao, controle: watchedControle });
 
@@ -195,8 +198,9 @@ export default function CostCalculatorPage() {
       modelo: watchedModelo, width: Number(watchedWidth) || 0, depth: Number(watchedDepth) || 0, height: Number(watchedHeight) || 0,
       mount: watchedInstalacao, qtdLampadas: qtdLampadasEfetiva, qtdBotoes: qtdBotoesEfetiva,
       tipoControle, posicaoLampadas: watchedPosicaoLampadas, posicaoComando: watchedPosicaoComando,
+      alturaPainel: watchedModelo === 'Piramidal' ? Number(watchedAlturaPainel) || 0 : undefined,
     }));
-  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas, watchedPosicaoComando]);
+  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas, watchedPosicaoComando, watchedAlturaPainel]);
   // Texto em edição dos campos do kit: permite apagar o número inteiro antes
   // de digitar outro (sem isso o campo "voltava" pro padrão a cada Backspace).
   const [kitRascunho, setKitRascunho] = useState<Partial<Record<'qtdLampadasManual' | 'qtdBotoesManual', string>>>({});
@@ -267,6 +271,7 @@ export default function CostCalculatorPage() {
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
       setUltimaPosicaoComando(values.posicaoComando);
+      setUltimaAlturaPainel(values.modelo === 'Piramidal' ? Number(values.alturaPainel) || 0 : undefined);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
       } else {
@@ -303,6 +308,7 @@ export default function CostCalculatorPage() {
   const router = useRouter();
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
+  const [ultimaAlturaPainel, setUltimaAlturaPainel] = useState<number | undefined>(undefined);
   const [ultimaPosicaoComando, setUltimaPosicaoComando] = useState<NonNullable<CoifaParamsSalvos['posicaoComando']>>('frente-centro');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
@@ -327,6 +333,7 @@ export default function CostCalculatorPage() {
       qtdLampadas: results.qtdLampadas, qtdBotoes: results.qtdBotoes,
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
       posicaoComando: ultimaPosicaoComando,
+      alturaPainel: ultimaAlturaPainel,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -342,7 +349,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimaPosicaoComando]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimaPosicaoComando, ultimaAlturaPainel]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -435,6 +442,17 @@ export default function CostCalculatorPage() {
                     <div className="grid grid-cols-2 gap-4 rounded-md border p-3 bg-muted/30">
                       <FormField control={form.control} name="tetoWidth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Medida do Teto — Largura</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
                       <FormField control={form.control} name="tetoDepth" render={({ field }) => ( <FormItem><FormLabel className="text-xs">Medida do Teto — Profundidade</FormLabel><FormControl><Input type="number" placeholder="mm" {...field} value={field.value || ''} /></FormControl></FormItem> )} />
+                    </div>
+                  )}
+                  {isPiramidal && (
+                    <div className="rounded-md border p-3 bg-muted/30">
+                      <FormField control={form.control} name="alturaPainel" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Painel da frente — altura (mm)</FormLabel>
+                          <FormControl><Input type="number" placeholder="ex: 100" {...field} value={field.value ?? ''} className="max-w-40" /></FormControl>
+                          <FormDescription className="text-xs">Trecho reto na base da frente (80 a 100 mm) onde vai a botoeira/botões; só depois a face inclina. Só muda o desenho — não o preço. 0 = sem painel.</FormDescription>
+                        </FormItem>
+                      )} />
                     </div>
                   )}
                   {(isLinea || isPiramidal) && (
@@ -721,6 +739,7 @@ export default function CostCalculatorPage() {
                   controle={tipoControle}
                   posicaoLampadas={watchedPosicaoLampadas}
                   posicaoComando={watchedPosicaoComando}
+                  alturaPainel={isPiramidal ? Number(watchedAlturaPainel) || 0 : undefined}
                   material={watchedMaterial}
                   filtro={watchedFiltro}
                   coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}

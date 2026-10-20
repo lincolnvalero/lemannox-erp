@@ -29,6 +29,7 @@ export function especificacoesDaCoifa(p: CoifaItemParams, qtd: { lampadas: numbe
       : `Medidas: ${mm(p.width)} × ${mm(p.depth)} × ${mm(p.height)} mm`,
   );
   if (p.modelo === 'Piramidal' && p.tetoWidth && p.tetoDepth) linhas.push(`Teto: ${mm(p.tetoWidth)} × ${mm(p.tetoDepth)} mm`);
+  if (p.modelo === 'Piramidal' && p.alturaPainel) linhas.push(`Painel da frente: ${mm(p.alturaPainel)} mm de altura`);
   if ((p.modelo === 'Piramidal' || p.modelo === 'Linea') && p.carenagemHeight) {
     const cw = p.carenagemWidth ? `${mm(p.carenagemWidth)} × ` : '';
     const cd = p.carenagemDepth ? `${mm(p.carenagemDepth)} × ` : '';

@@ -102,6 +102,7 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
         controle: salvo.controle,
         posicaoLampadas: salvo.posicaoLampadas,
         posicaoComando: salvo.posicaoComando,
+        alturaPainel: salvo.alturaPainel,
         exato: true,
       },
     };
@@ -158,7 +159,7 @@ function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaI
       const car = carenagemParaTabela(medida, contexto.padroes);
       return {
         ...comum, modelo: 'Piramidal', width: medida, depth: lote.profundidade, height: lote.altura,
-        tetoWidth: teto.largura, tetoDepth: teto.profundidade,
+        tetoWidth: teto.largura, tetoDepth: teto.profundidade, alturaPainel: lote.alturaPainelPiramidal,
         carenagemWidth: car.largura, carenagemDepth: car.profundidade, carenagemHeight: car.altura,
       };
     }

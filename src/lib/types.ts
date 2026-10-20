@@ -72,6 +72,8 @@ export type CoifaParamsSalvos = {
   controle?: 'botoes' | 'botoeira';
   /** Parede: lâmpadas na frente (padrão) ou junto à parede. */
   posicaoLampadas?: 'frente' | 'parede';
+  /** Piramidal: altura do painel vertical da frente (onde ficam botoeira/botões), em mm. 0/ausente = sem painel. Só desenho — não muda o preço. */
+  alturaPainel?: number;
   /** Posição dos botões/botoeira (frente ou embaixo × esquerda/centro/direita). Ausente = frente-centro. */
   posicaoComando?: 'frente-esquerda' | 'frente-centro' | 'frente-direita' | 'embaixo-esquerda' | 'embaixo-centro' | 'embaixo-direita';
   /**

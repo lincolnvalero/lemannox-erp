@@ -43,6 +43,11 @@ export interface CoifaViewer3DProps {
   controle?: TipoControle;
   /** Instalação em Parede: lâmpadas na frente (padrão) ou junto à parede. Na Ilha, metade/metade. */
   posicaoLampadas?: PosicaoLampadas;
+  /**
+   * Piramidal: altura do painel vertical da frente (a "saia" de 80–100mm onde
+   * ficam a botoeira e os botões) — só depois dele a face inclina. 0 = sem painel.
+   */
+  alturaPainel?: number;
   /** Onde ficam os botões/botoeira: frente ou embaixo × esquerda/centro/direita. Padrão: frente-centro. */
   posicaoComando?: PosicaoComando;
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
@@ -581,6 +586,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     metalMat.needsUpdate = true;
     const todas: Quad[] = [];
     let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
+    let painelPiramidal = 0; // altura da saia vertical (só Piramidal)
+    let frisoBase: Rect | null = null, frisoTopo: Rect | null = null; // zona dos frisos (se diferente do corpo)
 
     if (modelo === 'Tube') {
       const radius = width / 2;
@@ -618,9 +625,19 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         const tw = props.tetoWidth && props.tetoWidth > 0 ? props.tetoWidth : width * 0.4;
         const td = props.tetoDepth && props.tetoDepth > 0 ? props.tetoDepth : depth * 0.7;
         const zc = props.mount === 'Parede' ? -(depth / 2 - td / 2) : 0;
-        corpoBase = rect(width, depth, 0, 0, 0); corpoTopo = rect(tw, td, 0, zc, height);
+        // Painel vertical na frente (saia): sobe reto e só depois a face inclina.
+        painelPiramidal = Math.max(0, Math.min(props.alturaPainel ?? 0, height * 0.6));
+        corpoBase = rect(width, depth, 0, 0, painelPiramidal); corpoTopo = rect(tw, td, 0, zc, height);
         const f = shellFaces(corpoBase, corpoTopo);
-        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back); partes.base.push(f.bottom);
+        partes['22'].push(f.front, f.right, f.left); partes['24'].push(f.back);
+        if (painelPiramidal > 0) {
+          const saia = shellFaces(rect(width, depth, 0, 0, 0), rect(width, depth, 0, 0, painelPiramidal));
+          partes['22'].push(saia.front, saia.right, saia.left); partes['24'].push(saia.back); partes.base.push(saia.bottom);
+          frisoBase = rect(width, depth, 0, 0, 0); frisoTopo = rect(width, depth, 0, 0, painelPiramidal);
+          addLabel(V(-width / 2 - gap * 0.25, painelPiramidal / 2, depth / 2), `Painel ${fmt(painelPiramidal)}`);
+        } else {
+          partes.base.push(f.bottom);
+        }
         // Carenagem opcional sobre o teto (mesma regra da Línea). Sem medida
         // própria, acompanha o teto — é o duto subindo dele. Na Parede encosta
         // no fundo; na Ilha fica centralizada: o teto da Piramidal tem 3 águas
@@ -677,7 +694,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         todas.push(...partes[g]);
       });
       const edgesGeo = geomFromQuads(todas);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(edgesGeo, 20), edgeMat);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(edgesGeo, 12), edgeMat);
       edgesGeo.dispose();
       edges.visible = s.show.edges;
       modelGroup.add(edges);
@@ -687,7 +704,9 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     // ── Frisos (Box/Piramidal/Línea): faixas na parte de baixo das faces marcadas.
     if (corpoBase && corpoTopo && (props.frisoFrente || props.frisoLD || props.frisoLE)) {
       const nLinhas = Math.max(1, Math.min(3, props.frisoLinhas ?? 1));
-      const faixaAltura = modelo === 'Linea' ? height : Math.min(height * 0.35, 180);
+      // Piramidal com painel: os frisos ficam no painel vertical.
+      const zonaBase = frisoBase ?? corpoBase, zonaTopo = frisoTopo ?? corpoTopo;
+      const faixaAltura = frisoBase ? painelPiramidal : modelo === 'Linea' ? height : Math.min(height * 0.35, 180);
       const esp = Math.min(10, faixaAltura / (nLinhas + 1) * 0.5);
       const faces: ('front' | 'right' | 'left')[] = [];
       if (props.frisoFrente) faces.push('front');
@@ -696,7 +715,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       const quads: Quad[] = [];
       for (let i = 0; i < nLinhas; i++) {
         const yc = faixaAltura * (i + 1) / (nLinhas + 1);
-        faces.forEach(face => quads.push(faixa(corpoBase!, corpoTopo!, face, yc - esp / 2, yc + esp / 2)));
+        faces.forEach(face => quads.push(faixa(zonaBase, zonaTopo, face, yc - esp / 2, yc + esp / 2)));
       }
       modelGroup.add(new THREE.Mesh(geomFromQuads(quads), frisoMat));
     }
@@ -712,6 +731,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       tipoControle: props.controle ?? 'botoeira',
       posicaoLampadas: props.posicaoLampadas,
       posicaoComando: props.posicaoComando,
+      alturaPainel: modelo === 'Piramidal' ? props.alturaPainel : undefined,
     });
 
     // ── Filtro e coletor de gordura (vistos por baixo — vista "Inferior").
@@ -756,12 +776,15 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
 
     // Botões ou botoeira: na frente (rente à face, que é inclinada na Piramidal)
     // ou embaixo (face de baixo, junto à borda da frente).
-    const zFrenteEm = (y: number) => (corpoBase && corpoTopo ? secao(corpoBase, corpoTopo, y).z1 : depth / 2);
+    // Abaixo da base do tronco (painel vertical) a frente é reta, em depth/2.
+    const zFrenteEm = (y: number) => (corpoBase && corpoTopo && y > corpoBase.y ? secao(corpoBase, corpoTopo, y).z1 : depth / 2);
     const embaixo = plano.botoes.lado === 'embaixo';
     // A frente da Piramidal é inclinada: botoeira e botões precisam deitar sobre
     // a face (girados pelo ângulo dela) — antes ficavam na vertical, enterrados
     // na chapa, e o painel quase não aparecia.
-    const phi = corpoBase && corpoTopo ? Math.atan2(corpoBase.z1 - corpoTopo.z1, corpoTopo.y - corpoBase.y) : 0;
+    // Sobre o painel vertical o ângulo é 0; só acima dele a face inclina.
+    const yComando = plano.botoes.furos[0]?.y ?? 0;
+    const phi = corpoBase && corpoTopo && yComando > corpoBase.y ? Math.atan2(corpoBase.z1 - corpoTopo.z1, corpoTopo.y - corpoBase.y) : 0;
     const nFace = { y: Math.sin(phi), z: Math.cos(phi) }; // normal da face da frente (para fora)
     const naFace = (x: number, y: number, afasta: number) => V(x, y + nFace.y * afasta, zFrenteEm(y) + nFace.z * afasta);
     if (plano.botoes.furos.length > 0) {
@@ -835,7 +858,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.material, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.alturaPainel, props.material, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 
