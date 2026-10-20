@@ -758,6 +758,12 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     // ou embaixo (face de baixo, junto à borda da frente).
     const zFrenteEm = (y: number) => (corpoBase && corpoTopo ? secao(corpoBase, corpoTopo, y).z1 : depth / 2);
     const embaixo = plano.botoes.lado === 'embaixo';
+    // A frente da Piramidal é inclinada: botoeira e botões precisam deitar sobre
+    // a face (girados pelo ângulo dela) — antes ficavam na vertical, enterrados
+    // na chapa, e o painel quase não aparecia.
+    const phi = corpoBase && corpoTopo ? Math.atan2(corpoBase.z1 - corpoTopo.z1, corpoTopo.y - corpoBase.y) : 0;
+    const nFace = { y: Math.sin(phi), z: Math.cos(phi) }; // normal da face da frente (para fora)
+    const naFace = (x: number, y: number, afasta: number) => V(x, y + nFace.y * afasta, zFrenteEm(y) + nFace.z * afasta);
     if (plano.botoes.furos.length > 0) {
       const dBot = plano.botoes.diametro;
       const bg = new THREE.CylinderGeometry(dBot / 2, dBot / 2, 4, 20);
@@ -769,7 +775,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
           modelGroup.add(placa);
         } else {
           const placa = new THREE.Mesh(new THREE.BoxGeometry(pl.largura, pl.altura, 3), btnMat);
-          placa.position.set(pl.x, pl.y ?? 0, zFrenteEm(pl.y ?? 0) + 1.5);
+          placa.rotation.x = -phi;
+          placa.position.copy(naFace(pl.x, pl.y ?? 0, 1.5));
           modelGroup.add(placa);
         }
       });
@@ -779,8 +786,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         if (embaixo) {
           m.position.set(f.x, -2 - recuo, f.z ?? 0);
         } else {
-          m.rotation.x = Math.PI / 2;
-          m.position.set(f.x, f.y ?? 0, zFrenteEm(f.y ?? 0) + 2 + recuo);
+          m.rotation.x = Math.PI / 2 - phi;
+          m.position.copy(naFace(f.x, f.y ?? 0, 2 + recuo));
         }
         modelGroup.add(m);
       });

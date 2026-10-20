@@ -143,7 +143,8 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
 
   // ── Botões / botoeira ─────────────────────────────────────────────────────
   const nBot = Math.min(MAX_FUROS, Math.max(0, Math.round(e.qtdBotoes)));
-  const yBotao = Math.min(e.height, 60) / 2;
+  // Na Piramidal a frente é inclinada e a borda de baixo é só uma quina: o painel fica mais acima (≈80mm) pra aparecer.
+  const yBotao = Math.min(e.height, e.modelo === 'Piramidal' ? 160 : 60) / 2;
   const { botaoDiametro: dia, botaoEspacamento: esp, botoesPorBotoeira: porPlaca } = FURO_PADRAO;
   const furosBotao: FuroBotao[] = [];
   const placas: PlacaBotoeira[] = [];
