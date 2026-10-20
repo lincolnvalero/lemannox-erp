@@ -5,7 +5,7 @@
 import type { QuoteItem, CoifaParamsSalvos } from './types';
 import type { CoifaViewer3DProps } from '@/components/dashboard/coifa-viewer-3d';
 import {
-  loteDefinido, carenagemParaTabela, tetoParaTabela, LINHAS_TABELA,
+  loteDefinido, carenagemParaTabela, tetoParaTabela, LINHAS_TABELA, ROTULOS_ANTIGOS,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA, formatarMedidaCoifa, type PadroesTabela,
 } from './coifa-padroes';
 
@@ -129,7 +129,8 @@ export function coifaParamsFromQuoteItem(item: ItemAvaliavel, contexto: Contexto
 function desenhoDaTabela(item: ItemAvaliavel, contexto: ContextoDesenho): CoifaItemParams | null {
   const produto = item.productId ? contexto.produtos?.get(item.productId) : undefined;
   if (!produto) return null;
-  const linha = LINHAS_TABELA.find(l => l.modelLabel === produto.model);
+  const rotulo = ROTULOS_ANTIGOS[produto.model] ?? produto.model;
+  const linha = LINHAS_TABELA.find(l => l.modelLabel === rotulo);
   if (!linha) return null;
   if (produto.model !== (item.name ?? '').trim() || semEspacos(produto.measurement) !== semEspacos(item.measurement)) return null;
   const tipoAplicacao = produto.category === CATEGORIA_COIFA_CHURRASQUEIRA ? 'Churrasqueira'

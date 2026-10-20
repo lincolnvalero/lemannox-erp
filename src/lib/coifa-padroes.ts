@@ -33,15 +33,32 @@ export type LoteTabela = { profundidade: number; altura: number; alturaCorpoLine
  * gerado pela tabela e desenhá-lo.
  */
 export type ModeloCoifaTabela = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
-export type LinhaTabela = { modelo: ModeloCoifaTabela; instalacao: 'Parede' | 'Ilha'; modelLabel: string };
+export type AplicacaoCoifa = 'Cozinha' | 'Churrasqueira';
+export type LinhaTabela = {
+  modelo: ModeloCoifaTabela;
+  instalacao: 'Parede' | 'Ilha';
+  modelLabel: string;
+  /** Aplicações em que o modelo existe (Línea e Tube são só de cozinha — Levi, 19/10). */
+  aplicacoes: AplicacaoCoifa[];
+};
+const AMBAS: AplicacaoCoifa[] = ['Cozinha', 'Churrasqueira'];
 export const LINHAS_TABELA: LinhaTabela[] = [
-  { modelo: 'Box', instalacao: 'Parede', modelLabel: 'Box de Parede' },
-  { modelo: 'Box', instalacao: 'Ilha', modelLabel: 'Box Ilha' },
-  { modelo: 'Piramidal', instalacao: 'Parede', modelLabel: 'Piramidal de Parede' },
-  { modelo: 'Piramidal', instalacao: 'Ilha', modelLabel: 'Piramidal Ilha' },
-  { modelo: 'Linea', instalacao: 'Parede', modelLabel: 'Línea' },
-  { modelo: 'Tube', instalacao: 'Parede', modelLabel: 'Tube' },
+  { modelo: 'Box', instalacao: 'Parede', modelLabel: 'Box de Parede', aplicacoes: AMBAS },
+  { modelo: 'Box', instalacao: 'Ilha', modelLabel: 'Box Ilha', aplicacoes: AMBAS },
+  { modelo: 'Piramidal', instalacao: 'Parede', modelLabel: 'Piramidal de Parede', aplicacoes: AMBAS },
+  { modelo: 'Piramidal', instalacao: 'Ilha', modelLabel: 'Piramidal Ilha', aplicacoes: AMBAS },
+  { modelo: 'Linea', instalacao: 'Parede', modelLabel: 'Línea de Parede', aplicacoes: ['Cozinha'] },
+  { modelo: 'Linea', instalacao: 'Ilha', modelLabel: 'Línea Ilha', aplicacoes: ['Cozinha'] },
+  { modelo: 'Tube', instalacao: 'Parede', modelLabel: 'Tube de Parede', aplicacoes: ['Cozinha'] },
+  { modelo: 'Tube', instalacao: 'Ilha', modelLabel: 'Tube Ilha', aplicacoes: ['Cozinha'] },
 ];
+/** Nomes da tabela anterior ("Línea" e "Tube" eram só de parede) — ainda reconhecidos para desenhar itens antigos. */
+export const ROTULOS_ANTIGOS: Record<string, string> = { 'Línea': 'Línea de Parede', 'Tube': 'Tube de Parede' };
+/** Modelos que só existem para cozinha. */
+export const modeloSoCozinha = (modelo: string) => modelo === 'Linea' || modelo === 'Tube';
+
+/** Preço da tabela: zera a unidade (ex: 2.354,90 → 2.350,00) — Levi, 19/10. */
+export const arredondarPrecoTabela = (valor: number) => Math.round(valor / 10) * 10;
 export const CATEGORIA_COIFA_COZINHA = 'Coifa de Cozinha';
 export const CATEGORIA_COIFA_CHURRASQUEIRA = 'Coifa de Churrasqueira';
 

@@ -47,6 +47,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
   const [antigos, setAntigos] = useState<number | null>(null);
   const [gerando, setGerando] = useState(false);
   const [resumo, setResumo] = useState<string | null>(null);
+  const [avisos, setAvisos] = useState<string[]>([]);
 
   useEffect(() => { if (role === 'admin') contarAntigosCoifas().then(setAntigos); }, [role]);
 
@@ -76,15 +77,17 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
     setConfirmar(false);
     setGerando(true);
     setResumo(null);
+    setAvisos([]);
     const r = await generatePriceTableCoifas({ arquivarAntigos: arquivar && (antigos ?? 0) > 0 });
     setGerando(false);
     if (r.success) {
       const texto = `${r.created ?? 0} produto(s) criado(s), ${r.updated ?? 0} atualizado(s)${r.archived ? `, ${r.archived} antigo(s) arquivado(s)` : ''}.`;
-      setResumo(r.errors ? `${texto} ${r.errors.length} com erro — veja o console.` : texto);
-      if (r.errors) console.error('Erros na geração da tabela de preços:', r.errors);
+      setResumo(r.errors ? `${texto} ${r.errors.length} preço(s) NÃO gravado(s) — veja a lista abaixo.` : texto);
+      if (r.errors) { setAvisos(r.errors); console.error('Erros na geração da tabela de preços:', r.errors); }
       toast({ title: 'Tabela de Preços gerada!', description: texto });
       contarAntigosCoifas().then(setAntigos);
     } else {
+      if (r.errors) setAvisos(r.errors);
       toast({ variant: 'destructive', title: 'Erro ao gerar tabela', description: r.error });
     }
   };
@@ -125,7 +128,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Emissão da Tabela de Preços</CardTitle>
           <CardDescription>
-            Gera os produtos de Coifas de Cozinha e de Churrasqueira (Box de Parede, Box Ilha, Piramidal de Parede, Piramidal Ilha, Línea, Tube — 1000 a 3000mm, Inox 430/304/Carbono) a partir deste motor de cálculo.
+            Gera os produtos de Coifas de Cozinha (Box, Piramidal, Línea e Tube, cada um de Parede e Ilha) e de Churrasqueira (Box e Piramidal, de Parede e Ilha) — 1000 a 3000mm, Inox 430/304/Carbono — a partir deste motor de cálculo. Línea e Tube são só de cozinha. Os preços saem com a unidade zerada (ex: 2.354,90 → 2.350,00).
             Produtos com a mesma categoria, modelo e medida são atualizados; os demais são criados. Pede confirmação antes de gerar.
           </CardDescription>
           <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
@@ -142,6 +145,13 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
             {gerando ? 'Gerando...' : 'Gerar Tabela de Preços — Coifas'}
           </Button>
           {resumo && <p className="text-xs text-muted-foreground text-center">{resumo}</p>}
+          {avisos.length > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-500 space-y-0.5 max-h-40 overflow-y-auto">
+              <p className="font-medium">Preços não gravados (custo incompleto — ex: chapa não encontrada no Estoque):</p>
+              {avisos.slice(0, 12).map((a) => <p key={a}>• {a}</p>)}
+              {avisos.length > 12 && <p>… e mais {avisos.length - 12}.</p>}
+            </div>
+          )}
         </CardFooter>
       </Card>
 
@@ -180,7 +190,7 @@ export function EmissaoTabelaCoifas({ parametros, onParametrosSalvos }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Emitir a Tabela de Preços das coifas?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão calculados e gravados os preços de Coifas de Cozinha e de Churrasqueira, em todos os modelos, de 1000 a 3000 mm
+              Serão calculados e gravados os preços de Coifas de Cozinha (Box, Piramidal, Línea e Tube — Parede e Ilha) e de Churrasqueira (Box e Piramidal — Parede e Ilha), de 1000 a 3000 mm
               (Inox 430, Inox 304 e Carbono). Produtos já existentes com a mesma categoria, modelo e medida terão o preço atualizado.
             </AlertDialogDescription>
           </AlertDialogHeader>

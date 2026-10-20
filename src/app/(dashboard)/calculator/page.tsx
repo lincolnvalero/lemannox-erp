@@ -37,7 +37,7 @@ import {
 import { getCalculatorReferenceData } from './actions';
 import { EmissaoTabelaCoifas } from '@/components/dashboard/emissao-tabela-coifas';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { formatarMedidaCoifa, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
+import { formatarMedidaCoifa, modeloSoCozinha, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { planejarFuros, resumoFuros, POSICOES_COMANDO } from '@/lib/coifa-furos';
 import { useToast } from '@/hooks/use-toast';
@@ -209,6 +209,13 @@ export default function CostCalculatorPage() {
         .map(m => m.width as number)
     )).sort((a, b) => a - b);
   }, [ref, watchedMaterial]);
+
+  // Línea e Tube existem só para cozinha (Levi, 19/10): trocar para um deles
+  // volta a aplicação para Cozinha.
+  useEffect(() => {
+    if (modeloSoCozinha(watchedModelo) && form.getValues('tipoAplicacao') === 'Churrasqueira') form.setValue('tipoAplicacao', 'Cozinha');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedModelo]);
 
   const isPiramidal = watchedModelo === 'Piramidal';
   const isLinea = watchedModelo === 'Linea';
@@ -487,7 +494,7 @@ export default function CostCalculatorPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent></Select></FormItem> )} />
+                    <FormField control={form.control} name="tipoAplicacao" render={({ field }) => ( <FormItem><FormLabel>Aplicação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira" disabled={modeloSoCozinha(watchedModelo)}>Churrasqueira</SelectItem></SelectContent></Select>{modeloSoCozinha(watchedModelo) && <FormDescription className="text-xs">Línea e Tube são só de cozinha.</FormDescription>}</FormItem> )} />
                     <FormField control={form.control} name="tipoInstalacao" render={({ field }) => ( <FormItem><FormLabel>Instalação</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="Parede">Parede</SelectItem><SelectItem value="Ilha">Ilha</SelectItem></SelectContent></Select><FormDescription className="text-xs">Ilha soma o acréscimo de mão de obra da tabela — não é mais um modelo à parte.</FormDescription></FormItem> )} />
                   </div>
                   {(watchedAplicacao === 'Churrasqueira' && !isTube) && (

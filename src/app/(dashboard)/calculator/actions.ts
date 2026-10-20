@@ -6,7 +6,7 @@ import type { CalculatorReferenceData, IluminacaoRow, MaoDeObraRow, ParametrosGl
 import { getMaterials } from '@/app/(dashboard)/materials/actions';
 import { GRUPO_ARQUIVO } from '@/lib/product-groups';
 import {
-  LINHAS_TABELA,
+  LINHAS_TABELA, arredondarPrecoTabela,
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA,
   LOTE_PROFUNDIDADE_MIN, LOTE_PROFUNDIDADE_MAX, LOTE_ALTURA_MIN, LOTE_ALTURA_MAX, LOTE_CORPO_LINEA_MIN, LOTE_CORPO_LINEA_MAX,
   CATEGORIA_COIFA_COZINHA, CATEGORIA_COIFA_CHURRASQUEIRA,
@@ -95,12 +95,17 @@ function chapaPadraoParaLote(width: number): number {
   return width <= 1900 ? 2000 : 3000;
 }
 
-// Produto da tabela nova: modelo da lista e medida "NNNNmm" (1000mm…3000mm).
-const MEDIDA_TABELA_NOVA = /^\d{4}mm$/i;
-const ROTULOS_TABELA = new Set(LINHAS_TABELA.map(l => l.modelLabel));
+// Chaves (categoria|modelo|medida) de TUDO o que a tabela nova gera. Qualquer
+// outro produto de coifa é "antigo": formato LxPxA, nomes longos, Línea/Tube
+// Churrasqueira (que deixaram de existir), nomes sem "de Parede" etc.
+const chavePT = (categoria: string, modelo: string, medida: string) => `${categoria}|${modelo}|${medida}`;
+const CHAVES_TABELA_NOVA = new Set(
+  APLICACOES.flatMap(a => LINHAS_TABELA.filter(l => l.aplicacoes.includes(a.tipoAplicacao))
+    .flatMap(l => MEDIDAS.map(m => chavePT(a.category, l.modelLabel, `${m}mm`)))),
+);
 
-// Quem exatamente é "antigo": produto de coifa que não segue o formato da
-// tabela nova e ainda não foi arquivado.
+// Quem exatamente é "antigo": produto de coifa que a tabela nova não gera e
+// que ainda não foi arquivado.
 async function idsAntigosCoifas(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string[]> {
   const { data, error } = await supabase
     .from('products')
@@ -109,7 +114,7 @@ async function idsAntigosCoifas(supabase: Awaited<ReturnType<typeof createClient
   if (error) throw error;
   return (data ?? [])
     .filter(p => p.product_group !== GRUPO_ARQUIVO)
-    .filter(p => !(ROTULOS_TABELA.has(String(p.model)) && MEDIDA_TABELA_NOVA.test(String(p.measurement ?? '').trim())))
+    .filter(p => !CHAVES_TABELA_NOVA.has(chavePT(String(p.category), String(p.model), String(p.measurement ?? '').trim())))
     .map(p => p.id as string);
 }
 
@@ -162,7 +167,7 @@ export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boole
     // 1) Calcula tudo em memória primeiro: se algo estiver errado no
     //    Estoque/tabelas, nada é apagado.
     for (const { tipoAplicacao, category } of APLICACOES) {
-      for (const linha of LINHAS_TABELA) {
+      for (const linha of LINHAS_TABELA.filter(l => l.aplicacoes.includes(tipoAplicacao))) {
         for (const medida of MEDIDAS) {
           const variations: NovoProduto['variations'] = [];
           for (const material of MATERIAIS) {
@@ -196,7 +201,14 @@ export async function generatePriceTableCoifas(opcoes: { arquivarAntigos?: boole
                 frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
                 outros: 0, paintingCost: ref.parametros['pintura_padrao'] ?? 0,
               }, ref);
-              variations.push({ id: crypto.randomUUID(), material, price: Math.round(result.finalPrice * 100) / 100 });
+              // Cálculo com aviso (ex: chapa não encontrada no Estoque) = custo
+              // faltando. Não grava preço incompleto: registra o aviso e pula.
+              if (result.warnings.length > 0) {
+                errors.push(`${category} — ${linha.modelLabel} ${medida}mm (${material}): ${result.warnings.join(' ')}`);
+                continue;
+              }
+              // Preço de tabela: zera a unidade (2.354,90 → 2.350,00).
+              variations.push({ id: crypto.randomUUID(), material, price: arredondarPrecoTabela(result.finalPrice) });
             } catch (err) {
               errors.push(`${category} — ${linha.modelLabel} ${medida}mm (${material}): ${err instanceof Error ? err.message : 'erro no cálculo'}`);
             }

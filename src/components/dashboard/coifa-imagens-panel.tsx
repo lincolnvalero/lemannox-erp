@@ -244,7 +244,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Modelo</Label>
-                <Select value={f.modelo} onValueChange={(v) => set('modelo', v as Modelo)}>
+                <Select value={f.modelo} onValueChange={(v) => setF((o) => ({ ...o, modelo: v as Modelo, aplicacao: v === 'Linea' || v === 'Tube' ? 'Cozinha' : o.aplicacao }))}>
                   <SelectTrigger><SelectValue placeholder="Escolha" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Box">Box</SelectItem>
@@ -265,7 +265,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 <Label className="text-xs">Aplicação</Label>
                 <Select value={f.aplicacao} onValueChange={(v) => set('aplicacao', v as Form['aplicacao'])}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira">Churrasqueira</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="Cozinha">Cozinha</SelectItem><SelectItem value="Churrasqueira" disabled={f.modelo === 'Linea' || f.modelo === 'Tube'}>Churrasqueira</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
