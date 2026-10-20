@@ -222,6 +222,11 @@ export default function CostCalculatorPage() {
   }, [watchedModelo]);
 
   const isPiramidal = watchedModelo === 'Piramidal';
+  // Piramidal não tem friso (Levi, 21/10): trocar para ela limpa a marcação.
+  useEffect(() => {
+    if (watchedModelo === 'Piramidal') { form.setValue('frisoFrente', false); form.setValue('frisoLD', false); form.setValue('frisoLE', false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedModelo]);
   const isLinea = watchedModelo === 'Linea';
   const isTube = watchedModelo === 'Tube';
   // Línea é sempre com carenagem; Piramidal pode ser com ou sem.
@@ -665,6 +670,7 @@ export default function CostCalculatorPage() {
                     )} />
                   )}
 
+                  {!isPiramidal && (
                   <div className="rounded-md border p-3 space-y-2">
                     <p className="text-sm font-medium">Frisos</p>
                     <div className="flex items-center gap-4 flex-wrap">
@@ -682,6 +688,7 @@ export default function CostCalculatorPage() {
                       </FormItem>
                     )} />
                   </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="outros" render={({ field }) => ( <FormItem><FormLabel>Outros (R$)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0,00" {...field} value={field.value || ''} /></FormControl><FormDescription className="text-xs">Tubos de paneleiro etc.</FormDescription></FormItem> )} />

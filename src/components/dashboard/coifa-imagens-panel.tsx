@@ -202,7 +202,8 @@ function montarParametros(f: Form, material: string): { params: CoifaParamsSalvo
     tipoAplicacao: f.aplicacao, tipoInstalacao: f.mount, material,
     qtdLampadas: lamp, qtdBotoes: bot, controle: f.controle, posicaoLampadas: f.posLamp, posicaoComando: f.posCmd,
     filtro: f.filtro, coletor: f.filtro === 'nenhum' ? 'nenhum' : f.coletor,
-    frisoFrente: f.frisoF, frisoLD: f.frisoLD, frisoLE: f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
+    // Piramidal não tem friso.
+    frisoFrente: f.modelo !== 'Piramidal' && f.frisoF, frisoLD: f.modelo !== 'Piramidal' && f.frisoLD, frisoLE: f.modelo !== 'Piramidal' && f.frisoLE, frisoLinhas: Number(f.frisoLinhas) || 1,
   };
   if (f.modelo === 'Piramidal') {
     params.tetoWidth = tetoL; params.tetoDepth = tetoP;
@@ -353,6 +354,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
               </div>
             )}
 
+            {f.modelo !== 'Piramidal' && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
               <span className="text-xs font-medium">Frisos:</span>
               {([['frisoF', 'Frente'], ['frisoLD', 'Lat. direita'], ['frisoLE', 'Lat. esquerda']] as const).map(([k, rot]) => (
@@ -365,6 +367,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 <SelectContent><SelectItem value="1">1 linha</SelectItem><SelectItem value="2">2 linhas</SelectItem><SelectItem value="3">3 linhas</SelectItem></SelectContent>
               </Select>
             </div>
+            )}
           </div>
 
           <div className="space-y-2">

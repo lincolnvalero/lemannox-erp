@@ -339,7 +339,8 @@ export function calculateCoifa(input: CoifaCalculatorInput, ref: CalculatorRefer
       frisoCost = input.frisoLinhas * (0.25 * precoChapa + 0.25 * precoChapa);
       details.push({ label: `Friso Tube (${input.frisoLinhas} linha(s) — 25% chapa + 25% mão de obra)`, value: brl(frisoCost) });
     }
-  } else {
+  } else if (input.modelo !== 'Piramidal') {
+    // Piramidal não tem friso (Levi, 21/10).
     const extensaoMm = (input.frisoFrente ? width : 0) + (input.frisoLD ? depth : 0) + (input.frisoLE ? depth : 0);
     if (extensaoMm > 0) {
       const extensaoCm = extensaoMm / 10;

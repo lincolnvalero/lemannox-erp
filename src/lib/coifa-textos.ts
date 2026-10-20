@@ -52,7 +52,7 @@ export function especificacoesDaCoifa(p: CoifaItemParams, qtd: { lampadas: numbe
     const coletor = p.coletor && p.coletor !== 'nenhum' ? ` com coletor de gordura${p.coletor === 'duplo' ? ' duplo' : ''}` : '';
     linhas.push(nome + coletor);
   }
-  if (p.frisoFrente || p.frisoLD || p.frisoLE) {
+  if (p.modelo !== 'Piramidal' && (p.frisoFrente || p.frisoLD || p.frisoLE)) {
     const onde = [p.frisoFrente && 'frente', p.frisoLD && 'lateral direita', p.frisoLE && 'lateral esquerda'].filter(Boolean).join(', ');
     const n = p.frisoLinhas ?? 1;
     linhas.push(`Friso brilhante (${n} linha${n !== 1 ? 's' : ''}) — ${onde}`);

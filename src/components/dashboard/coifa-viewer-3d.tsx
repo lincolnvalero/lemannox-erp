@@ -587,7 +587,6 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     const todas: Quad[] = [];
     let corpoBase: Rect | null = null, corpoTopo: Rect | null = null; // onde vão frisos/filtro
     let painelPiramidal = 0; // altura da saia vertical (só Piramidal)
-    let frisoBase: Rect | null = null, frisoTopo: Rect | null = null; // zona dos frisos (se diferente do corpo)
 
     if (modelo === 'Tube') {
       const radius = width / 2;
@@ -633,7 +632,6 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
         if (painelPiramidal > 0) {
           const saia = shellFaces(rect(width, depth, 0, 0, 0), rect(width, depth, 0, 0, painelPiramidal));
           partes['22'].push(saia.front, saia.right, saia.left); partes['24'].push(saia.back); partes.base.push(saia.bottom);
-          frisoBase = rect(width, depth, 0, 0, 0); frisoTopo = rect(width, depth, 0, 0, painelPiramidal);
           addLabel(V(-width / 2 - gap * 0.25, painelPiramidal / 2, depth / 2), `Painel ${fmt(painelPiramidal)}`);
         } else {
           partes.base.push(f.bottom);
@@ -702,11 +700,9 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     }
 
     // ── Frisos (Box/Piramidal/Línea): faixas na parte de baixo das faces marcadas.
-    if (corpoBase && corpoTopo && (props.frisoFrente || props.frisoLD || props.frisoLE)) {
+    if (corpoBase && corpoTopo && modelo !== 'Piramidal' && (props.frisoFrente || props.frisoLD || props.frisoLE)) {
       const nLinhas = Math.max(1, Math.min(3, props.frisoLinhas ?? 1));
-      // Piramidal com painel: os frisos ficam no painel vertical.
-      const zonaBase = frisoBase ?? corpoBase, zonaTopo = frisoTopo ?? corpoTopo;
-      const faixaAltura = frisoBase ? painelPiramidal : modelo === 'Linea' ? height : Math.min(height * 0.35, 180);
+      const faixaAltura = modelo === 'Linea' ? height : Math.min(height * 0.35, 180);
       const esp = Math.min(10, faixaAltura / (nLinhas + 1) * 0.5);
       const faces: ('front' | 'right' | 'left')[] = [];
       if (props.frisoFrente) faces.push('front');
@@ -715,7 +711,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       const quads: Quad[] = [];
       for (let i = 0; i < nLinhas; i++) {
         const yc = faixaAltura * (i + 1) / (nLinhas + 1);
-        faces.forEach(face => quads.push(faixa(zonaBase, zonaTopo, face, yc - esp / 2, yc + esp / 2)));
+        faces.forEach(face => quads.push(faixa(corpoBase!, corpoTopo!, face, yc - esp / 2, yc + esp / 2)));
       }
       modelGroup.add(new THREE.Mesh(geomFromQuads(quads), frisoMat));
     }
