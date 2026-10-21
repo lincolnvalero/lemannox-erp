@@ -381,7 +381,7 @@ function DefinirDesenhoDialog({ item, atual, onClose, onSave }: { item: QuoteIte
                 carenagemWidth={params.carenagemWidth} carenagemDepth={params.carenagemDepth} carenagemHeight={params.carenagemHeight}
                 mount={params.tipoInstalacao}
                 qtdLampadas={params.qtdLampadas} qtdBotoes={params.qtdBotoes}
-                controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando} alturaPainel={params.alturaPainel}
+                controle={params.controle} posicaoLampadas={params.posicaoLampadas} posicaoComando={params.posicaoComando} alturaPainel={params.alturaPainel} aplicacao={params.tipoAplicacao}
                 material={params.material}
                 filtro={params.filtro} coletor={params.coletor}
                 frisoFrente={params.frisoFrente} frisoLD={params.frisoLD} frisoLE={params.frisoLE} frisoLinhas={params.frisoLinhas}

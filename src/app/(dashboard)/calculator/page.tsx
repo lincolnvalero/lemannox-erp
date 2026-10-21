@@ -36,10 +36,12 @@ import {
 } from '@/components/ui/select';
 import { getCalculatorReferenceData } from './actions';
 import { EmissaoTabelaCoifas } from '@/components/dashboard/emissao-tabela-coifas';
+import { PlanificacaoCoifa } from '@/components/dashboard/planificacao-coifa';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatarMedidaCoifa, modeloSoCozinha, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { planejarFuros, resumoFuros, POSICOES_COMANDO } from '@/lib/coifa-furos';
+import { desenhoDefinido } from '@/lib/coifa-desenho';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Bot, Calculator, ReceiptText, TrendingUp, Sparkles, AlertTriangle, XCircle, Copy, Box as BoxIcon, RotateCcw, FilePlus2, Download } from 'lucide-react';
@@ -190,6 +192,17 @@ export default function CostCalculatorPage() {
   const qtdBotoesEfetiva = watchedBotoesManual ?? kitPadrao?.qtdBotoes ?? 0;
   const lampadasDivergem = watchedLampadasManual !== undefined && kitPadrao !== null && watchedLampadasManual !== kitPadrao.qtdLampadas;
   const botoesDivergem = watchedBotoesManual !== undefined && kitPadrao !== null && watchedBotoesManual !== kitPadrao.qtdBotoes;
+  // Dados fixos de desenho (furos, dobras, chapa) — editáveis na Memória de Cálculos.
+  const desenhoFixo = useMemo(() => desenhoDefinido(ref?.parametros), [ref]);
+  const entradaPlanificacao = useMemo(() => {
+    const L = Number(watchedWidth) || 0, P = Number(watchedDepth) || 0, A = Number(watchedHeight) || 0;
+    if (!(L > 0 && P > 0 && A > 0)) return null;
+    return {
+      width: L, depth: P, height: A, mount: watchedInstalacao, aplicacao: watchedAplicacao,
+      qtdLampadas: qtdLampadasEfetiva, posicaoLampadas: watchedPosicaoLampadas,
+      qtdBotoes: qtdBotoesEfetiva, tipoControle, posicaoComando: watchedPosicaoComando,
+    };
+  }, [watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
   const nomeBotao = tipoControle === 'botoeira' ? 'Botoeiras' : 'Botões';
   // Furos que o desenho mostra (base para o futuro DXF de fabricação).
   const furosResumo = useMemo(() => {
@@ -197,10 +210,10 @@ export default function CostCalculatorPage() {
     return resumoFuros(planejarFuros({
       modelo: watchedModelo, width: Number(watchedWidth) || 0, depth: Number(watchedDepth) || 0, height: Number(watchedHeight) || 0,
       mount: watchedInstalacao, qtdLampadas: qtdLampadasEfetiva, qtdBotoes: qtdBotoesEfetiva,
-      tipoControle, posicaoLampadas: watchedPosicaoLampadas, posicaoComando: watchedPosicaoComando,
+      tipoControle, posicaoLampadas: watchedPosicaoLampadas, posicaoComando: watchedPosicaoComando, aplicacao: watchedAplicacao, desenho: desenhoFixo,
       alturaPainel: watchedModelo === 'Piramidal' ? Number(watchedAlturaPainel) || 0 : undefined,
     }));
-  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas, watchedPosicaoComando, watchedAlturaPainel]);
+  }, [watchedModelo, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, qtdLampadasEfetiva, qtdBotoesEfetiva, tipoControle, watchedPosicaoLampadas, watchedPosicaoComando, watchedAlturaPainel, watchedAplicacao, desenhoFixo]);
   // Texto em edição dos campos do kit: permite apagar o número inteiro antes
   // de digitar outro (sem isso o campo "voltava" pro padrão a cada Backspace).
   const [kitRascunho, setKitRascunho] = useState<Partial<Record<'qtdLampadasManual' | 'qtdBotoesManual', string>>>({});
@@ -706,6 +719,13 @@ export default function CostCalculatorPage() {
                 </CardFooter>
               </Card>
 
+              <PlanificacaoCoifa
+                entrada={entradaPlanificacao}
+                modelo={watchedModelo}
+                desenho={desenhoFixo}
+                nomeArquivo={`${watchedModelo} ${watchedWidth}x${watchedDepth}x${watchedHeight}`}
+              />
+
               <EmissaoTabelaCoifas
                 parametros={ref?.parametros ?? {}}
                 onParametrosSalvos={(novos) => setRef((old) => (old ? { ...old, parametros: { ...old.parametros, ...novos } } : old))}
@@ -747,6 +767,8 @@ export default function CostCalculatorPage() {
                   posicaoLampadas={watchedPosicaoLampadas}
                   posicaoComando={watchedPosicaoComando}
                   alturaPainel={isPiramidal ? Number(watchedAlturaPainel) || 0 : undefined}
+                  aplicacao={watchedAplicacao}
+                  desenho={desenhoFixo}
                   material={watchedMaterial}
                   filtro={watchedFiltro}
                   coletor={watchedFiltro === 'nenhum' ? 'nenhum' : watchedColetor}

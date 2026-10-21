@@ -15,6 +15,7 @@ import {
   getCalculatorReferenceData, updateParametrosGlobaisRows,
 } from '@/app/(dashboard)/calculator/actions';
 import type { MaoDeObraRow, IluminacaoRow } from '@/lib/types';
+import { CHAVE_DESENHO, DESENHO_INICIAL, type ParametrosDesenho } from '@/lib/coifa-desenho';
 import {
   CHAVES_CARENAGEM_ATE_1300, CHAVES_CARENAGEM_ACIMA_1300, CARENAGEM_ATE_1300_INICIAL, CARENAGEM_ACIMA_1300_INICIAL,
   CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL,
@@ -307,12 +308,33 @@ const GRUPOS_PARAMETROS: { titulo: string; chaves: string[] }[] = [
   { titulo: 'Margem e Pintura', chaves: ['margem_lucro_padrao', 'pintura_padrao'] },
   { titulo: 'Friso decorativo', chaves: ['preco_friso_por_cm'] },
   { titulo: 'Filtro inercial (fórmula: constante ÷ 0,7 × L×P ÷ 1.000.000)', chaves: ['filtro_constante_430', 'filtro_constante_304', 'filtro_constante_aluminio', 'filtro_coletor_gordura_por_cm'] },
+  { titulo: 'Desenho — furos (mm)', chaves: ['furoBotoeira', 'espacoBotoeira', 'furoBotao', 'furoLampadaCozinha', 'furoLampadaChurrasqueira'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
+  { titulo: 'Desenho — posição das lâmpadas na largura', chaves: ['lampPercentual', 'lampLimite', 'lampFixa'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
+  { titulo: 'Desenho — dobras e chapas', chaves: ['acrescimoDobra', 'espessura22', 'espessura24', 'larguraChapa', 'margemChapa', 'espacoPecas'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
+  { titulo: 'Desenho — peças da Box (regras de oficina, do exemplo Coifa Israel)', chaves: ['abaTopo', 'frenteRetorno', 'frentePainel', 'frenteAba', 'frenteBainha', 'frentePainelRecuo', 'costaRetorno', 'costaDegrau', 'costaAba', 'costaBainha', 'costaRecuo', 'lateralAba', 'tampaFolga', 'alivioLargura', 'alivioAltura'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
   { titulo: 'Tabela de Preços — medidas do corpo (mm)', chaves: [CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL] },
   { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas até 1300 mm', chaves: Object.values(CHAVES_CARENAGEM_ATE_1300) },
   { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas a partir de 1400 mm', chaves: Object.values(CHAVES_CARENAGEM_ACIMA_1300) },
 ];
 
+const ROTULOS_DESENHO: Record<keyof ParametrosDesenho, string> = {
+  furoBotoeira: 'Furos da botoeira — diâmetro (5 furos)', espacoBotoeira: 'Furos da botoeira/botões — espaço entre furos',
+  furoBotao: 'Furos dos botões — diâmetro (2 botões)', furoLampadaCozinha: 'Furo da lâmpada — Cozinha (diâmetro)',
+  furoLampadaChurrasqueira: 'Furo da lâmpada — Churrasqueira (diâmetro)',
+  lampPercentual: 'Lateral → 1ª lâmpada (até o limite): % da largura', lampLimite: 'Largura limite da regra do % (mm)',
+  lampFixa: 'Lateral → 1ª lâmpada acima do limite (mm)',
+  acrescimoDobra: 'Acréscimo da dobradeira por dobra (mm)', espessura22: 'Espessura chapa 22 — frente e laterais (mm)',
+  espessura24: 'Espessura chapa 24 — costas, teto e carenagens (mm)', larguraChapa: 'Largura da chapa (mm)',
+  margemChapa: 'Margem da borda da chapa no encaixe (mm)', espacoPecas: 'Espaço entre peças no encaixe (mm)',
+  abaTopo: 'Aba superior (mm)', frenteRetorno: 'Frente — trecho antes do painel de baixo (mm)', frentePainel: 'Frente — painel de baixo, com as lâmpadas (mm)',
+  frenteAba: 'Frente — aba após o painel (mm)', frenteBainha: 'Frente — bainha final (mm)', frentePainelRecuo: 'Frente — recuo lateral do painel de baixo (mm)',
+  costaRetorno: 'Costas — retorno de baixo (mm)', costaDegrau: 'Costas — degrau (mm)', costaAba: 'Costas — aba (mm)',
+  costaBainha: 'Costas — bainha final, cada uma das duas (mm)', costaRecuo: 'Costas — recuo lateral da parte de baixo (mm)',
+  lateralAba: 'Laterais — aba lateral (mm)', tampaFolga: 'Tampa — folga em largura e profundidade (mm)',
+  alivioLargura: 'Recorte de canto — largura (mm)', alivioAltura: 'Recorte de canto — altura (mm)',
+};
 const PARAM_LABELS: Record<string, string> = {
+  ...Object.fromEntries((Object.keys(CHAVE_DESENHO) as (keyof ParametrosDesenho)[]).map(k => [CHAVE_DESENHO[k], ROTULOS_DESENHO[k]])),
   margem_lucro_padrao: 'Margem de lucro padrão (%)',
   pintura_padrao: 'Pintura — valor padrão sugerido (R$)',
   preco_friso_por_cm: 'Friso — preço por cm (R$)',
@@ -334,6 +356,7 @@ const PARAM_LABELS: Record<string, string> = {
 
 // Valor mostrado enquanto o parâmetro ainda não foi gravado no banco.
 const PARAM_PADRAO: Record<string, number> = {
+  ...Object.fromEntries((Object.keys(CHAVE_DESENHO) as (keyof ParametrosDesenho)[]).map(k => [CHAVE_DESENHO[k], DESENHO_INICIAL[k]])),
   [CHAVE_LOTE_PROFUNDIDADE]: 700,
   [CHAVE_LOTE_ALTURA]: 1000,
   [CHAVE_LOTE_ALTURA_CORPO_LINEA]: 100,

@@ -11,6 +11,7 @@
 // para cima.
 
 import type { TipoControle } from './coifa-calculator';
+import { DESENHO_INICIAL, diametroFuroLampada, posicoesLampadasX, type ParametrosDesenho } from './coifa-desenho';
 
 /** Onde ficam as lâmpadas numa coifa de Parede (na Ilha é sempre metade/metade). */
 export type PosicaoLampadas = 'frente' | 'parede';
@@ -99,11 +100,16 @@ export interface EntradaFuros {
   posicaoComando?: PosicaoComando;
   /** Piramidal: altura do painel vertical da frente — o comando fica nele, na metade da altura. */
   alturaPainel?: number;
+  /** Define o diâmetro dos furos das lâmpadas (cozinha 56, churrasqueira 60). Padrão: Cozinha. */
+  aplicacao?: 'Cozinha' | 'Churrasqueira';
+  /** Dados fixos de desenho (Memória). Padrão: valores do Levi/Adriano. */
+  desenho?: ParametrosDesenho;
 }
 
 const MAX_FUROS = 50;
 
 export function planejarFuros(e: EntradaFuros): PlanoFuros {
+  const D = e.desenho ?? DESENHO_INICIAL;
   const tube = e.modelo === 'Tube';
   const diametroTube = e.width > 0 ? e.width : 500;
   const largura = tube ? diametroTube : e.width;
@@ -136,11 +142,14 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const larguraUtil = tube
     ? 2 * Math.sqrt(Math.max(0, (diametroTube / 2) ** 2 - zFileira * zFileira)) * 0.8
     : largura;
-  const maiorFileira = Math.max(nFrente, nFundos, 1);
-  const diametroLampada = Math.max(10, Math.min(FURO_PADRAO.lampadaDiametro, larguraUtil / (maiorFileira * 1.5), banda * 0.8));
-
+  // Diâmetro fixo (cozinha 56 / churrasqueira 60). Posições: a 1ª e a última a
+  // 20% da largura da lateral (até 1000mm; acima, 200mm), as demais igualmente
+  // espaçadas — regra do Levi. Na Tube (redonda), distribuição simples na corda.
+  const diametroLampada = diametroFuroLampada(e.aplicacao, D);
   const fileira = (n: number, z: number): FuroLampada[] =>
-    Array.from({ length: n }, (_, j) => ({ x: -larguraUtil / 2 + larguraUtil * (j + 0.5) / n, z }));
+    tube
+      ? Array.from({ length: n }, (_, j) => ({ x: -larguraUtil / 2 + larguraUtil * (j + 0.5) / n, z }))
+      : posicoesLampadasX(n, largura, D).map((x) => ({ x, z }));
   const furosLampada = [...fileira(nFrente, zFileira), ...fileira(nFundos, -(profundidade / 2 - banda / 2))];
 
   // ── Botões / botoeira ─────────────────────────────────────────────────────
@@ -151,7 +160,10 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const yBotao = e.modelo === 'Piramidal' && (e.alturaPainel ?? 0) > 0
     ? e.alturaPainel! / 2
     : Math.min(e.height, e.modelo === 'Piramidal' ? 160 : 60) / 2;
-  const { botaoDiametro: dia, botaoEspacamento: esp, botoesPorBotoeira: porPlaca } = FURO_PADRAO;
+  // Botoeira: 5 furos Ø8,3; dois botões: Ø19; espaço entre furos 20 (Levi, 20/10).
+  const dia = e.tipoControle === 'botoeira' ? D.furoBotoeira : D.furoBotao;
+  const esp = D.espacoBotoeira;
+  const porPlaca = FURO_PADRAO.botoesPorBotoeira;
   const furosBotao: FuroBotao[] = [];
   const placas: PlacaBotoeira[] = [];
   let escala = 1;

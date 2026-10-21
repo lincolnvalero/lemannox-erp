@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { planejarFuros, resumoFuros, type PosicaoLampadas, type PosicaoComando } from '@/lib/coifa-furos';
+import type { ParametrosDesenho } from '@/lib/coifa-desenho';
 import type { TipoControle } from '@/lib/coifa-calculator';
 
 export type CoifaViewerModelo = 'Box' | 'Piramidal' | 'Linea' | 'Tube';
@@ -48,6 +49,10 @@ export interface CoifaViewer3DProps {
    * ficam a botoeira e os botões) — só depois dele a face inclina. 0 = sem painel.
    */
   alturaPainel?: number;
+  /** Cozinha (lâmpadas Ø56) ou Churrasqueira (Ø60). Padrão: Cozinha. */
+  aplicacao?: 'Cozinha' | 'Churrasqueira';
+  /** Dados fixos de desenho (Memória): diâmetros dos furos, distâncias… Padrão: valores do Levi. */
+  desenho?: ParametrosDesenho;
   /** Onde ficam os botões/botoeira: frente ou embaixo × esquerda/centro/direita. Padrão: frente-centro. */
   posicaoComando?: PosicaoComando;
   /** Nome do material (ex: "Inox 430", "Carbono") — muda a aparência: inox escovado x carbono pintado. */
@@ -728,6 +733,8 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       posicaoLampadas: props.posicaoLampadas,
       posicaoComando: props.posicaoComando,
       alturaPainel: modelo === 'Piramidal' ? props.alturaPainel : undefined,
+      aplicacao: props.aplicacao,
+      desenho: props.desenho,
     });
 
     // ── Filtro e coletor de gordura (vistos por baixo — vista "Inferior").
@@ -854,7 +861,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
   }, [
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
-    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.alturaPainel, props.material, props.filtro, props.coletor,
+    props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.alturaPainel, props.aplicacao, props.desenho, props.material, props.filtro, props.coletor,
     props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
   ]);
 

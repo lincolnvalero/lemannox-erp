@@ -268,6 +268,7 @@ export function QuotePreview({ quote }: Props) {
                         embedded
                         onViewChange={() => atualizarImagem(c.key)}
                         {...viewerParams}
+                        aplicacao={tipoAplicacao}
                         qtdLampadas={kit?.qtdLampadas}
                         qtdBotoes={kit?.qtdBotoes}
                       />
