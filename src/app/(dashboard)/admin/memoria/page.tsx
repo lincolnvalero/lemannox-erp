@@ -311,14 +311,14 @@ const GRUPOS_PARAMETROS: { titulo: string; chaves: string[] }[] = [
   { titulo: 'Desenho — furos (mm)', chaves: ['furoBotoeira', 'espacoBotoeira', 'furoBotao', 'furoLampadaCozinha', 'furoLampadaChurrasqueira'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
   { titulo: 'Desenho — posição das lâmpadas na largura', chaves: ['lampPercentual', 'lampLimite', 'lampFixa'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
   { titulo: 'Desenho — dobras e chapas', chaves: ['acrescimoDobra', 'espessura22', 'espessura24', 'larguraChapa', 'margemChapa', 'espacoPecas'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
-  { titulo: 'Desenho — peças da Box (regras de oficina, do exemplo Coifa Israel)', chaves: ['abaTopo', 'frenteRetorno', 'frentePainel', 'frenteAba', 'frenteBainha', 'frentePainelRecuo', 'costaRetorno', 'costaDegrau', 'costaAba', 'costaBainha', 'costaRecuo', 'lateralAba', 'tampaFolga', 'alivioLargura', 'alivioAltura'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
+  { titulo: 'Desenho — peças da Box (regras de oficina, do exemplo Coifa Israel)', chaves: ['abaTopo', 'frenteRetorno', 'frentePainel', 'frenteAba', 'frenteBainha', 'frentePainelRecuo', 'costaRetorno', 'costaDegrau', 'costaAba', 'costaBainha', 'costaDobraExtra', 'costaRecuo', 'lateralAba', 'tampaFolga', 'alivioLargura', 'alivioAltura'].map(k => CHAVE_DESENHO[k as keyof ParametrosDesenho]) },
   { titulo: 'Tabela de Preços — medidas do corpo (mm)', chaves: [CHAVE_LOTE_PROFUNDIDADE, CHAVE_LOTE_ALTURA, CHAVE_LOTE_ALTURA_CORPO_LINEA, CHAVE_LOTE_PAINEL_PIRAMIDAL] },
   { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas até 1300 mm', chaves: Object.values(CHAVES_CARENAGEM_ATE_1300) },
   { titulo: 'Tabela de Preços — carenagem (Línea e Piramidal) em coifas a partir de 1400 mm', chaves: Object.values(CHAVES_CARENAGEM_ACIMA_1300) },
 ];
 
 const ROTULOS_DESENHO: Record<keyof ParametrosDesenho, string> = {
-  furoBotoeira: 'Furos da botoeira — diâmetro (5 furos)', espacoBotoeira: 'Furos da botoeira/botões — espaço entre furos',
+  furoBotoeira: 'Furos da botoeira — diâmetro (5 furos)', espacoBotoeira: 'Botoeira — distância de centro a centro dos furos (botões: espaço entre bordas)',
   furoBotao: 'Furos dos botões — diâmetro (2 botões)', furoLampadaCozinha: 'Furo da lâmpada — Cozinha (diâmetro)',
   furoLampadaChurrasqueira: 'Furo da lâmpada — Churrasqueira (diâmetro)',
   lampPercentual: 'Lateral → 1ª lâmpada (até o limite): % da largura', lampLimite: 'Largura limite da regra do % (mm)',
@@ -329,7 +329,7 @@ const ROTULOS_DESENHO: Record<keyof ParametrosDesenho, string> = {
   abaTopo: 'Aba superior (mm)', frenteRetorno: 'Frente — trecho antes do painel de baixo (mm)', frentePainel: 'Frente — painel de baixo, com as lâmpadas (mm)',
   frenteAba: 'Frente — aba após o painel (mm)', frenteBainha: 'Frente — bainha final (mm)', frentePainelRecuo: 'Frente — recuo lateral do painel de baixo (mm)',
   costaRetorno: 'Costas — retorno de baixo (mm)', costaDegrau: 'Costas — degrau (mm)', costaAba: 'Costas — aba (mm)',
-  costaBainha: 'Costas — bainha final, cada uma das duas (mm)', costaRecuo: 'Costas — recuo lateral da parte de baixo (mm)',
+  costaBainha: 'Costas — bainha final (mm)', costaDobraExtra: 'Costas — outra dobra, antes da bainha final (mm)', costaRecuo: 'Costas — recuo lateral da parte de baixo (mm)',
   lateralAba: 'Laterais — aba lateral (mm)', tampaFolga: 'Tampa — folga em largura e profundidade (mm)',
   alivioLargura: 'Recorte de canto — largura (mm)', alivioAltura: 'Recorte de canto — altura (mm)',
 };

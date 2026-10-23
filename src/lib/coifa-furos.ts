@@ -142,14 +142,14 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const larguraUtil = tube
     ? 2 * Math.sqrt(Math.max(0, (diametroTube / 2) ** 2 - zFileira * zFileira)) * 0.8
     : largura;
-  // Diâmetro fixo (cozinha 56 / churrasqueira 60). Posições: a 1ª e a última a
-  // 20% da largura da lateral (até 1000mm; acima, 200mm), as demais igualmente
-  // espaçadas — regra do Levi. Na Tube (redonda), distribuição simples na corda.
+  // Diâmetro fixo (cozinha 56 / churrasqueira 60). Posições: a borda do furo da
+  // 1ª e da última a 20% da largura da lateral (até 1000mm; acima, 200mm), as
+  // demais igualmente espaçadas — regra do Levi. Na Tube (redonda), distribuição simples na corda.
   const diametroLampada = diametroFuroLampada(e.aplicacao, D);
   const fileira = (n: number, z: number): FuroLampada[] =>
     tube
       ? Array.from({ length: n }, (_, j) => ({ x: -larguraUtil / 2 + larguraUtil * (j + 0.5) / n, z }))
-      : posicoesLampadasX(n, largura, D).map((x) => ({ x, z }));
+      : posicoesLampadasX(n, largura, D, diametroLampada).map((x) => ({ x, z }));
   const furosLampada = [...fileira(nFrente, zFileira), ...fileira(nFundos, -(profundidade / 2 - banda / 2))];
 
   // ── Botões / botoeira ─────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
   const yBotao = e.modelo === 'Piramidal' && (e.alturaPainel ?? 0) > 0
     ? e.alturaPainel! / 2
     : Math.min(e.height, e.modelo === 'Piramidal' ? 160 : 60) / 2;
-  // Botoeira: 5 furos Ø8,3; dois botões: Ø19; espaço entre furos 20 (Levi, 20/10).
+  // Botoeira: 5 furos Ø8,3 a 20mm de centro a centro; dois botões Ø19 com 20mm entre bordas (Levi, 20/10 e 22/10).
   const dia = e.tipoControle === 'botoeira' ? D.furoBotoeira : D.furoBotao;
   const esp = D.espacoBotoeira;
   const porPlaca = FURO_PADRAO.botoesPorBotoeira;
@@ -180,7 +180,7 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
 
   if (nBot > 0 && !tube) {
     if (e.tipoControle === 'botoeira') {
-      const larguraPlaca = porPlaca * dia + (porPlaca - 1) * esp + 2 * FURO_PADRAO.botoeiraFolgaLateral;
+      const larguraPlaca = dia + (porPlaca - 1) * esp + 2 * FURO_PADRAO.botoeiraFolgaLateral;
       const alturaPlaca = dia + 2 * FURO_PADRAO.botoeiraFolgaVertical;
       const total = nBot * larguraPlaca + (nBot - 1) * FURO_PADRAO.botoeiraEntrePlacas;
       escala = Math.min(1, (largura * 0.9) / total);
@@ -190,7 +190,7 @@ export function planejarFuros(e: EntradaFuros): PlanoFuros {
       for (let i = 0; i < nBot; i++) {
         const cx = x0 + lp / 2 + i * (lp + gap);
         placas.push({ x: cx, largura: lp, altura: ap, ...posicionar(cx, ap) });
-        const passo = (dia + esp) * escala;
+        const passo = esp * escala;
         for (let b = 0; b < porPlaca; b++) {
           const bx = cx + (b - (porPlaca - 1) / 2) * passo;
           furosBotao.push({ x: bx, ...posicionar(bx, ap) });

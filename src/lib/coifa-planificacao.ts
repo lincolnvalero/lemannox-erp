@@ -8,7 +8,7 @@
 // (como no CAD). Internamente as medidas "de cima para baixo" (yTopo) são
 // convertidas na hora de montar o contorno.
 
-import { posicoesLampadasX, diametroFuroLampada, type ParametrosDesenho } from './coifa-desenho';
+import { distanciaLampadaBorda, diametroFuroLampada, type ParametrosDesenho } from './coifa-desenho';
 import { FURO_PADRAO, type PosicaoComando } from './coifa-furos';
 
 export type Ponto = [number, number];
@@ -53,14 +53,11 @@ function repartirLampadas(e: EntradaPlanificacao): { frente: number; fundo: numb
   return e.posicaoLampadas === 'parede' ? { frente: 0, fundo: n } : { frente: n, fundo: 0 };
 }
 
-/** Lâmpadas numa faixa útil [x0, x1] (da peça aberta): a regra do % da largura vale a partir das bordas da faixa. */
-function lampadasNaFaixa(n: number, x0: number, x1: number, larguraCoifa: number, p: ParametrosDesenho): number[] {
+/** Lâmpadas numa faixa [x0, x1] da peça aberta: a borda do furo da 1ª/última fica a `distanciaLampadaBorda` da lateral da coifa (x0 e x1). */
+function lampadasNaFaixa(n: number, x0: number, x1: number, larguraCoifa: number, diametro: number, p: ParametrosDesenho): number[] {
   if (n <= 0) return [];
-  const span = x1 - x0;
-  // posicoesLampadasX trabalha com a largura da coifa (define a distância d); reaproveitamos d e aplicamos na faixa.
-  const [primeira] = posicoesLampadasX(2, larguraCoifa, p);
-  const d = primeira + larguraCoifa / 2;
-  if (n === 1) return [x0 + span / 2];
+  if (n === 1) return [(x0 + x1) / 2];
+  const d = distanciaLampadaBorda(larguraCoifa, p) + diametro / 2;
   const a = x0 + d, b = x1 - d;
   return Array.from({ length: n }, (_, i) => a + ((b - a) * i) / (n - 1));
 }
@@ -93,13 +90,13 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     const furos: FuroPeca[] = [];
     // Lâmpadas da frente: no painel de baixo, medidas a partir das bordas do painel.
     const yLamp = toY(H, yPainel + p.frentePainel / 2);
-    lampadasNaFaixa(lamp.frente, r, W - r, L, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
+    lampadasNaFaixa(lamp.frente, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
     // Botões/botoeira.
     if (nBot > 0) {
       const [lado, alinh] = (e.posicaoComando ?? 'frente-centro').split('-') as ['frente' | 'embaixo', 'esquerda' | 'centro' | 'direita'];
       const dia = e.tipoControle === 'botoeira' ? p.furoBotoeira : p.furoBotao;
       const nF = e.tipoControle === 'botoeira' ? FURO_PADRAO.botoesPorBotoeira : nBot;
-      const passo = dia + p.espacoBotoeira;
+      const passo = e.tipoControle === 'botoeira' ? p.espacoBotoeira : dia + p.espacoBotoeira; // botoeira: centro a centro
       const total = (nF - 1) * passo;
       const margem = 80;
       const cx = alinh === 'esquerda' ? margem + total / 2 : alinh === 'direita' ? W - margem - total / 2 : W / 2;
@@ -121,7 +118,7 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     const corpo = A - 2 * a;
     const yRet = p.abaTopo + corpo;
     const yEsc = yRet + p.costaRetorno + p.costaDegrau;
-    const yFim = yEsc + p.costaAba + 2 * p.costaBainha;
+    const yFim = yEsc + p.costaAba + p.costaDobraExtra + p.costaBainha;
     const H = arred(yFim);
     const c = p.costaRecuo;
     const contorno: Ponto[] = [
@@ -130,8 +127,8 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     const furos: FuroPeca[] = [];
     // Lâmpadas do fundo (Ilha ou "junto à parede"): no retorno de baixo.
     const yLamp = toY(H, yRet + p.costaRetorno / 2);
-    lampadasNaFaixa(lamp.fundo, 0, W, L, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
-    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yRet + p.costaRetorno, yRet + p.costaRetorno + p.costaDegrau + p.costaAba, yRet + p.costaRetorno + p.costaDegrau + p.costaAba + p.costaBainha]
+    lampadasNaFaixa(lamp.fundo, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
+    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yRet + p.costaRetorno, yRet + p.costaRetorno + p.costaDegrau + p.costaAba, yRet + p.costaRetorno + p.costaDegrau + p.costaAba + p.costaDobraExtra]
       .map((y, i) => (i >= 3 ? [c, toY(H, y), W - c, toY(H, y)] : [0, toY(H, y), W, toY(H, y)]) as [number, number, number, number]);
     todosFurosDentro('Costa', contorno, furos, avisos);
     costa = { id: 'COSTA', nome: 'COSTA', bitola: 24, w: W, h: H, contorno, furos, dobras };
@@ -283,10 +280,10 @@ export function pontoNaChapa(pp: PecaPosicionada, [x, y]: Ponto): Ponto {
 export interface OpcoesDxf { linhasDeDobra?: boolean; rotulos?: boolean }
 
 /**
- * Gera o DXF de uma chapa: contornos e furos na camada CORTE, marcas de dobra
- * de 1mm nas bordas (como o desenho do Adriano) na camada MARCAS. Com
- * `linhasDeDobra`, também as linhas inteiras na camada DOBRA — NÃO ligue isso
- * se o programa de corte corta todas as camadas.
+ * Gera o DXF de uma chapa: contornos, furos e piques de dobra na camada CORTE.
+ * Em cada dobra vai só um pique de 1mm nas duas extremidades, para guiar o
+ * operador da dobradeira (Levi, 22/10) — a linha inteira da dobra não é
+ * desenhada, a menos que `linhasDeDobra` seja ligado (camada DOBRA).
  */
 export function dxfDaChapa(chapa: ChapaEncaixada, op: OpcoesDxf = {}): string {
   const f = (n: number) => (Math.round(n * 1000) / 1000).toString();
@@ -299,7 +296,7 @@ export function dxfDaChapa(chapa: ChapaEncaixada, op: OpcoesDxf = {}): string {
   add(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 0, 'ENDSEC');
   add(0, 'SECTION', 2, 'TABLES');
   add(0, 'TABLE', 2, 'LTYPE', 70, 1, 0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0, 0, 'ENDTAB');
-  const camadas: [string, number][] = [['0', 7], ['CORTE', 5], ['MARCAS', 3], ['DOBRA', 3], ['TEXTO', 7]];
+  const camadas: [string, number][] = [['0', 7], ['CORTE', 5], ['DOBRA', 3], ['TEXTO', 7]];
   add(0, 'TABLE', 2, 'LAYER', 70, camadas.length);
   camadas.forEach(([n, c]) => add(0, 'LAYER', 2, n, 70, 0, 62, c, 6, 'CONTINUOUS'));
   add(0, 'ENDTAB', 0, 'ENDSEC');
@@ -318,8 +315,8 @@ export function dxfDaChapa(chapa: ChapaEncaixada, op: OpcoesDxf = {}): string {
       // marcas de 1mm nas duas pontas da dobra
       const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
       const u: Ponto = [dx / len, dy / len];
-      linha('MARCAS', P([x1, y1]), P([x1 + u[0], y1 + u[1]]));
-      linha('MARCAS', P([x2 - u[0], y2 - u[1]]), P([x2, y2]));
+      linha('CORTE', P([x1, y1]), P([x1 + u[0], y1 + u[1]]));
+      linha('CORTE', P([x2 - u[0], y2 - u[1]]), P([x2, y2]));
       if (op.linhasDeDobra) linha('DOBRA', P([x1, y1]), P([x2, y2]));
     });
     if (op.rotulos !== false) {

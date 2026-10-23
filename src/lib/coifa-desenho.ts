@@ -7,7 +7,7 @@ export type ParametrosDesenho = {
   // ── Furos ──
   /** Diâmetro dos 5 furos da botoeira (mm). */
   furoBotoeira: number;
-  /** Espaço entre os furos da botoeira (borda a borda, mm). */
+  /** Distância entre os furos da botoeira, de centro a centro (mm) — e espaço (borda a borda) entre os botões. */
   espacoBotoeira: number;
   /** Diâmetro dos furos dos botões (mm) — churrasqueira usa 2 botões. */
   furoBotao: number;
@@ -39,7 +39,8 @@ export type ParametrosDesenho = {
   costaRetorno: number;      // costas: retorno de baixo (100)
   costaDegrau: number;       // costas: degrau (15)
   costaAba: number;          // costas: aba (45)
-  costaBainha: number;       // costas: 10 + 10 finais
+  costaBainha: number;       // costas: bainha final (10)
+  costaDobraExtra: number;   // costas: outra dobra de 10, antes da bainha final (Levi, 22/10)
   costaRecuo: number;        // costas: recuo lateral da parte de baixo (30)
   lateralAba: number;        // aba lateral das laterais (20)
   tampaFolga: number;        // tampa = (L − x) × (P − x) (20)
@@ -54,7 +55,7 @@ export const DESENHO_INICIAL: ParametrosDesenho = {
   acrescimoDobra: 1, espessura22: 0.8, espessura24: 0.6,
   margemChapa: 5, espacoPecas: 5, larguraChapa: 1250,
   abaTopo: 20, frenteRetorno: 35, frentePainel: 90, frenteAba: 40, frenteBainha: 10, frentePainelRecuo: 51,
-  costaRetorno: 100, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaRecuo: 30,
+  costaRetorno: 100, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaDobraExtra: 10, costaRecuo: 30,
   lateralAba: 20, tampaFolga: 20, alivioLargura: 8.7, alivioAltura: 15,
 };
 
@@ -68,7 +69,7 @@ export const CHAVE_DESENHO: Record<keyof ParametrosDesenho, string> = {
   abaTopo: 'desenho_box_aba_topo', frenteRetorno: 'desenho_box_frente_retorno', frentePainel: 'desenho_box_frente_painel',
   frenteAba: 'desenho_box_frente_aba', frenteBainha: 'desenho_box_frente_bainha', frentePainelRecuo: 'desenho_box_frente_painel_recuo',
   costaRetorno: 'desenho_box_costa_retorno', costaDegrau: 'desenho_box_costa_degrau', costaAba: 'desenho_box_costa_aba',
-  costaBainha: 'desenho_box_costa_bainha', costaRecuo: 'desenho_box_costa_recuo',
+  costaBainha: 'desenho_box_costa_bainha', costaDobraExtra: 'desenho_box_costa_dobra_extra', costaRecuo: 'desenho_box_costa_recuo',
   lateralAba: 'desenho_box_lateral_aba', tampaFolga: 'desenho_box_tampa_folga',
   alivioLargura: 'desenho_box_alivio_largura', alivioAltura: 'desenho_box_alivio_altura',
 };
@@ -85,15 +86,21 @@ export function desenhoDefinido(parametros: Record<string, number | undefined> |
 }
 
 /**
- * Centros (x, a partir do centro da coifa) das `n` lâmpadas de uma fileira de
- * largura `largura`. A 1ª e a última ficam a `d` da lateral — `d` = 20% da
- * largura até 1000mm, 200mm acima; as demais, a distâncias iguais entre si.
- * (Medido até o centro do furo — é o que bate com o desenho do exemplo.)
+ * Distância da lateral da coifa à BORDA do furo da 1ª (e da última) lâmpada:
+ * 20% da largura até 1000mm, 200mm acima (Levi, 22/10: vale até a borda do furo).
  */
-export function posicoesLampadasX(n: number, largura: number, p: ParametrosDesenho): number[] {
+export const distanciaLampadaBorda = (largura: number, p: ParametrosDesenho) =>
+  largura <= p.lampLimite ? (p.lampPercentual / 100) * largura : p.lampFixa;
+
+/**
+ * Centros (x, a partir do centro da coifa) das `n` lâmpadas de diâmetro
+ * `diametro` numa fileira de largura `largura`. A 1ª e a última têm a borda do
+ * furo a `distanciaLampadaBorda` da lateral; as demais, a distâncias iguais.
+ */
+export function posicoesLampadasX(n: number, largura: number, p: ParametrosDesenho, diametro: number): number[] {
   if (n <= 0) return [];
   if (n === 1) return [0];
-  const d = largura <= p.lampLimite ? (p.lampPercentual / 100) * largura : p.lampFixa;
+  const d = distanciaLampadaBorda(largura, p) + diametro / 2;
   const x0 = -largura / 2 + d;
   const x1 = largura / 2 - d;
   return Array.from({ length: n }, (_, i) => x0 + ((x1 - x0) * i) / (n - 1));

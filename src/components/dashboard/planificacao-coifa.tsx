@@ -9,7 +9,6 @@ import { useMemo, useState } from 'react';
 import { Download, Ruler } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -63,8 +62,7 @@ function ChapaSvg({ chapa }: { chapa: ChapaEncaixada }) {
 export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Props) {
   const [aberto, setAberto] = useState(false);
   const [comprimento, setComprimento] = useState(2000);
-  const [linhasDeDobra, setLinhasDeDobra] = useState(false);
-  const ehBox = modelo === 'Box';
+    const ehBox = modelo === 'Box';
 
   const resultado = useMemo(() => {
     if (!aberto || !entrada || !ehBox) return null;
@@ -74,7 +72,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
   }, [aberto, entrada, ehBox, comprimento, desenho]);
 
   const nomeChapa = (c: ChapaEncaixada) => `${nomeArquivo} - chapa ${c.indice} (${c.bitola}).dxf`;
-  const baixarTodas = () => resultado?.chapas.forEach((c) => baixar(nomeChapa(c), dxfDaChapa(c, { linhasDeDobra })));
+  const baixarTodas = () => resultado?.chapas.forEach((c) => baixar(nomeChapa(c), dxfDaChapa(c)));
 
   return (
     <Card>
@@ -91,7 +89,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
           <li>Chapa 22 (frente/laterais): {desenho.espessura22} mm</li>
           <li>Chapa 24 (costas/teto/carenagem): {desenho.espessura24} mm</li>
           <li>Lâmpada: Ø{desenho.furoLampadaCozinha} cozinha / Ø{desenho.furoLampadaChurrasqueira} churrasqueira</li>
-          <li>Botoeira: Ø{desenho.furoBotoeira}, {desenho.espacoBotoeira} mm entre furos</li>
+          <li>Botoeira: Ø{desenho.furoBotoeira}, {desenho.espacoBotoeira} mm de centro a centro</li>
           <li>Botão: Ø{desenho.furoBotao}</li>
           <li className="col-span-2">
             Lâmpadas: até {desenho.lampLimite} mm de largura → {desenho.lampPercentual}% da largura da lateral ao 1º furo; acima → {desenho.lampFixa} mm.
@@ -129,10 +127,6 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex items-center gap-2 text-xs">
-              <Checkbox checked={linhasDeDobra} onCheckedChange={(v) => setLinhasDeDobra(v === true)} />
-              Incluir linhas de dobra no DXF (camada DOBRA)
-            </label>
             <Button type="button" size="sm" onClick={baixarTodas} disabled={!resultado?.chapas.length}>
               <Download className="mr-2 h-4 w-4" />Baixar todas
             </Button>
@@ -155,7 +149,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
                       <p className="text-sm font-medium">
                         Chapa {c.indice} — {c.bitola} ({c.bitola === 22 ? desenho.espessura22 : desenho.espessura24} mm), {c.comprimento} × {c.largura} · aproveitamento {c.aproveitamento}%
                       </p>
-                      <Button type="button" size="sm" variant="outline" onClick={() => baixar(nomeChapa(c), dxfDaChapa(c, { linhasDeDobra }))}>
+                      <Button type="button" size="sm" variant="outline" onClick={() => baixar(nomeChapa(c), dxfDaChapa(c))}>
                         <Download className="mr-2 h-4 w-4" />DXF
                       </Button>
                     </div>
@@ -163,8 +157,8 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
                   </div>
                 ))}
                 <p className="text-[11px] text-muted-foreground">
-                  DXF no formato R12 (ASCII) — o mais aceito por programas de corte. Contornos e furos na camada CORTE; marcas de dobra
-                  de 1 mm na camada MARCAS. Confira a primeira chapa no programa da Franciele antes de cortar.
+                  DXF no formato R12 (ASCII) — o mais aceito por programas de corte. Contornos, furos e piques de dobra (1 mm nas duas pontas
+                  de cada dobra) na camada CORTE. Confira a primeira chapa no programa da Franciele antes de cortar.
                 </p>
               </div>
             )}
