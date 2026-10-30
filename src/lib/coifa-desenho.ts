@@ -46,6 +46,10 @@ export type ParametrosDesenho = {
   tampaFolga: number;        // tampa = (L − x) × (P − x) (20)
   alivioLargura: number;     // recorte de canto (8,7)
   alivioAltura: number;      // recorte de canto (15)
+  // ── Frisos (Levi, 29/10) ──
+  frisoCentro: number;       // peça do friso: parte central (20)
+  frisoAba: number;          // peça do friso: cada aba (10)
+  frisoAbaParte: number;     // abas dos pedaços da frente acima e abaixo do friso (10)
 };
 
 export const DESENHO_INICIAL: ParametrosDesenho = {
@@ -57,6 +61,7 @@ export const DESENHO_INICIAL: ParametrosDesenho = {
   abaTopo: 20, frenteRetorno: 35, frentePainel: 90, frenteAba: 40, frenteBainha: 10, frentePainelRecuo: 51,
   costaRetorno: 100, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaDobraExtra: 10, costaRecuo: 30,
   lateralAba: 20, tampaFolga: 20, alivioLargura: 8.7, alivioAltura: 15,
+  frisoCentro: 20, frisoAba: 10, frisoAbaParte: 10,
 };
 
 /** Chave em parametros_globais de cada campo. */
@@ -72,6 +77,7 @@ export const CHAVE_DESENHO: Record<keyof ParametrosDesenho, string> = {
   costaBainha: 'desenho_box_costa_bainha', costaDobraExtra: 'desenho_box_costa_dobra_extra', costaRecuo: 'desenho_box_costa_recuo',
   lateralAba: 'desenho_box_lateral_aba', tampaFolga: 'desenho_box_tampa_folga',
   alivioLargura: 'desenho_box_alivio_largura', alivioAltura: 'desenho_box_alivio_altura',
+  frisoCentro: 'desenho_friso_centro', frisoAba: 'desenho_friso_aba', frisoAbaParte: 'desenho_friso_aba_parte',
 };
 
 /** Lê os dados de desenho de parametros_globais; o que não existir (ou for inválido) usa o valor inicial. */

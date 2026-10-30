@@ -91,6 +91,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
           <li>Lâmpada: Ø{desenho.furoLampadaCozinha} cozinha / Ø{desenho.furoLampadaChurrasqueira} churrasqueira</li>
           <li>Botoeira: Ø{desenho.furoBotoeira}, {desenho.espacoBotoeira} mm de centro a centro</li>
           <li>Botão: Ø{desenho.furoBotao}</li>
+          <li className="col-span-2">Friso: peça própria (centro {desenho.frisoCentro} mm + 2 abas de {desenho.frisoAba} mm); a frente é cortada em pedaços com abas de {desenho.frisoAbaParte} mm.</li>
           <li className="col-span-2">
             Lâmpadas: até {desenho.lampLimite} mm de largura → {desenho.lampPercentual}% da largura da lateral ao 1º furo; acima → {desenho.lampFixa} mm.
           </li>
@@ -113,7 +114,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
             <DialogTitle>Planificação — {nomeArquivo}</DialogTitle>
             <DialogDescription>
               Chapas de {desenho.larguraChapa} mm de largura, margem {desenho.margemChapa} mm e {desenho.espacoPecas} mm entre peças.
-              Chapa 22 e chapa 24 não se misturam na mesma chapa.
+              Chapa 22 e chapa 24 não se misturam na mesma chapa. As peças ficam sempre em pé (sentido do escovado), nunca deitadas.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-end gap-4">

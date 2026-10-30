@@ -81,6 +81,9 @@ const formSchema = z.object({
   frisoLD: z.boolean(),
   frisoLE: z.boolean(),
   frisoLinhas: z.coerce.number().min(1).max(3),
+  // Posição dos frisos no desenho (Box): da base ao 1º friso e entre frisos, borda a borda (mm).
+  frisoDistBase: z.coerce.number().min(30).max(3000),
+  frisoDistEntre: z.coerce.number().min(30).max(3000),
   outros: numField,
   paintingCost: numField,
   // Ajuste manual do kit de iluminação — vazio = usa o padrão da tabela.
@@ -107,7 +110,7 @@ const defaultValues: FormValues = {
   material: '', larguraPadrao: 0, larguraPadraoCarenagem: 0,
   tipoAplicacao: 'Cozinha', tipoInstalacao: 'Parede',
   filtro: 'nenhum', coletor: 'nenhum',
-  frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1,
+  frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1, frisoDistBase: 200, frisoDistEntre: 200,
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
   controle: 'botoes', posicaoLampadas: 'frente', comCarenagem: true, posicaoComando: 'frente-centro',
@@ -169,8 +172,8 @@ export default function CostCalculatorPage() {
   const watchedAplicacao = watch('tipoAplicacao');
   const watchedInstalacao = watch('tipoInstalacao');
   const watchedLampadasManual = watch('qtdLampadasManual');
-  const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas] =
-    watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas']);
+  const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre] =
+    watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas', 'frisoDistBase', 'frisoDistEntre']);
   const watchedBotoesManual = watch('qtdBotoesManual');
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
@@ -201,8 +204,11 @@ export default function CostCalculatorPage() {
       width: L, depth: P, height: A, mount: watchedInstalacao, aplicacao: watchedAplicacao,
       qtdLampadas: qtdLampadasEfetiva, posicaoLampadas: watchedPosicaoLampadas,
       qtdBotoes: qtdBotoesEfetiva, tipoControle, posicaoComando: watchedPosicaoComando,
+      frisoFrente: watchedFrisoFrente, frisoLD: watchedFrisoLD, frisoLE: watchedFrisoLE,
+      frisoLinhas: Number(watchedFrisoLinhas) || 1,
+      frisoDistBase: Number(watchedFrisoDistBase) || undefined, frisoDistEntre: Number(watchedFrisoDistEntre) || undefined,
     };
-  }, [watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
+  }, [watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
   const nomeBotao = tipoControle === 'botoeira' ? 'Botoeiras' : 'Botões';
   // Furos que o desenho mostra (base para o futuro DXF de fabricação).
   const furosResumo = useMemo(() => {
@@ -289,6 +295,7 @@ export default function CostCalculatorPage() {
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
       setUltimaPosicaoComando(values.posicaoComando);
+      setUltimaFrisoDist({ base: Number(values.frisoDistBase) || undefined, entre: Number(values.frisoDistEntre) || undefined });
       setUltimaAlturaPainel(values.modelo === 'Piramidal' ? Number(values.alturaPainel) || 0 : undefined);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
@@ -327,6 +334,7 @@ export default function CostCalculatorPage() {
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
   const [ultimaAlturaPainel, setUltimaAlturaPainel] = useState<number | undefined>(undefined);
+  const [ultimaFrisoDist, setUltimaFrisoDist] = useState<{ base?: number; entre?: number }>({});
   const [ultimaPosicaoComando, setUltimaPosicaoComando] = useState<NonNullable<CoifaParamsSalvos['posicaoComando']>>('frente-centro');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
@@ -352,6 +360,7 @@ export default function CostCalculatorPage() {
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
       posicaoComando: ultimaPosicaoComando,
       alturaPainel: ultimaAlturaPainel,
+      frisoDistBase: ultimaFrisoDist.base, frisoDistEntre: ultimaFrisoDist.entre,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -367,7 +376,7 @@ export default function CostCalculatorPage() {
       notes: results.descricaoAuto,
       coifaParams,
     };
-  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimaPosicaoComando, ultimaAlturaPainel]);
+  }, [results, ultimoInput, ultimaPosicaoLampadas, ultimaPosicaoComando, ultimaAlturaPainel, ultimaFrisoDist]);
 
   const abrirDialogoOrcamento = async () => {
     setOrcDestino('novo');
@@ -700,6 +709,23 @@ export default function CostCalculatorPage() {
                         </Select>
                       </FormItem>
                     )} />
+                    {(watchedFrisoFrente && watchedModelo === 'Box') && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="frisoDistBase" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Da base ao 1º friso (mm)</FormLabel>
+                            <FormControl><Input type="number" step="1" min={30} {...field} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="frisoDistEntre" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Entre frisos (mm)</FormLabel>
+                            <FormControl><Input type="number" step="1" min={30} disabled={Number(watchedFrisoLinhas) < 2} {...field} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <p className="col-span-2 text-[11px] text-muted-foreground">Só muda o desenho (3D e planificação) — não altera o preço. Medidas de borda a borda do friso; a maioria é 100 ou 200 mm.</p>
+                      </div>
+                    )}
                   </div>
                   )}
 
@@ -776,6 +802,8 @@ export default function CostCalculatorPage() {
                   frisoLD={watchedFrisoLD}
                   frisoLE={watchedFrisoLE}
                   frisoLinhas={Number(watchedFrisoLinhas) || 1}
+                  frisoDistBase={Number(watchedFrisoDistBase) || undefined}
+                  frisoDistEntre={Number(watchedFrisoDistEntre) || undefined}
                   ref={viewerRef}
                 />
               ) : (

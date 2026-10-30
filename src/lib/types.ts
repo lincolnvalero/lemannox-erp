@@ -66,6 +66,9 @@ export type CoifaParamsSalvos = {
   frisoLD?: boolean;
   frisoLE?: boolean;
   frisoLinhas?: number;
+  /** Posição dos frisos no desenho (mm): da base ao 1º friso e entre frisos. Ausente = 200 / 200. */
+  frisoDistBase?: number;
+  frisoDistEntre?: number;
   qtdLampadas?: number;
   qtdBotoes?: number;
   /** Botões avulsos ou botoeira (placa de 5 botões). Ausente = botoeira. */

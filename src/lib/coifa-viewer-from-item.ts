@@ -97,6 +97,8 @@ export function avaliarDesenhoDoItem(item: ItemAvaliavel, contexto: ContextoDese
         frisoLD: salvo.frisoLD,
         frisoLE: salvo.frisoLE,
         frisoLinhas: salvo.frisoLinhas,
+        frisoDistBase: salvo.frisoDistBase,
+        frisoDistEntre: salvo.frisoDistEntre,
         qtdLampadas: salvo.qtdLampadas,
         qtdBotoes: salvo.qtdBotoes,
         controle: salvo.controle,

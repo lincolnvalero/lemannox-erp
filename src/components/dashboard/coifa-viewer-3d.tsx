@@ -63,6 +63,9 @@ export interface CoifaViewer3DProps {
   frisoLD?: boolean;
   frisoLE?: boolean;
   frisoLinhas?: number;
+  /** Posição dos frisos (mm): da base do corpo ao 1º friso e entre frisos (borda a borda). Ausente = faixa de baixo (modo antigo). */
+  frisoDistBase?: number;
+  frisoDistEntre?: number;
   className?: string;
   /**
    * Modo embutido (prévia do orçamento): a roda do mouse só dá zoom depois de
@@ -714,7 +717,15 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
       if (props.frisoLD) faces.push('right');
       if (props.frisoLE) faces.push('left');
       const quads: Quad[] = [];
+      // Com a posição informada (Levi, 29/10): friso de 20mm a `frisoDistBase` da base e `frisoDistEntre` entre eles.
+      const posicionado = modelo === 'Box' && props.frisoDistBase !== undefined;
       for (let i = 0; i < nLinhas; i++) {
+        if (posicionado) {
+          const ya = corpoBase!.y + props.frisoDistBase! + i * ((props.frisoDistEntre ?? 200) + 20);
+          if (ya + 20 > corpoTopo!.y) continue;
+          faces.forEach(face => quads.push(faixa(corpoBase!, corpoTopo!, face, ya, ya + 20)));
+          continue;
+        }
         const yc = faixaAltura * (i + 1) / (nLinhas + 1);
         faces.forEach(face => quads.push(faixa(corpoBase!, corpoTopo!, face, yc - esp / 2, yc + esp / 2)));
       }
@@ -862,7 +873,7 @@ export const CoifaViewer3D = forwardRef<CoifaViewer3DHandle, CoifaViewer3DProps>
     props.modelo, props.width, props.depth, props.height, props.tetoWidth, props.tetoDepth,
     props.carenagemWidth, props.carenagemDepth, props.carenagemHeight, props.mount,
     props.qtdLampadas, props.qtdBotoes, props.controle, props.posicaoLampadas, props.posicaoComando, props.alturaPainel, props.aplicacao, props.desenho, props.material, props.filtro, props.coletor,
-    props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas,
+    props.frisoFrente, props.frisoLD, props.frisoLE, props.frisoLinhas, props.frisoDistBase, props.frisoDistEntre,
   ]);
 
   // ── Aplica toggles (arestas, raio-x, ortho, cotas) ───────────────────────

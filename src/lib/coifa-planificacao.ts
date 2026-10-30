@@ -40,7 +40,18 @@ export interface EntradaPlanificacao {
   qtdBotoes: number;
   tipoControle: 'botoes' | 'botoeira';
   posicaoComando?: PosicaoComando;
+  /** Frisos (Levi, 29/10): cada linha vira uma peça própria e parte a frente em pedaços. */
+  frisoFrente?: boolean;
+  frisoLD?: boolean;
+  frisoLE?: boolean;
+  frisoLinhas?: number;
+  /** Distância (acabada) da base do corpo da frente ao 1º friso, e entre frisos — borda a borda (mm). */
+  frisoDistBase?: number;
+  frisoDistEntre?: number;
 }
+
+export const FRISO_DIST_BASE_PADRAO = 200;
+export const FRISO_DIST_ENTRE_PADRAO = 200;
 
 export interface ResultadoPecas { pecas: Peca[]; avisos: string[] }
 
@@ -72,44 +83,93 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
   const nBot = Math.max(0, Math.round(e.qtdBotoes));
 
   // ── FRENTE (22): 2 dobras laterais → L − 2·acréscimo. ─────────────────────
-  let frente: Peca;
+  // Sem friso é uma peça só. Com friso (Levi, 29/10) cada linha de friso é uma
+  // peça (aba 10 + centro 20 + aba 10) e a frente se parte em pedaços: BAIXO
+  // (com o painel das lâmpadas), MEIO(s) e CIMA (o que sobra). Cada pedaço
+  // aberto = medida acabada − 2 dobras; cada friso soma 2 dobras ao corpo.
+  const frentes: Peca[] = [];
   {
     const W = arred(L - 2 * a);
     const corpo = A - 2 * a;
-    const yRet = p.abaTopo + corpo;                 // fim do corpo
-    const yPainel = yRet + p.frenteRetorno;         // início do painel de baixo
-    const yAba = yPainel + p.frentePainel;
-    const yBainha = yAba + p.frenteAba;
-    const H = arred(yBainha + p.frenteBainha);
     const r = p.frentePainelRecuo, aw = p.alivioLargura, ah = p.alivioAltura;
-    const contorno: Ponto[] = [
-      [0, 0], [W, 0], [W, yPainel], [W - aw, yPainel + ah], [W - r + aw, yPainel + ah], [W - r, yPainel],
-      [W - r, H], [r, H], [r, yPainel], [r - aw, yPainel + ah], [aw, yPainel + ah], [0, yPainel], [0, 0],
-    ].map(([x, y]) => [arred(x), toY(H, y)] as Ponto);
-
-    const furos: FuroPeca[] = [];
-    // Lâmpadas da frente: no painel de baixo, medidas a partir das bordas do painel.
-    const yLamp = toY(H, yPainel + p.frentePainel / 2);
-    lampadasNaFaixa(lamp.frente, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
-    // Botões/botoeira.
-    if (nBot > 0) {
-      const [lado, alinh] = (e.posicaoComando ?? 'frente-centro').split('-') as ['frente' | 'embaixo', 'esquerda' | 'centro' | 'direita'];
-      const dia = e.tipoControle === 'botoeira' ? p.furoBotoeira : p.furoBotao;
-      const nF = e.tipoControle === 'botoeira' ? FURO_PADRAO.botoesPorBotoeira : nBot;
-      const passo = e.tipoControle === 'botoeira' ? p.espacoBotoeira : dia + p.espacoBotoeira; // botoeira: centro a centro
-      const total = (nF - 1) * passo;
-      const margem = 80;
-      const cx = alinh === 'esquerda' ? margem + total / 2 : alinh === 'direita' ? W - margem - total / 2 : W / 2;
-      // Frente: no corpo, 45mm acima da dobra de baixo. Embaixo: no painel de baixo.
-      const yCmd = lado === 'frente' ? toY(H, yRet - 45) : yLamp;
-      for (let i = 0; i < nF; i++) furos.push({ x: arred(cx - total / 2 + i * passo), y: yCmd, d: dia });
+    const dBase = e.frisoDistBase ?? FRISO_DIST_BASE_PADRAO;
+    const dEntre = e.frisoDistEntre ?? FRISO_DIST_ENTRE_PADRAO;
+    let nFris = e.frisoFrente ? Math.max(1, Math.min(3, Math.round(e.frisoLinhas ?? 1))) : 0;
+    let planoFriso: { baixo: number; meios: number[]; cima: number } | null = null;
+    if (nFris > 0) {
+      const baixo = arred(dBase - 2 * a), meio = arred(dEntre - 2 * a);
+      const meios = Array.from({ length: nFris - 1 }, () => meio);
+      const cima = arred(corpo - 2 * nFris * a - nFris * p.frisoCentro - baixo - meio * (nFris - 1));
+      if (baixo > 0 && meio > 0 && cima > 0) planoFriso = { baixo, meios, cima };
+      else {
+        avisos.push(`Friso: as distâncias (${dBase} mm da base, ${dEntre} mm entre frisos) não cabem na altura de ${A} mm — frisos fora do desenho.`);
+        nFris = 0;
+      }
     }
 
-    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yPainel].map((y) => [0, toY(H, y), W, toY(H, y)] as [number, number, number, number]);
-    [yAba, yBainha].forEach((y) => dobras.push([r, toY(H, y), W - r, toY(H, y)]));
-    todosFurosDentro('Frente', contorno, furos, avisos);
-    frente = { id: 'FRENTE', nome: 'FRENTE', bitola: 22, w: W, h: H, contorno, furos, dobras };
+    // Pedaço de baixo: aba de cima + corpo + retorno + painel (lâmpadas) + aba + bainha.
+    const pedacoBaixo = (id: string, nome: string, abaCima: number, corpoAberto: number): Peca => {
+      const yRet = abaCima + corpoAberto;           // fim do corpo
+      const yPainel = yRet + p.frenteRetorno;       // início do painel de baixo
+      const yAba = yPainel + p.frentePainel;
+      const yBainha = yAba + p.frenteAba;
+      const H = arred(yBainha + p.frenteBainha);
+      const contorno: Ponto[] = [
+        [0, 0], [W, 0], [W, yPainel], [W - aw, yPainel + ah], [W - r + aw, yPainel + ah], [W - r, yPainel],
+        [W - r, H], [r, H], [r, yPainel], [r - aw, yPainel + ah], [aw, yPainel + ah], [0, yPainel], [0, 0],
+      ].map(([x, y]) => [arred(x), toY(H, y)] as Ponto);
+
+      const furos: FuroPeca[] = [];
+      // Lâmpadas da frente: no painel de baixo, medidas a partir da lateral da coifa.
+      const yLamp = toY(H, yPainel + p.frentePainel / 2);
+      lampadasNaFaixa(lamp.frente, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
+      // Botões/botoeira.
+      if (nBot > 0) {
+        const [lado, alinh] = (e.posicaoComando ?? 'frente-centro').split('-') as ['frente' | 'embaixo', 'esquerda' | 'centro' | 'direita'];
+        const dia = e.tipoControle === 'botoeira' ? p.furoBotoeira : p.furoBotao;
+        const nF = e.tipoControle === 'botoeira' ? FURO_PADRAO.botoesPorBotoeira : nBot;
+        const passo = e.tipoControle === 'botoeira' ? p.espacoBotoeira : dia + p.espacoBotoeira; // botoeira: centro a centro
+        const total = (nF - 1) * passo;
+        const margem = 80;
+        const cx = alinh === 'esquerda' ? margem + total / 2 : alinh === 'direita' ? W - margem - total / 2 : W / 2;
+        // Frente: no corpo, 45mm acima da dobra de baixo. Embaixo: no painel de baixo.
+        const yCmd = lado === 'frente' ? toY(H, yRet - 45) : yLamp;
+        for (let i = 0; i < nF; i++) furos.push({ x: arred(cx - total / 2 + i * passo), y: yCmd, d: dia });
+      }
+
+      const dobras: Peca['dobras'] = [abaCima, yRet, yPainel].map((y) => [0, toY(H, y), W, toY(H, y)] as [number, number, number, number]);
+      [yAba, yBainha].forEach((y) => dobras.push([r, toY(H, y), W - r, toY(H, y)]));
+      todosFurosDentro(nome, contorno, furos, avisos);
+      return { id, nome, bitola: 22, w: W, h: H, contorno, furos, dobras };
+    };
+
+    // Faixa lisa (pedaço do meio/de cima e o friso): aba + corpo + aba, 2 dobras.
+    const faixaLisa = (id: string, nome: string, abaCima: number, corpoAberto: number, abaBaixo: number): Peca => {
+      const H = arred(abaCima + corpoAberto + abaBaixo);
+      return {
+        id, nome, bitola: 22, w: W, h: H,
+        contorno: [[0, 0], [W, 0], [W, H], [0, H], [0, 0]],
+        furos: [],
+        dobras: [abaCima, abaCima + corpoAberto].map((y) => [0, toY(H, y), W, toY(H, y)] as [number, number, number, number]),
+      };
+    };
+
+    if (!planoFriso) {
+      frentes.push(pedacoBaixo('FRENTE', 'FRENTE', p.abaTopo, corpo));
+    } else {
+      // De baixo para cima, como na montagem: BAIXO, friso 1, MEIO 1, friso 2, ..., CIMA.
+      frentes.push(pedacoBaixo('FRENTE_BAIXO', 'FRENTE BAIXO', p.frisoAbaParte, planoFriso.baixo));
+      for (let i = 0; i < nFris; i++) {
+        frentes.push(faixaLisa(`FRISO_${i + 1}`, `FRISO ${i + 1}`, p.frisoAba, p.frisoCentro, p.frisoAba));
+        if (i < nFris - 1) {
+          const n = nFris > 2 ? ` ${i + 1}` : '';
+          frentes.push(faixaLisa(`FRENTE_MEIO${i + 1}`, `FRENTE MEIO${n}`, p.frisoAbaParte, planoFriso.meios[i], p.frisoAbaParte));
+        }
+      }
+      frentes.push(faixaLisa('FRENTE_CIMA', 'FRENTE CIMA', p.abaTopo, planoFriso.cima, p.frisoAbaParte));
+    }
   }
+  if (e.frisoLD || e.frisoLE) avisos.push('Friso nas laterais: ainda não entra no desenho (só o friso da frente). Falta a regra de oficina das laterais.');
 
   // ── COSTA (24): retorno de baixo de 100, degrau e aba mais estreita. ──────
   let costa: Peca;
@@ -159,7 +219,7 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     contorno: [[0, 0], [tw, 0], [tw, th], [0, th], [0, 0]], furos: [], dobras: [],
   };
 
-  return { pecas: [frente, costa, lateral('ESQ'), lateral('DIR'), tampa], avisos };
+  return { pecas: [...frentes, costa, lateral('ESQ'), lateral('DIR'), tampa], avisos };
 }
 
 // Ponto dentro do polígono (ray casting) — só para avisar de furo fora da peça.
@@ -202,7 +262,8 @@ function encaixarGrupo(pecas: Peca[], comprimento: number, largura: number, marg
   const melhorEm = (livres: Rect[], w: number, h: number) => {
     let melhor: { r: Rect; girada: boolean; score: number } | null = null;
     for (const r of livres) {
-      for (const girada of [false, true]) {
+      // Peças sempre em pé (sentido do escovado) — nunca giram (Levi, 29/10).
+      for (const girada of [false]) {
         const pw = girada ? h : w, ph = girada ? w : h;
         if (pw <= r.w + 1e-6 && ph <= r.h + 1e-6) {
           const score = Math.min(r.w - pw, r.h - ph);
@@ -227,8 +288,8 @@ function encaixarGrupo(pecas: Peca[], comprimento: number, largura: number, marg
 
   for (const peca of ordenadas) {
     const w = peca.w + espaco, h = peca.h + espaco;
-    if (!((w <= areaW && h <= areaH) || (h <= areaW && w <= areaH))) {
-      avisos.push(`${peca.nome} (${peca.w} × ${peca.h}) não cabe numa chapa de ${comprimento} × ${largura}.`);
+    if (!(w <= areaW && h <= areaH)) {
+      avisos.push(`${peca.nome} (${peca.w} × ${peca.h}) não cabe em pé numa chapa de ${comprimento} × ${largura} — a peça não pode ser deitada por causa do escovado.`);
       continue;
     }
     let colocada = false;
