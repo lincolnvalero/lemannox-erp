@@ -107,6 +107,9 @@ export const CARENAGEM_MAX = 3000;
  */
 export const CHAVE_ITEM_PENDENTE_ORCAMENTO = 'lemannox:item-pendente-orcamento';
 
+/** Passagem inversa: item de um orçamento levado para a Calculadora ("Abrir na calculadora"). */
+export const CHAVE_ITEM_PARA_CALCULADORA = 'lemannox:item-para-calculadora';
+
 const dentro = (v: number, min: number, max: number) => v >= min && v <= max;
 
 /** Todos os padrões que a Tabela de Preços precisa antes de ser gerada. */

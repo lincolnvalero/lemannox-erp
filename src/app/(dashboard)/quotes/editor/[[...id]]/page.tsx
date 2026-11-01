@@ -42,7 +42,7 @@ import {
 } from '@/components/ui/table';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Trash2, X, PlusCircle, Printer, RotateCcw, Check, Loader2 } from 'lucide-react';
+import { Save, Trash2, X, PlusCircle, Printer, RotateCcw, Check, Loader2, Calculator } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -58,7 +58,8 @@ import { QuotePreview } from '@/components/dashboard/quote-preview';
 import { CoifaImagensPanel } from '@/components/dashboard/coifa-imagens-panel';
 import { OsEditor } from '@/components/dashboard/os-editor';
 import { PRODUCT_GROUPS, resolveProductGroup, collectCustomGroups, produtoArquivado, GRUPO_ARQUIVO } from '@/lib/product-groups';
-import { CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
+import { CHAVE_ITEM_PENDENTE_ORCAMENTO, CHAVE_ITEM_PARA_CALCULADORA } from '@/lib/coifa-padroes';
+import { ehItemDeCoifa } from '@/lib/coifa-viewer-from-item';
 
 
 // .passthrough(): o zod descarta por padrão os campos que não estão no
@@ -350,6 +351,18 @@ export default function QuoteEditorPage() {
       }
     }
   }, [watchedCustomerId, customers, setValue]);
+
+  // Leva a coifa do item para a Calculadora (os dados vão pela sessionStorage; o orçamento não é alterado).
+  const abrirNaCalculadora = (index: number) => {
+    const item = getValues(`items.${index}`);
+    try {
+      sessionStorage.setItem(CHAVE_ITEM_PARA_CALCULADORA, JSON.stringify(item));
+    } catch {
+      toast({ variant: 'destructive', title: 'Não foi possível abrir na calculadora', description: 'O navegador bloqueou o armazenamento temporário.' });
+      return;
+    }
+    router.push('/calculator');
+  };
 
   const handleMaterialChange = (index: number, newMaterial: string) => {
     const item = getValues(`items.${index}`);
@@ -937,6 +950,18 @@ export default function QuoteEditorPage() {
                                         </div>
                                       </TableCell>
                                       <TableCell className="align-middle">
+                                        {ehItemDeCoifa({ name: watchedItems[index]?.name ?? '', measurement: '', material: '', category: watchedItems[index]?.category, productId: watchedItems[index]?.productId }, { produtos: new Map(products.map((p) => [p.id, { category: p.category, model: p.model, measurement: p.measurement }])) }) && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            type="button"
+                                            className="h-10 w-10"
+                                            title="Abrir na calculadora"
+                                            onClick={() => abrirNaCalculadora(index)}
+                                          >
+                                            <Calculator className="h-4 w-4" />
+                                          </Button>
+                                        )}
                                         <Button
                                           variant="ghost"
                                           size="icon"

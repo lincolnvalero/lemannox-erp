@@ -38,7 +38,11 @@ import { getCalculatorReferenceData } from './actions';
 import { EmissaoTabelaCoifas } from '@/components/dashboard/emissao-tabela-coifas';
 import { PlanificacaoCoifa } from '@/components/dashboard/planificacao-coifa';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { formatarMedidaCoifa, modeloSoCozinha, CHAVE_ITEM_PENDENTE_ORCAMENTO } from '@/lib/coifa-padroes';
+import { formatarMedidaCoifa, modeloSoCozinha, CHAVE_ITEM_PENDENTE_ORCAMENTO, CHAVE_ITEM_PARA_CALCULADORA } from '@/lib/coifa-padroes';
+import { itemParaCalculadora } from '@/lib/coifa-para-calculadora';
+import { ehItemDeCoifa, type ContextoDesenho } from '@/lib/coifa-viewer-from-item';
+import { getProducts } from '@/app/(dashboard)/products/actions';
+import { getPadroesTabela } from './actions';
 import { calculateCoifa, kitIluminacaoPadrao, tipoControleEfetivo, type CoifaCalculatorInput, type CoifaCalculationResult } from '@/lib/coifa-calculator';
 import { planejarFuros, resumoFuros, POSICOES_COMANDO } from '@/lib/coifa-furos';
 import { desenhoDefinido } from '@/lib/coifa-desenho';
@@ -361,6 +365,8 @@ export default function CostCalculatorPage() {
       posicaoComando: ultimaPosicaoComando,
       alturaPainel: ultimaAlturaPainel,
       frisoDistBase: ultimaFrisoDist.base, frisoDistEntre: ultimaFrisoDist.entre,
+      larguraPadrao: i.larguraPadrao, larguraPadraoCarenagem: i.larguraPadraoCarenagem,
+      comCarenagem: i.comCarenagem, outros: i.outros, paintingCost: i.paintingCost,
     };
     return {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `calc-${Date.now()}`,
@@ -401,6 +407,77 @@ export default function CostCalculatorPage() {
     router.push(orcDestino === 'novo' ? '/quotes/editor?adicionarItem=1' : `/quotes/editor?id=${orcDestino}&adicionarItem=1`);
   };
 
+  // ── Abrir um orçamento na calculadora ─────────────────────────────────────
+  // Por número do orçamento (campo no topo) ou pelo botão "Abrir na calculadora"
+  // de um item no editor de orçamento (que deixa o item na sessionStorage).
+  const [numOrcamento, setNumOrcamento] = useState('');
+  const [buscandoOrc, setBuscandoOrc] = useState(false);
+  const [orcEncontrado, setOrcEncontrado] = useState<{ numero: number; cliente: string; itens: QuoteItem[] } | null>(null);
+
+  const carregarItemNaCalculadora = useCallback(async (item: QuoteItem, rotulo: string) => {
+    if (!ref) return;
+    let contexto: ContextoDesenho = { produtos: null, padroes: null };
+    if (!item.coifaParams && item.productId) {
+      const [pr, pad] = await Promise.all([getProducts(), getPadroesTabela()]);
+      contexto = {
+        produtos: pr.success && pr.products ? new Map(pr.products.map((x) => [x.id, { category: x.category, model: x.model, measurement: x.measurement }])) : null,
+        padroes: pad,
+      };
+    }
+    const r = itemParaCalculadora(item, contexto);
+    if (!r) {
+      toast({ variant: 'destructive', title: 'Não consegui carregar este item', description: 'Faltam dados da coifa no item. Preencha o formulário manualmente.' });
+      return;
+    }
+    const v = r.valores;
+    const material = v.material && materiaisDisponiveis.includes(v.material) ? v.material : '';
+    const larguras = new Set((ref.materiaisEstoque ?? []).filter((m) => familiaMaterial(m.name) === material && m.width).map((m) => m.width as number));
+    const valores: FormValues = {
+      ...defaultValues,
+      paintingCost: ref.parametros['pintura_padrao'] ?? 0,
+      ...v,
+      material,
+      larguraPadrao: v.larguraPadrao && larguras.has(v.larguraPadrao) ? v.larguraPadrao : 0,
+      larguraPadraoCarenagem: v.larguraPadraoCarenagem && larguras.has(v.larguraPadraoCarenagem) ? v.larguraPadraoCarenagem : 0,
+    } as FormValues;
+    form.reset(valores);
+    setKitRascunho({});
+    setResults(null);
+    setUltimoInput(null);
+    const avisos = [...r.avisos];
+    if (v.material && !material) avisos.push(`O material "${v.material}" não está no Estoque: escolha outro.`);
+    toast({ title: `${rotulo} carregado na calculadora`, description: avisos.join(' ') || 'Conferindo os dados, o cálculo foi refeito.' });
+    if (r.origem === 'completo' && material && valores.larguraPadrao) setTimeout(() => { void form.handleSubmit(onSubmit)(); }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, materiaisDisponiveis, toast]);
+
+  const buscarOrcamento = async () => {
+    const n = Number(numOrcamento.replace(/\D/g, ''));
+    if (!n) { toast({ variant: 'destructive', title: 'Informe o número do orçamento' }); return; }
+    setBuscandoOrc(true);
+    try {
+      const r = await getQuotes();
+      const q = r.success ? r.quotes?.find((x) => x.quoteNumber === n) : undefined;
+      if (!q) { setOrcEncontrado(null); toast({ variant: 'destructive', title: `Orçamento ${n} não encontrado` }); return; }
+      const itens = (q.items ?? []).filter((i) => ehItemDeCoifa(i));
+      if (itens.length === 0) { setOrcEncontrado(null); toast({ variant: 'destructive', title: `O orçamento ${n} não tem coifa` }); return; }
+      if (itens.length === 1) { setOrcEncontrado(null); await carregarItemNaCalculadora(itens[0], `Orçamento ${n}`); return; }
+      setOrcEncontrado({ numero: n, cliente: q.customerName ?? '', itens });
+    } finally {
+      setBuscandoOrc(false);
+    }
+  };
+
+  // Item vindo do editor de orçamento.
+  useEffect(() => {
+    if (!ref) return;
+    let bruto: string | null = null;
+    try { bruto = sessionStorage.getItem(CHAVE_ITEM_PARA_CALCULADORA); sessionStorage.removeItem(CHAVE_ITEM_PARA_CALCULADORA); } catch { /* sem storage */ }
+    if (!bruto) return;
+    try { void carregarItemNaCalculadora(JSON.parse(bruto) as QuoteItem, 'Item do orçamento'); } catch { /* item inválido */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref]);
+
   const copyDescricao = () => {
     if (!results) return;
     navigator.clipboard.writeText(results.descricaoAuto);
@@ -428,6 +505,34 @@ export default function CostCalculatorPage() {
         <ScrollArea className="w-2/5 flex-shrink-0 pr-6">
           <Form {...form}>
             <form id="calculator-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Abrir um orçamento</CardTitle>
+                  <CardDescription>Digite o número do orçamento para trazer os dados da coifa para a calculadora.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      inputMode="numeric" placeholder="Nº do orçamento" value={numOrcamento}
+                      onChange={(e) => setNumOrcamento(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void buscarOrcamento(); } }}
+                    />
+                    <Button type="button" variant="outline" disabled={buscandoOrc} onClick={() => void buscarOrcamento()}>Abrir</Button>
+                  </div>
+                  {orcEncontrado && (
+                    <div className="space-y-1 rounded-md border p-2">
+                      <p className="text-xs text-muted-foreground">Orçamento {orcEncontrado.numero}{orcEncontrado.cliente ? ` — ${orcEncontrado.cliente}` : ''}: escolha a coifa.</p>
+                      {orcEncontrado.itens.map((it) => (
+                        <Button key={it.id} type="button" variant="ghost" size="sm" className="h-auto w-full justify-start whitespace-normal py-1 text-left text-xs"
+                          onClick={() => { void carregarItemNaCalculadora(it, `Orçamento ${orcEncontrado.numero}`); setOrcEncontrado(null); }}>
+                          {it.name}{it.measurement ? ` — ${it.measurement}` : ''}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle>1. Modelo, Dimensões e Materiais</CardTitle>
