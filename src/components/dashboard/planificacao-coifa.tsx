@@ -72,6 +72,23 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
   }, [aberto, entrada, ehBox, comprimento, desenho]);
 
   const nomeChapa = (c: ChapaEncaixada) => `${nomeArquivo} - chapa ${c.indice} (${c.bitola}).dxf`;
+  const baixarPdf = async () => {
+    if (!resultado || !entrada) return;
+    const { pdfDaPlanificacao } = await import('@/lib/coifa-planificacao-pdf');
+    const e = entrada;
+    const frisos = [e.frisoFrente && 'frente', e.frisoLE && 'lateral esquerda', e.frisoLD && 'lateral direita'].filter(Boolean);
+    const doc = pdfDaPlanificacao({
+      titulo: `Coifa ${modelo} ${e.width} × ${e.depth} × ${e.height} mm`,
+      linhas: [
+        `${e.aplicacao} - instalação em ${e.mount} - lâmpadas: ${e.qtdLampadas} - ${e.tipoControle === 'botoeira' ? 'botoeira' : 'botões'}: ${e.qtdBotoes}`,
+        frisos.length
+          ? `Frisos: ${e.frisoLinhas ?? 1} linha(s) em ${frisos.join(', ')} - 1º friso a ${e.frisoDistBase ?? 200} mm da base, ${e.frisoDistEntre ?? 200} mm entre frisos`
+          : 'Sem friso',
+      ],
+      pecas: resultado.pecas, chapas: resultado.chapas, avisos: resultado.avisos, desenho, comprimentoChapa: comprimento,
+    });
+    doc.save(`${nomeArquivo} - cotado.pdf`);
+  };
   const baixarTodas = () => resultado?.chapas.forEach((c) => baixar(nomeChapa(c), dxfDaChapa(c)));
 
   return (
@@ -129,7 +146,10 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
               </Select>
             </div>
             <Button type="button" size="sm" onClick={baixarTodas} disabled={!resultado?.chapas.length}>
-              <Download className="mr-2 h-4 w-4" />Baixar todas
+              <Download className="mr-2 h-4 w-4" />Baixar todas (DXF)
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={baixarPdf} disabled={!resultado?.pecas.length}>
+              <Download className="mr-2 h-4 w-4" />PDF cotado
             </Button>
           </div>
           <ScrollArea className="flex-1 min-h-0 pr-3">

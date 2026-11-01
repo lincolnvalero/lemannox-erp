@@ -382,14 +382,15 @@ export function dxfDaChapa(chapa: ChapaEncaixada, op: OpcoesDxf = {}): string {
   const f = (n: number) => (Math.round(n * 1000) / 1000).toString();
   const linhas: string[] = [];
   const add = (...v: (string | number)[]) => v.forEach((x) => linhas.push(String(x)));
-  const linha = (camada: string, a: Ponto, b: Ponto) => add(0, 'LINE', 8, camada, 10, f(a[0]), 20, f(a[1]), 30, 0, 11, f(b[0]), 21, f(b[1]), 31, 0);
-  const circulo = (camada: string, c: Ponto, d: number) => add(0, 'CIRCLE', 8, camada, 10, f(c[0]), 20, f(c[1]), 30, 0, 40, f(d / 2));
-  const texto = (camada: string, p: Ponto, h: number, t: string, girado = false) => add(0, 'TEXT', 8, camada, 10, f(p[0]), 20, f(p[1]), 30, 0, 40, f(h), 1, t, ...(girado ? [50, 90] : []));
+  const linha = (camada: string, a: Ponto, b: Ponto) => add(0, 'LINE', 8, camada, 62, 7, 10, f(a[0]), 20, f(a[1]), 30, 0, 11, f(b[0]), 21, f(b[1]), 31, 0);
+  const circulo = (camada: string, c: Ponto, d: number) => add(0, 'CIRCLE', 8, camada, 62, 7, 10, f(c[0]), 20, f(c[1]), 30, 0, 40, f(d / 2));
+  const texto = (camada: string, p: Ponto, h: number, t: string, girado = false) => add(0, 'TEXT', 8, camada, 62, 7, 10, f(p[0]), 20, f(p[1]), 30, 0, 40, f(h), 1, t, ...(girado ? [50, 90] : []));
 
   add(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 0, 'ENDSEC');
   add(0, 'SECTION', 2, 'TABLES');
   add(0, 'TABLE', 2, 'LTYPE', 70, 1, 0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0, 0, 'ENDTAB');
-  const camadas: [string, number][] = [['0', 7], ['CORTE', 5], ['DOBRA', 3], ['TEXTO', 7]];
+  // Tudo em branco (cor 7): o Levi desenha em fundo escuro no Cadcraft/AutoCAD (01/11).
+  const camadas: [string, number][] = [['0', 7], ['CORTE', 7], ['DOBRA', 7], ['TEXTO', 7]];
   add(0, 'TABLE', 2, 'LAYER', 70, camadas.length);
   camadas.forEach(([n, c]) => add(0, 'LAYER', 2, n, 70, 0, 62, c, 6, 'CONTINUOUS'));
   add(0, 'ENDTAB', 0, 'ENDSEC');
