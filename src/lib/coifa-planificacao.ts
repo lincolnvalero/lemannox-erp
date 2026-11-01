@@ -169,7 +169,6 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
       frentes.push(faixaLisa('FRENTE_CIMA', 'FRENTE CIMA', p.abaTopo, planoFriso.cima, p.frisoAbaParte));
     }
   }
-  if (e.frisoLD || e.frisoLE) avisos.push('Friso nas laterais: ainda não entra no desenho (só o friso da frente). Falta a regra de oficina das laterais.');
 
   // ── COSTA (24): retorno de baixo de 100, degrau e aba mais estreita. ──────
   let costa: Peca;
@@ -195,21 +194,54 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
   }
 
   // ── LATERAIS (22): 1 dobra → P − acréscimo; aba lateral de 20 e aba de cima. ─
-  const lateral = (lado: 'ESQ' | 'DIR'): Peca => {
+  // Frisos da lateral coincidem com os da frente (Levi, 01/11): mesma quantidade e
+  // mesmas distâncias. A parte de baixo só tem 1 dobra (a de cima), então o corpo
+  // aberto dela é medida acabada − 1 dobra (199 para 200), não − 2.
+  const lateral = (lado: 'ESQ' | 'DIR'): Peca[] => {
     const Wb = arred(P - a);
     const Wt = arred(Wb + p.lateralAba);
-    const H = arred(p.abaTopo + (A - a));
-    // Esquerda: aba lateral à direita. Direita: espelhada.
-    const base: Ponto[] = [
-      [0, 0], [Wb, 0], [Wb, p.abaTopo], [Wt, p.abaTopo], [Wt, H], [0, H], [0, 0],
-    ];
-    const pts = base.map(([x, y]) => [arred(lado === 'ESQ' ? x : Wt - x), toY(H, y)] as Ponto);
+    const espelha = (x: number) => arred(lado === 'ESQ' ? x : Wt - x);
     const xb = lado === 'ESQ' ? Wb : Wt - Wb;
-    const dobras: Peca['dobras'] = [
-      lado === 'ESQ' ? [0, toY(H, p.abaTopo), Wb, toY(H, p.abaTopo)] : [Wt - Wb, toY(H, p.abaTopo), Wt, toY(H, p.abaTopo)],
-      [xb, 0, xb, toY(H, p.abaTopo)],
-    ];
-    return { id: `LAT_${lado}`, nome: `LAT. ${lado === 'ESQ' ? 'ESQ' : 'DIR'}`, bitola: 22, w: Wt, h: H, contorno: pts, furos: [], dobras };
+    const sufixo = lado === 'ESQ' ? 'ESQ' : 'DIR';
+    // Pedaço: aba de cima (só na largura do corpo) + corpo + aba de baixo; a aba lateral vai da aba de cima até o fim.
+    const pedaco = (id: string, nome: string, abaCima: number, corpoAberto: number, abaBaixo: number): Peca => {
+      const H = arred(abaCima + corpoAberto + abaBaixo);
+      const base: Ponto[] = [[0, 0], [Wb, 0], [Wb, abaCima], [Wt, abaCima], [Wt, H], [0, H], [0, 0]];
+      const dobras: Peca['dobras'] = [];
+      if (abaCima > 0) dobras.push([Math.min(espelha(0), espelha(Wb)), toY(H, abaCima), Math.max(espelha(0), espelha(Wb)), toY(H, abaCima)]);
+      if (abaBaixo > 0) dobras.push([Math.min(espelha(0), espelha(Wb)), toY(H, abaCima + corpoAberto), Math.max(espelha(0), espelha(Wb)), toY(H, abaCima + corpoAberto)]);
+      dobras.push([xb, 0, xb, toY(H, abaCima)]);
+      return { id: `${id}_${sufixo}`, nome: `${nome} ${sufixo}`, bitola: 22, w: Wt, h: H, contorno: base.map(([x, y]) => [espelha(x), toY(H, y)] as Ponto), furos: [], dobras };
+    };
+    const friso = (n: number): Peca => {
+      const H = arred(p.frisoAba * 2 + p.frisoCentro);
+      return {
+        id: `LAT_FRISO${n}_${sufixo}`, nome: `LAT. FRISO ${n} ${sufixo}`, bitola: 22, w: Wb, h: H,
+        contorno: [[0, 0], [Wb, 0], [Wb, H], [0, H], [0, 0]], furos: [],
+        dobras: [p.frisoAba, p.frisoAba + p.frisoCentro].map((y) => [0, toY(H, y), Wb, toY(H, y)] as [number, number, number, number]),
+      };
+    };
+
+    const comFriso = lado === 'ESQ' ? e.frisoLE : e.frisoLD;
+    const nFris = comFriso ? Math.max(1, Math.min(3, Math.round(e.frisoLinhas ?? 1))) : 0;
+    const dBase = e.frisoDistBase ?? FRISO_DIST_BASE_PADRAO;
+    const dEntre = e.frisoDistEntre ?? FRISO_DIST_ENTRE_PADRAO;
+    const corpo = A - a;
+    if (nFris > 0) {
+      const baixo = arred(dBase - a), meio = arred(dEntre - 2 * a);
+      const cima = arred(corpo - 2 * nFris * a - nFris * p.frisoCentro - baixo - meio * (nFris - 1));
+      if (baixo > 0 && meio > 0 && cima > 0) {
+        const partes: Peca[] = [pedaco('LAT_BAIXO', 'LAT. BAIXO', p.frisoAbaParte, baixo, 0)];
+        for (let i = 0; i < nFris; i++) {
+          partes.push(friso(i + 1));
+          if (i < nFris - 1) partes.push(pedaco(`LAT_MEIO${i + 1}`, `LAT. MEIO${nFris > 2 ? ` ${i + 1}` : ''}`, p.frisoAbaParte, meio, p.frisoAbaParte));
+        }
+        partes.push(pedaco('LAT_CIMA', 'LAT. CIMA', p.abaTopo, cima, p.frisoAbaParte));
+        return partes;
+      }
+      avisos.push(`Friso na lateral ${sufixo}: as distâncias (${dBase} mm da base, ${dEntre} mm entre frisos) não cabem na altura de ${A} mm — frisos fora do desenho.`);
+    }
+    return [pedaco('LAT', 'LAT.', p.abaTopo, corpo, 0)];
   };
 
   // ── TAMPA = teto (24): retângulo (L − 20) × (P − 20). ──────────────────────
@@ -219,7 +251,7 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     contorno: [[0, 0], [tw, 0], [tw, th], [0, th], [0, 0]], furos: [], dobras: [],
   };
 
-  return { pecas: [...frentes, costa, lateral('ESQ'), lateral('DIR'), tampa], avisos };
+  return { pecas: [...frentes, costa, ...lateral('ESQ'), ...lateral('DIR'), tampa], avisos };
 }
 
 // Ponto dentro do polígono (ray casting) — só para avisar de furo fora da peça.

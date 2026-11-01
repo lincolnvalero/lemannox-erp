@@ -331,7 +331,7 @@ const ROTULOS_DESENHO: Record<keyof ParametrosDesenho, string> = {
   frenteAba: 'Frente — aba após o painel (mm)', frenteBainha: 'Frente — bainha final (mm)', frentePainelRecuo: 'Frente — recuo lateral do painel de baixo (mm)',
   costaRetorno: 'Costas — retorno de baixo (mm)', costaDegrau: 'Costas — degrau (mm)', costaAba: 'Costas — aba (mm)',
   frisoCentro: 'Friso — parte central da peça (mm)', frisoAba: 'Friso — cada aba da peça (mm)',
-  frisoAbaParte: 'Frente — abas dos pedaços acima e abaixo do friso (mm)',
+  frisoAbaParte: 'Frente e laterais — abas dos pedaços acima e abaixo do friso (mm)',
   costaBainha: 'Costas — bainha final (mm)', costaDobraExtra: 'Costas — outra dobra, antes da bainha final (mm)', costaRecuo: 'Costas — recuo lateral da parte de baixo (mm)',
   lateralAba: 'Laterais — aba lateral (mm)', tampaFolga: 'Tampa — folga em largura e profundidade (mm)',
   alivioLargura: 'Recorte de canto — largura (mm)', alivioAltura: 'Recorte de canto — altura (mm)',

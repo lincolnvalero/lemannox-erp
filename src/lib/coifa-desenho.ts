@@ -49,7 +49,7 @@ export type ParametrosDesenho = {
   // ── Frisos (Levi, 29/10) ──
   frisoCentro: number;       // peça do friso: parte central (20)
   frisoAba: number;          // peça do friso: cada aba (10)
-  frisoAbaParte: number;     // abas dos pedaços da frente acima e abaixo do friso (10)
+  frisoAbaParte: number;     // abas dos pedaços (frente e laterais) acima e abaixo do friso (20 — Levi, 01/11)
 };
 
 export const DESENHO_INICIAL: ParametrosDesenho = {
@@ -61,7 +61,7 @@ export const DESENHO_INICIAL: ParametrosDesenho = {
   abaTopo: 20, frenteRetorno: 35, frentePainel: 90, frenteAba: 40, frenteBainha: 10, frentePainelRecuo: 51,
   costaRetorno: 100, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaDobraExtra: 10, costaRecuo: 30,
   lateralAba: 20, tampaFolga: 20, alivioLargura: 8.7, alivioAltura: 15,
-  frisoCentro: 20, frisoAba: 10, frisoAbaParte: 10,
+  frisoCentro: 20, frisoAba: 10, frisoAbaParte: 20,
 };
 
 /** Chave em parametros_globais de cada campo. */
