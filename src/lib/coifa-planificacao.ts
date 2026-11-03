@@ -132,8 +132,9 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
         const total = (nF - 1) * passo;
         const margem = 80;
         const cx = alinh === 'esquerda' ? margem + total / 2 : alinh === 'direita' ? W - margem - total / 2 : W / 2;
-        // Frente: no corpo, 45mm acima da dobra de baixo. Embaixo: no painel de baixo.
-        const yCmd = lado === 'frente' ? toY(H, yRet - 45) : yLamp;
+        // Frente: no corpo, 45mm acima da dobra de baixo. Embaixo: no segmento de 35mm (retorno), acima das
+        // lâmpadas — não ao lado delas (Levi, 02/11).
+        const yCmd = lado === 'frente' ? toY(H, yRet - 45) : toY(H, yRet + p.frenteRetorno / 2);
         for (let i = 0; i < nF; i++) furos.push({ x: arred(cx - total / 2 + i * passo), y: yCmd, d: dia });
       }
 
@@ -176,7 +177,9 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     const W = arred(L - 2 * a);
     const corpo = A - 2 * a;
     const yRet = p.abaTopo + corpo;
-    const yEsc = yRet + p.costaRetorno + p.costaDegrau;
+    // Retorno de baixo: profundidade − 545, no mínimo 50 (Levi, 02/11) — antes era fixo em 100.
+    const retorno = Math.max(p.costaRetornoMin, arred(P - p.costaRetornoDesconto));
+    const yEsc = yRet + retorno + p.costaDegrau;
     const yFim = yEsc + p.costaAba + p.costaDobraExtra + p.costaBainha;
     const H = arred(yFim);
     const c = p.costaRecuo;
@@ -185,10 +188,11 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     ].map(([x, y]) => [arred(x), toY(H, y)] as Ponto);
     const furos: FuroPeca[] = [];
     // Lâmpadas do fundo (Ilha ou "junto à parede"): no retorno de baixo.
-    const yLamp = toY(H, yRet + p.costaRetorno / 2);
+    const yLamp = toY(H, yRet + retorno / 2);
     lampadasNaFaixa(lamp.fundo, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
-    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yRet + p.costaRetorno, yRet + p.costaRetorno + p.costaDegrau + p.costaAba, yRet + p.costaRetorno + p.costaDegrau + p.costaAba + p.costaDobraExtra]
+    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yRet + retorno, yRet + retorno + p.costaDegrau + p.costaAba, yRet + retorno + p.costaDegrau + p.costaAba + p.costaDobraExtra]
       .map((y, i) => (i >= 3 ? [c, toY(H, y), W - c, toY(H, y)] : [0, toY(H, y), W, toY(H, y)]) as [number, number, number, number]);
+    if (furos.length && dL > retorno) avisos.push(`Costa: o furo da lâmpada (Ø${dL}) é maior que o retorno de baixo (${retorno} mm) — o furo invade as dobras.`);
     todosFurosDentro('Costa', contorno, furos, avisos);
     costa = { id: 'COSTA', nome: 'COSTA', bitola: 24, w: W, h: H, contorno, furos, dobras };
   }

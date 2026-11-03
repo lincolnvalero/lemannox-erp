@@ -36,7 +36,8 @@ export type ParametrosDesenho = {
   frenteAba: number;         // frente: aba depois do painel (40)
   frenteBainha: number;      // frente: bainha final (10)
   frentePainelRecuo: number; // frente: o painel de baixo é mais estreito, recuo de cada lado (51)
-  costaRetorno: number;      // costas: retorno de baixo (100)
+  costaRetornoDesconto: number; // costas: retorno de baixo = profundidade (sem aba) − este valor (545), no mínimo `costaRetornoMin` (Levi, 02/11)
+  costaRetornoMin: number;      // costas: retorno de baixo mínimo (50)
   costaDegrau: number;       // costas: degrau (15)
   costaAba: number;          // costas: aba (45)
   costaBainha: number;       // costas: bainha final (10)
@@ -59,7 +60,7 @@ export const DESENHO_INICIAL: ParametrosDesenho = {
   acrescimoDobra: 1, espessura22: 0.8, espessura24: 0.6,
   margemChapa: 5, espacoPecas: 5, larguraChapa: 1250,
   abaTopo: 20, frenteRetorno: 35, frentePainel: 90, frenteAba: 40, frenteBainha: 10, frentePainelRecuo: 51,
-  costaRetorno: 100, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaDobraExtra: 10, costaRecuo: 30,
+  costaRetornoDesconto: 545, costaRetornoMin: 50, costaDegrau: 15, costaAba: 45, costaBainha: 10, costaDobraExtra: 10, costaRecuo: 30,
   lateralAba: 20, tampaFolga: 20, alivioLargura: 8.7, alivioAltura: 15,
   frisoCentro: 20, frisoAba: 10, frisoAbaParte: 20,
 };
@@ -73,7 +74,7 @@ export const CHAVE_DESENHO: Record<keyof ParametrosDesenho, string> = {
   margemChapa: 'desenho_margem_chapa', espacoPecas: 'desenho_espaco_pecas', larguraChapa: 'desenho_largura_chapa',
   abaTopo: 'desenho_box_aba_topo', frenteRetorno: 'desenho_box_frente_retorno', frentePainel: 'desenho_box_frente_painel',
   frenteAba: 'desenho_box_frente_aba', frenteBainha: 'desenho_box_frente_bainha', frentePainelRecuo: 'desenho_box_frente_painel_recuo',
-  costaRetorno: 'desenho_box_costa_retorno', costaDegrau: 'desenho_box_costa_degrau', costaAba: 'desenho_box_costa_aba',
+  costaRetornoDesconto: 'desenho_box_costa_retorno_desconto', costaRetornoMin: 'desenho_box_costa_retorno_min', costaDegrau: 'desenho_box_costa_degrau', costaAba: 'desenho_box_costa_aba',
   costaBainha: 'desenho_box_costa_bainha', costaDobraExtra: 'desenho_box_costa_dobra_extra', costaRecuo: 'desenho_box_costa_recuo',
   lateralAba: 'desenho_box_lateral_aba', tampaFolga: 'desenho_box_tampa_folga',
   alivioLargura: 'desenho_box_alivio_largura', alivioAltura: 'desenho_box_alivio_altura',
