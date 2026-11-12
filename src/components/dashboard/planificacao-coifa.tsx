@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { dxfDaChapa, encaixarNasChapas, planificarBox, pontoNaChapa, type ChapaEncaixada, type EntradaPlanificacao } from '@/lib/coifa-planificacao';
+import { dxfDaChapa, encaixarNasChapas, planificar, pontoNaChapa, type ChapaEncaixada, type EntradaPlanificacao } from '@/lib/coifa-planificacao';
 import type { ParametrosDesenho } from '@/lib/coifa-desenho';
 
 interface Props {
@@ -62,11 +62,11 @@ function ChapaSvg({ chapa }: { chapa: ChapaEncaixada }) {
 export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Props) {
   const [aberto, setAberto] = useState(false);
   const [comprimento, setComprimento] = useState(2000);
-    const ehBox = modelo === 'Box';
+    const ehBox = modelo === 'Box' || modelo === 'Piramidal'; // modelos com planificação
 
   const resultado = useMemo(() => {
     if (!aberto || !entrada || !ehBox) return null;
-    const pecas = planificarBox(entrada, desenho);
+    const pecas = planificar(entrada, desenho);
     const enc = encaixarNasChapas(pecas.pecas, comprimento, desenho);
     return { pecas: pecas.pecas, chapas: enc.chapas, avisos: [...pecas.avisos, ...enc.avisos] };
   }, [aberto, entrada, ehBox, comprimento, desenho]);
@@ -115,14 +115,14 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
         </ul>
         {!ehBox && (
           <p className="text-xs rounded-md border border-amber-500/50 bg-amber-500/10 p-2">
-            A planificação ainda só existe para a Box. Piramidal, Línea e Tube precisam de um exemplo (DXF + PDF) do Adriano
+            A planificação existe para a Box e a Piramidal. Línea e Tube precisam de um exemplo (DXF + PDF) do Adriano
             para que as dobras, abas e o teto saiam certos — sem isso o ERP não inventa medida de corte.
           </p>
         )}
         <Button type="button" variant="outline" disabled={!entrada || !ehBox} onClick={() => setAberto(true)}>
           <Ruler className="mr-2 h-4 w-4" />Planificar e gerar DXF
         </Button>
-        {!entrada && ehBox && <p className="text-xs text-muted-foreground">Preencha largura, profundidade e altura.</p>}
+        {!entrada && ehBox && <p className="text-xs text-muted-foreground">Preencha largura, profundidade e altura (e o teto, na Piramidal).</p>}
       </CardContent>
 
       <Dialog open={aberto} onOpenChange={setAberto}>

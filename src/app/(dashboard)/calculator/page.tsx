@@ -205,6 +205,9 @@ export default function CostCalculatorPage() {
     const L = Number(watchedWidth) || 0, P = Number(watchedDepth) || 0, A = Number(watchedHeight) || 0;
     if (!(L > 0 && P > 0 && A > 0)) return null;
     return {
+      modelo: watchedModelo === 'Piramidal' ? 'Piramidal' as const : 'Box' as const,
+      tetoWidth: Number(watchedTetoWidth) || undefined, tetoDepth: Number(watchedTetoDepth) || undefined,
+      alturaPainel: watchedModelo === 'Piramidal' ? Number(watchedAlturaPainel) || 0 : undefined,
       width: L, depth: P, height: A, mount: watchedInstalacao, aplicacao: watchedAplicacao,
       qtdLampadas: qtdLampadasEfetiva, posicaoLampadas: watchedPosicaoLampadas,
       qtdBotoes: qtdBotoesEfetiva, tipoControle, posicaoComando: watchedPosicaoComando,
@@ -212,7 +215,7 @@ export default function CostCalculatorPage() {
       frisoLinhas: Number(watchedFrisoLinhas) || 1,
       frisoDistBase: Number(watchedFrisoDistBase) || undefined, frisoDistEntre: Number(watchedFrisoDistEntre) || undefined,
     };
-  }, [watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
+  }, [watchedModelo, watchedTetoWidth, watchedTetoDepth, watchedAlturaPainel, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
   const nomeBotao = tipoControle === 'botoeira' ? 'Botoeiras' : 'Botões';
   // Furos que o desenho mostra (base para o futuro DXF de fabricação).
   const furosResumo = useMemo(() => {

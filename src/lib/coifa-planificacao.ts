@@ -1,8 +1,8 @@
-// Planificação (peças abertas) da coifa Box, encaixe nas chapas e DXF.
+// Planificação (peças abertas) da coifa Box e Piramidal, encaixe nas chapas e DXF.
 //
 // Regras tiradas do exemplo "Coifa Israel" (DXF + PDF do Adriano) e das
-// respostas do Levi em 20/10/26. Só a Box está coberta — Piramidal, Línea e
-// Tube precisam de um exemplo de cada. Tudo em mm; módulo puro.
+// respostas do Levi em 20/10/26; a Piramidal, do desenho "Coifas Paulo New G"
+// (02/11). Línea e Tube precisam de um exemplo de cada. Tudo em mm; módulo puro.
 //
 // Convenção das peças abertas: origem no canto inferior esquerdo, y para cima
 // (como no CAD). Internamente as medidas "de cima para baixo" (yTopo) são
@@ -30,6 +30,12 @@ export interface Peca {
 }
 
 export interface EntradaPlanificacao {
+  /** Modelo a planificar (padrão Box). */
+  modelo?: 'Box' | 'Piramidal';
+  /** Piramidal: teto (topo do tronco) e altura do painel vertical da frente. */
+  tetoWidth?: number;
+  tetoDepth?: number;
+  alturaPainel?: number;
   width: number;   // L (frente)
   depth: number;   // P
   height: number;  // A
@@ -256,6 +262,90 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
   };
 
   return { pecas: [...frentes, costa, ...lateral('ESQ'), ...lateral('DIR'), tampa], avisos };
+}
+
+/** Planifica o modelo pedido (hoje Box e Piramidal). */
+export function planificar(e: EntradaPlanificacao, p: ParametrosDesenho): ResultadoPecas {
+  return e.modelo === 'Piramidal' ? planificarPiramidal(e, p) : planificarBox(e, p);
+}
+
+// ── PIRAMIDAL (tronco de 4 águas) ───────────────────────────────────────────
+// Do desenho "Coifas Paulo New G" (Ilha 1100 × 700 × 400, teto 400 × 350, painel 80):
+// o corpo é um tronco de pirâmide de altura R = A − painel; cada face é um
+// trapézio de altura inclinada √(recuo² + R²), em que recuo é a metade da
+// diferença entre a base e o teto (na frente, pela profundidade; na lateral,
+// pela largura). Confere com o desenho: frente 364,73 e lateral 474,24 para
+// R = 320, e a aresta (505,50) é a mesma nas duas. Abaixo do tronco, a frente
+// tem o painel vertical (80), o painel das lâmpadas (90) e a bainha (15); a
+// lateral só o painel vertical, com +1 mm (tem uma dobra a menos).
+function planificarPiramidal(e: EntradaPlanificacao, p: ParametrosDesenho): ResultadoPecas {
+  const avisos: string[] = [];
+  const L = e.width, P = e.depth, A = e.height;
+  const tw = e.tetoWidth ?? 0, td = e.tetoDepth ?? 0;
+  const painel = Math.max(0, e.alturaPainel ?? 0);
+  const a = p.acrescimoDobra;
+  const R = A - painel;
+  if (!(tw > 0 && td > 0 && tw < L && td < P)) {
+    return { pecas: [], avisos: ['Piramidal: informe o teto (menor que a largura e a profundidade) para planificar.'] };
+  }
+  if (!(R > 0)) return { pecas: [], avisos: ['Piramidal: a altura precisa ser maior que o painel da frente.'] };
+  if (painel <= 0) avisos.push('Piramidal sem painel vertical: o comando (botoeira/botões) não tem onde ficar e não entra no desenho.');
+
+  const dxF = (L - tw) / 2, dxL = (P - td) / 2;      // recuo de cada lado na frente / na lateral
+  const faceF = arred(Math.hypot(dxL, R));            // altura inclinada da frente (e da costa)
+  const faceL = arred(Math.hypot(dxF, R));            // altura inclinada da lateral
+  const lamp = repartirLampadas(e);
+  const dL = diametroFuroLampada(e.aplicacao, p);
+  const nBot = Math.max(0, Math.round(e.qtdBotoes));
+
+  // Trapézio + abas: base `W` no fundo, `Wt` no topo, `yBase` de segmentos retos embaixo.
+  const trapezio = (id: string, nome: string, bitola: 22 | 24, W: number, Wt: number, yBase: number, face: number,
+    dobrasBase: number[], furos: FuroPeca[]): Peca => {
+    const dx = (W - Wt) / 2;
+    const yFace = yBase + face, H = arred(yFace + p.abaTopo);
+    const pts: Ponto[] = [[0, 0], [W, 0], [W, yBase], [W - dx, yFace], [W - dx, H], [dx, H], [dx, yFace], [0, yBase], [0, 0]]
+      .map(([x, y]) => [arred(x), arred(y)] as Ponto);
+    const dobras: Peca['dobras'] = dobrasBase.map((y) => [0, y, W, y] as [number, number, number, number]);
+    dobras.push([arred(dx), arred(yFace), arred(W - dx), arred(yFace)]);
+    todosFurosDentro(nome, pts, furos, avisos);
+    return { id, nome, bitola, w: W, h: H, contorno: pts, furos, dobras };
+  };
+
+  // Base da frente/costa: bainha + painel das lâmpadas + painel vertical.
+  const yLampPainel = p.piramidalBainha + p.frentePainel;
+  const yBaseF = yLampPainel + painel;
+  const yLampada = arred(p.piramidalBainha + p.frentePainel / 2);
+  const dobrasF = [p.piramidalBainha, yLampPainel, yBaseF].filter((y, i, v) => i === 0 || y > v[i - 1] + 0.01);
+
+  const furosFrente: FuroPeca[] = lampadasNaFaixa(lamp.frente, 0, L, L, dL, p).map((x) => ({ x: arred(x), y: yLampada, d: dL }));
+  if (nBot > 0 && painel > 0) {
+    const [lado, alinh] = (e.posicaoComando ?? 'frente-centro').split('-') as ['frente' | 'embaixo', 'esquerda' | 'centro' | 'direita'];
+    if (lado === 'embaixo') avisos.push('Piramidal: comando "embaixo" ainda não tem regra de oficina — foi desenhado no painel vertical da frente.');
+    const dia = e.tipoControle === 'botoeira' ? p.furoBotoeira : p.furoBotao;
+    const nF = e.tipoControle === 'botoeira' ? FURO_PADRAO.botoesPorBotoeira : nBot;
+    const passo = e.tipoControle === 'botoeira' ? p.espacoBotoeira : dia + p.espacoBotoeira;
+    const total = (nF - 1) * passo;
+    const margem = 80;
+    const cx = alinh === 'esquerda' ? margem + total / 2 : alinh === 'direita' ? L - margem - total / 2 : L / 2;
+    const y = arred(yLampPainel + painel / 2);         // meio do painel vertical
+    for (let i = 0; i < nF; i++) furosFrente.push({ x: arred(cx - total / 2 + i * passo), y, d: dia });
+  }
+  const frente = trapezio('FRENTE', 'FRENTE', 22, L, tw, yBaseF, faceF, dobrasF, furosFrente);
+
+  const furosCosta: FuroPeca[] = lampadasNaFaixa(lamp.fundo, 0, L, L, dL, p).map((x) => ({ x: arred(x), y: yLampada, d: dL }));
+  const costa = trapezio('COSTA', 'COSTA', 24, L, tw, yBaseF, faceF, dobrasF, furosCosta);
+  if (e.mount === 'Parede') avisos.push('Piramidal de parede: a costa foi desenhada igual à frente (sem comando) — confirme com o Levi se tem outro formato.');
+
+  // Laterais: só o painel vertical embaixo (+1 mm: uma dobra a menos).
+  const yBaseL = arred(painel + a);
+  const lateral = (n: 1 | 2) => trapezio(`LAT_${n}`, `LATERAL ${n}`, 22, P, td, yBaseL, faceL, [yBaseL], []);
+
+  // Teto: retângulo (teto − folga), como na Box (aba de 20 em volta).
+  const rw = arred(tw - p.tampaFolga), rh = arred(td - p.tampaFolga);
+  const tampa: Peca = { id: 'TAMPA', nome: 'TETO', bitola: 24, w: rw, h: rh, contorno: [[0, 0], [rw, 0], [rw, rh], [0, rh], [0, 0]], furos: [], dobras: [] };
+
+  avisos.push('Piramidal: as cantoneiras do exemplo (tiras de 50 × 548) e a carenagem ainda não entram no desenho — falta a regra de quantidade e medida.');
+  return { pecas: [frente, costa, lateral(1), lateral(2), tampa], avisos };
 }
 
 // Ponto dentro do polígono (ray casting) — só para avisar de furo fora da peça.
