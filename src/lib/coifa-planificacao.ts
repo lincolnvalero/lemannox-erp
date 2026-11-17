@@ -32,7 +32,7 @@ export interface Peca {
 export interface EntradaPlanificacao {
   /** Modelo a planificar (padrão Box). */
   modelo?: 'Box' | 'Piramidal';
-  /** Filtro e tipo do filtro inercial (Levi, 13/11): o desenho atual da Box é o do filtro inclinado; o reto virá em outro DXF. */
+  /** Filtro e tipo do filtro inercial (Levi, 13/11): informados, mas por ora não mudam as peças (Levi, 17/11) — o DXF do reto, se mudar algo, virá depois. */
   filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
   tipoFiltroInercial?: 'inclinado' | 'reto';
   /** Piramidal: teto (topo do tronco) e altura do painel vertical da frente. */
@@ -275,10 +275,6 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
 
 /** Planifica o modelo pedido (hoje Box e Piramidal). */
 export function planificar(e: EntradaPlanificacao, p: ParametrosDesenho): ResultadoPecas {
-  const inercial = e.filtro === 'inercial_430' || e.filtro === 'inercial_304';
-  if (inercial && e.tipoFiltroInercial === 'reto') {
-    return { pecas: [], avisos: ['Filtro inercial reto: a planificação deste modelo ainda não existe (o DXF do filtro reto ainda será enviado). O desenho atual vale só para o filtro inclinado.'] };
-  }
   return e.modelo === 'Piramidal' ? planificarPiramidal(e, p) : planificarBox(e, p);
 }
 

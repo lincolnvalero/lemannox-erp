@@ -798,7 +798,7 @@ export default function CostCalculatorPage() {
                             <SelectItem value="reto">Reto</SelectItem>
                           </SelectContent>
                         </Select>
-                        <FormDescription className="text-xs">Só muda o desenho para corte — não altera o preço. O desenho do filtro reto ainda será definido.</FormDescription>
+                        <FormDescription className="text-xs">Não altera o preço nem, por enquanto, o desenho para corte.</FormDescription>
                       </FormItem>
                     )} />
                   )}
