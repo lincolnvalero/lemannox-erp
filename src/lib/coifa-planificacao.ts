@@ -32,6 +32,9 @@ export interface Peca {
 export interface EntradaPlanificacao {
   /** Modelo a planificar (padrão Box). */
   modelo?: 'Box' | 'Piramidal';
+  /** Filtro e tipo do filtro inercial (Levi, 13/11): o desenho atual da Box é o do filtro inclinado; o reto virá em outro DXF. */
+  filtro?: 'nenhum' | 'aluminio' | 'inercial_430' | 'inercial_304';
+  tipoFiltroInercial?: 'inclinado' | 'reto';
   /** Piramidal: teto (topo do tronco) e altura do painel vertical da frente. */
   tetoWidth?: number;
   tetoDepth?: number;
@@ -210,17 +213,23 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
   const lateral = (lado: 'ESQ' | 'DIR'): Peca[] => {
     const Wb = arred(P - a);
     const Wt = arred(Wb + p.lateralAba);
-    const espelha = (x: number) => arred(lado === 'ESQ' ? x : Wt - x);
-    const xb = lado === 'ESQ' ? Wb : Wt - Wb;
+    // Chapa cortada com o PVC para cima (Levi, 13/11): a lateral direita tem a aba lateral à direita e a
+    // esquerda, ao contrário (à esquerda).
+    const espelha = (x: number) => arred(lado === 'DIR' ? x : Wt - x);
+    const xb = lado === 'DIR' ? Wb : Wt - Wb;
     const sufixo = lado === 'ESQ' ? 'ESQ' : 'DIR';
     // Pedaço: aba de cima (só na largura do corpo) + corpo + aba de baixo; a aba lateral vai da aba de cima até o fim.
     const pedaco = (id: string, nome: string, abaCima: number, corpoAberto: number, abaBaixo: number): Peca => {
       const H = arred(abaCima + corpoAberto + abaBaixo);
-      const base: Ponto[] = [[0, 0], [Wb, 0], [Wb, abaCima], [Wt, abaCima], [Wt, H], [0, H], [0, 0]];
+      // Aba lateral entre as duas abas horizontais: onde há dobra embaixo (pedaços de cima e do meio), o contorno
+      // também estreita embaixo — dobra dos dois lados (Levi, 13/11). O pedaço de baixo só tem a dobra de cima.
+      const base: Ponto[] = abaBaixo > 0
+        ? [[0, 0], [Wb, 0], [Wb, abaCima], [Wt, abaCima], [Wt, H - abaBaixo], [Wb, H - abaBaixo], [Wb, H], [0, H], [0, 0]]
+        : [[0, 0], [Wb, 0], [Wb, abaCima], [Wt, abaCima], [Wt, H], [0, H], [0, 0]];
       const dobras: Peca['dobras'] = [];
       if (abaCima > 0) dobras.push([Math.min(espelha(0), espelha(Wb)), toY(H, abaCima), Math.max(espelha(0), espelha(Wb)), toY(H, abaCima)]);
       if (abaBaixo > 0) dobras.push([Math.min(espelha(0), espelha(Wb)), toY(H, abaCima + corpoAberto), Math.max(espelha(0), espelha(Wb)), toY(H, abaCima + corpoAberto)]);
-      dobras.push([xb, 0, xb, toY(H, abaCima)]);
+      dobras.push([xb, abaBaixo > 0 ? abaBaixo : 0, xb, toY(H, abaCima)]);
       return { id: `${id}_${sufixo}`, nome: `${nome} ${sufixo}`, bitola: 22, w: Wt, h: H, contorno: base.map(([x, y]) => [espelha(x), toY(H, y)] as Ponto), furos: [], dobras };
     };
     const friso = (n: number): Peca => {
@@ -266,6 +275,10 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
 
 /** Planifica o modelo pedido (hoje Box e Piramidal). */
 export function planificar(e: EntradaPlanificacao, p: ParametrosDesenho): ResultadoPecas {
+  const inercial = e.filtro === 'inercial_430' || e.filtro === 'inercial_304';
+  if (inercial && e.tipoFiltroInercial === 'reto') {
+    return { pecas: [], avisos: ['Filtro inercial reto: a planificação deste modelo ainda não existe (o DXF do filtro reto ainda será enviado). O desenho atual vale só para o filtro inclinado.'] };
+  }
   return e.modelo === 'Piramidal' ? planificarPiramidal(e, p) : planificarBox(e, p);
 }
 

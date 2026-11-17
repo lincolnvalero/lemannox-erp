@@ -88,6 +88,8 @@ const formSchema = z.object({
   // Posição dos frisos no desenho (Box): da base ao 1º friso e entre frisos, borda a borda (mm).
   frisoDistBase: z.coerce.number().min(30).max(3000),
   frisoDistEntre: z.coerce.number().min(30).max(3000),
+  // Filtro inercial inclinado ou reto (só desenho).
+  tipoFiltroInercial: z.enum(['inclinado', 'reto']),
   outros: numField,
   paintingCost: numField,
   // Ajuste manual do kit de iluminação — vazio = usa o padrão da tabela.
@@ -114,7 +116,7 @@ const defaultValues: FormValues = {
   material: '', larguraPadrao: 0, larguraPadraoCarenagem: 0,
   tipoAplicacao: 'Cozinha', tipoInstalacao: 'Parede',
   filtro: 'nenhum', coletor: 'nenhum',
-  frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1, frisoDistBase: 200, frisoDistEntre: 200,
+  frisoFrente: false, frisoLD: false, frisoLE: false, frisoLinhas: 1, frisoDistBase: 200, frisoDistEntre: 200, tipoFiltroInercial: 'inclinado',
   outros: 0, paintingCost: 0,
   qtdLampadasManual: undefined, qtdBotoesManual: undefined,
   controle: 'botoes', posicaoLampadas: 'frente', comCarenagem: true, posicaoComando: 'frente-centro',
@@ -176,8 +178,8 @@ export default function CostCalculatorPage() {
   const watchedAplicacao = watch('tipoAplicacao');
   const watchedInstalacao = watch('tipoInstalacao');
   const watchedLampadasManual = watch('qtdLampadasManual');
-  const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre] =
-    watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas', 'frisoDistBase', 'frisoDistEntre']);
+  const [watchedColetor, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedTipoFiltro] =
+    watch(['coletor', 'frisoFrente', 'frisoLD', 'frisoLE', 'frisoLinhas', 'frisoDistBase', 'frisoDistEntre', 'tipoFiltroInercial']);
   const watchedBotoesManual = watch('qtdBotoesManual');
   const watchedControle = watch('controle');
   const watchedPosicaoLampadas = watch('posicaoLampadas');
@@ -214,8 +216,9 @@ export default function CostCalculatorPage() {
       frisoFrente: watchedFrisoFrente, frisoLD: watchedFrisoLD, frisoLE: watchedFrisoLE,
       frisoLinhas: Number(watchedFrisoLinhas) || 1,
       frisoDistBase: Number(watchedFrisoDistBase) || undefined, frisoDistEntre: Number(watchedFrisoDistEntre) || undefined,
+      filtro: watchedFiltro, tipoFiltroInercial: watchedTipoFiltro,
     };
-  }, [watchedModelo, watchedTetoWidth, watchedTetoDepth, watchedAlturaPainel, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
+  }, [watchedFiltro, watchedTipoFiltro, watchedModelo, watchedTetoWidth, watchedTetoDepth, watchedAlturaPainel, watchedFrisoFrente, watchedFrisoLD, watchedFrisoLE, watchedFrisoLinhas, watchedFrisoDistBase, watchedFrisoDistEntre, watchedWidth, watchedDepth, watchedHeight, watchedInstalacao, watchedAplicacao, qtdLampadasEfetiva, watchedPosicaoLampadas, qtdBotoesEfetiva, tipoControle, watchedPosicaoComando]);
   const nomeBotao = tipoControle === 'botoeira' ? 'Botoeiras' : 'Botões';
   // Furos que o desenho mostra (base para o futuro DXF de fabricação).
   const furosResumo = useMemo(() => {
@@ -302,7 +305,7 @@ export default function CostCalculatorPage() {
       setUltimoInput(input);
       setUltimaPosicaoLampadas(values.posicaoLampadas);
       setUltimaPosicaoComando(values.posicaoComando);
-      setUltimaFrisoDist({ base: Number(values.frisoDistBase) || undefined, entre: Number(values.frisoDistEntre) || undefined });
+      setUltimaFrisoDist({ base: Number(values.frisoDistBase) || undefined, entre: Number(values.frisoDistEntre) || undefined, filtro: values.tipoFiltroInercial });
       setUltimaAlturaPainel(values.modelo === 'Piramidal' ? Number(values.alturaPainel) || 0 : undefined);
       if (result.warnings.length > 0) {
         toast({ variant: 'destructive', title: 'Cálculo concluído com avisos', description: result.warnings.join(' ') });
@@ -341,7 +344,7 @@ export default function CostCalculatorPage() {
   const [ultimoInput, setUltimoInput] = useState<CoifaCalculatorInput | null>(null);
   const [ultimaPosicaoLampadas, setUltimaPosicaoLampadas] = useState<'frente' | 'parede'>('frente');
   const [ultimaAlturaPainel, setUltimaAlturaPainel] = useState<number | undefined>(undefined);
-  const [ultimaFrisoDist, setUltimaFrisoDist] = useState<{ base?: number; entre?: number }>({});
+  const [ultimaFrisoDist, setUltimaFrisoDist] = useState<{ base?: number; entre?: number; filtro?: 'inclinado' | 'reto' }>({});
   const [ultimaPosicaoComando, setUltimaPosicaoComando] = useState<NonNullable<CoifaParamsSalvos['posicaoComando']>>('frente-centro');
   const [orcDialog, setOrcDialog] = useState(false);
   const [orcamentosAbertos, setOrcamentosAbertos] = useState<Quote[] | null>(null);
@@ -367,7 +370,7 @@ export default function CostCalculatorPage() {
       controle: results.tipoControle, posicaoLampadas: ultimaPosicaoLampadas,
       posicaoComando: ultimaPosicaoComando,
       alturaPainel: ultimaAlturaPainel,
-      frisoDistBase: ultimaFrisoDist.base, frisoDistEntre: ultimaFrisoDist.entre,
+      frisoDistBase: ultimaFrisoDist.base, frisoDistEntre: ultimaFrisoDist.entre, tipoFiltroInercial: ultimaFrisoDist.filtro,
       larguraPadrao: i.larguraPadrao, larguraPadraoCarenagem: i.larguraPadraoCarenagem,
       comCarenagem: i.comCarenagem, outros: i.outros, paintingCost: i.paintingCost,
     };
@@ -784,6 +787,21 @@ export default function CostCalculatorPage() {
                     </FormItem>
                   )} />
 
+                  {showColetor && (
+                    <FormField control={form.control} name="tipoFiltroInercial" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Tipo do Filtro Inercial</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="inclinado">Inclinado</SelectItem>
+                            <SelectItem value="reto">Reto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Só muda o desenho para corte — não altera o preço. O desenho do filtro reto ainda será definido.</FormDescription>
+                      </FormItem>
+                    )} />
+                  )}
                   {showColetor && (
                     <FormField control={form.control} name="coletor" render={({ field }) => (
                       <FormItem>

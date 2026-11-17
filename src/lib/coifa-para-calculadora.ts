@@ -22,6 +22,7 @@ export interface PreenchimentoCalculadora {
   coletor?: 'nenhum' | 'simples' | 'duplo';
   frisoFrente?: boolean; frisoLD?: boolean; frisoLE?: boolean; frisoLinhas?: number;
   frisoDistBase?: number; frisoDistEntre?: number;
+  tipoFiltroInercial?: 'inclinado' | 'reto';
   qtdLampadasManual?: number; qtdBotoesManual?: number;
   controle?: 'botoes' | 'botoeira';
   posicaoLampadas?: 'frente' | 'parede';
@@ -49,7 +50,7 @@ function dosParametrosSalvos(c: CoifaParamsSalvos): PreenchimentoCalculadora {
     material: c.material, larguraPadrao: c.larguraPadrao, larguraPadraoCarenagem: c.larguraPadraoCarenagem,
     tipoAplicacao: c.tipoAplicacao, tipoInstalacao: c.tipoInstalacao, filtro: c.filtro, coletor: c.coletor,
     frisoFrente: c.frisoFrente, frisoLD: c.frisoLD, frisoLE: c.frisoLE, frisoLinhas: c.frisoLinhas,
-    frisoDistBase: c.frisoDistBase, frisoDistEntre: c.frisoDistEntre,
+    frisoDistBase: c.frisoDistBase, frisoDistEntre: c.frisoDistEntre, tipoFiltroInercial: c.tipoFiltroInercial,
     qtdLampadasManual: c.qtdLampadas, qtdBotoesManual: c.qtdBotoes,
     controle: c.controle ?? 'botoeira', posicaoLampadas: c.posicaoLampadas, posicaoComando: c.posicaoComando,
     comCarenagem: c.comCarenagem, outros: c.outros, paintingCost: c.paintingCost,

@@ -69,6 +69,8 @@ export type CoifaParamsSalvos = {
   /** Posição dos frisos no desenho (mm): da base ao 1º friso e entre frisos. Ausente = 200 / 200. */
   frisoDistBase?: number;
   frisoDistEntre?: number;
+  /** Filtro inercial: inclinado (padrão) ou reto — só desenho. */
+  tipoFiltroInercial?: 'inclinado' | 'reto';
   /** Dados do cálculo que não aparecem no desenho — guardados para reabrir o item na Calculadora. */
   larguraPadrao?: number;
   larguraPadraoCarenagem?: number;
