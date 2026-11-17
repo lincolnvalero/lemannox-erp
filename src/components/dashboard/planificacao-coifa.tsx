@@ -104,7 +104,7 @@ export function PlanificacaoCoifa({ entrada, modelo, desenho, nomeArquivo }: Pro
         <ul className="text-xs text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1">
           <li>Dobra: +{desenho.acrescimoDobra} mm por dobra</li>
           <li>Chapa 22 (frente/laterais): {desenho.espessura22} mm</li>
-          <li>Chapa 24 (costas/teto/carenagem): {desenho.espessura24} mm</li>
+          <li>Chapa 24 (costas — parte de cima —, teto, carenagem): {desenho.espessura24} mm</li>
           <li>Lâmpada: Ø{desenho.furoLampadaCozinha} cozinha / Ø{desenho.furoLampadaChurrasqueira} churrasqueira</li>
           <li>Botoeira: Ø{desenho.furoBotoeira}, {desenho.espacoBotoeira} mm de centro a centro</li>
           <li>Botão: Ø{desenho.furoBotao}</li>

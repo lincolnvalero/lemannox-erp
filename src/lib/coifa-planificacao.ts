@@ -180,14 +180,24 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     }
   }
 
-  // ── COSTA (24): retorno de baixo de 100, degrau e aba mais estreita. ──────
-  let costa: Peca;
+  // ── COSTA (Levi, 13/11): em duas partes. ─────────────────────────────────
+  // CIMA (chapa 24): altura total − 2 dobras, com a aba de 20 em cima. BAIXO (chapa 22): como era
+  // (retorno = profundidade − 545, mín. 50, degrau, aba e bainhas), com +30 de aba para dobra em cima.
+  const costas: Peca[] = [];
   {
     const W = arred(L - 2 * a);
     const corpo = A - 2 * a;
-    const yRet = p.abaTopo + corpo;
+    {
+      const H = arred(p.abaTopo + corpo);
+      costas.push({
+        id: 'COSTA_CIMA', nome: 'COSTA CIMA', bitola: 24, w: W, h: H,
+        contorno: [[0, 0], [W, 0], [W, H], [0, H], [0, 0]], furos: [],
+        dobras: [[0, toY(H, p.abaTopo), W, toY(H, p.abaTopo)]],
+      });
+    }
     // Retorno de baixo: profundidade − 545, no mínimo 50 (Levi, 02/11) — antes era fixo em 100.
     const retorno = Math.max(p.costaRetornoMin, arred(P - p.costaRetornoDesconto));
+    const yRet = p.costaAbaDivisao;                  // fim da aba de 30 (1ª dobra)
     const yEsc = yRet + retorno + p.costaDegrau;
     const yFim = yEsc + p.costaAba + p.costaDobraExtra + p.costaBainha;
     const H = arred(yFim);
@@ -199,11 +209,11 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     // Lâmpadas do fundo (Ilha ou "junto à parede"): no retorno de baixo.
     const yLamp = toY(H, yRet + retorno / 2);
     lampadasNaFaixa(lamp.fundo, 0, W, L, dL, p).forEach((x) => furos.push({ x: arred(x), y: yLamp, d: dL }));
-    const dobras: Peca['dobras'] = [p.abaTopo, yRet, yRet + retorno, yRet + retorno + p.costaDegrau + p.costaAba, yRet + retorno + p.costaDegrau + p.costaAba + p.costaDobraExtra]
-      .map((y, i) => (i >= 3 ? [c, toY(H, y), W - c, toY(H, y)] : [0, toY(H, y), W, toY(H, y)]) as [number, number, number, number]);
+    const dobras: Peca['dobras'] = [yRet, yRet + retorno, yRet + retorno + p.costaDegrau + p.costaAba, yRet + retorno + p.costaDegrau + p.costaAba + p.costaDobraExtra]
+      .map((y, i) => (i >= 2 ? [c, toY(H, y), W - c, toY(H, y)] : [0, toY(H, y), W, toY(H, y)]) as [number, number, number, number]);
     if (furos.length && dL > retorno) avisos.push(`Costa: o furo da lâmpada (Ø${dL}) é maior que o retorno de baixo (${retorno} mm) — o furo invade as dobras.`);
-    todosFurosDentro('Costa', contorno, furos, avisos);
-    costa = { id: 'COSTA', nome: 'COSTA', bitola: 24, w: W, h: H, contorno, furos, dobras };
+    todosFurosDentro('Costa baixo', contorno, furos, avisos);
+    costas.push({ id: 'COSTA_BAIXO', nome: 'COSTA BAIXO', bitola: 22, w: W, h: H, contorno, furos, dobras });
   }
 
   // ── LATERAIS (22): 1 dobra → P − acréscimo; aba lateral de 20 e aba de cima. ─
@@ -270,7 +280,7 @@ export function planificarBox(e: EntradaPlanificacao, p: ParametrosDesenho): Res
     contorno: [[0, 0], [tw, 0], [tw, th], [0, th], [0, 0]], furos: [], dobras: [],
   };
 
-  return { pecas: [...frentes, costa, ...lateral('ESQ'), ...lateral('DIR'), tampa], avisos };
+  return { pecas: [...frentes, ...costas, ...lateral('ESQ'), ...lateral('DIR'), tampa], avisos };
 }
 
 /** Planifica o modelo pedido (hoje Box e Piramidal). */
